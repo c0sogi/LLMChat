@@ -1,0 +1,64 @@
+version: '3.9'
+
+volumes:
+  mysql:
+
+
+services:
+  proxy:
+    image: traefik
+    command:
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entryPoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entryPoints.web.http.redirections.entryPoint.scheme=https"
+      - "--providers.docker"
+      - "--api.insecure=true"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=${LETSENCRYPT_EMAIL}"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      # - "--log.level=DEBUG"
+      # - "--certificatesresolvers.myresolver.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./letsencrypt:/letsencrypt
+
+  db:
+    image: mysql:latest
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE}"
+    volumes:
+      - mysql:/var/lib/mysql
+      # - ./my.cnf:/etc/mysql/conf.d/my.cnf
+    depends_on:
+      - proxy
+
+  api:
+    env_file:
+      - .env
+    environment:
+      DB_URL: "mysql+pymysql://root:${MYSQL_ROOT_PASSWORD}@db:3306/${MYSQL_DATABASE}?charset=utf8mb4"
+      TEST_DB_URL: "mysql+pymysql://root:${MYSQL_ROOT_PASSWORD}@db:3306/${MYSQL_TEST_DATABASE}?charset=utf8mb4"
+    build: .
+    depends_on:
+      - proxy
+      - db
+    labels:
+      - "traefik.http.routers.api.rule=HostRegexp(`${HOST_MAIN}`, `{subdomain:[a-z]+}.${HOST_MAIN}`, `${HOST_IP}`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.services.api.loadbalancer.server.scheme=http"
+      - "traefik.http.services.api.loadbalancer.server.port=8000"
+      - "traefik.http.routers.api.tls=true"
+      - "traefik.http.routers.api.tls.certresolver=myresolver"
+      - "traefik.http.routers.api.tls.domains[0].main=${HOST_MAIN}"
+      - "traefik.http.routers.api.tls.domains[0].sans=${HOST_SUB}"
+    volumes:
+      - .:/app
