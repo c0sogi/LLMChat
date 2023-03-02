@@ -8,7 +8,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from app.common.config import (
-    get_config,
+    Config,
     EXCEPT_PATH_LIST,
     EXCEPT_PATH_REGEX,
     JWT_SECRET,
@@ -24,21 +24,17 @@ from app.utils.logger import api_logger
 from app.utils.query_utils import query_row_to_dict
 from app.utils.encoding_and_hashing import hash_params
 
-config = get_config()
+config = Config.get()
 
 
 async def access_control(request: Request, call_next: RequestResponseEndpoint):
     headers, cookies = request.headers, request.cookies
     url = request.url.path
     query_params = str(request.query_params)
-    ip = (
-        request.headers["x-forwarded-for"]
-        if "x-forwarded-for" in request.headers.keys()
-        else request.client.host
-    )
+    ip = request.client.host
 
     response: Optional[Response] = None
-    error: Optional[SqlFailureEx, APIException] = None
+    error: Optional[Union[SqlFailureEx, APIException]] = None
     request.state.req_time = UTC.now()
     request.state.start = time()
     request.state.inspect = None
@@ -54,29 +50,20 @@ async def access_control(request: Request, call_next: RequestResponseEndpoint):
 
     try:
         if url.startswith("/api/services"):  # Api-services must use session
-            if config.debug:
-                # [NON-LOCAL] Validate token by headers(Authorization) with session
-                if "authorization" not in headers.keys():
-                    raise ex.NotAuthorized()
-                access_key = headers.get("authorization")
-                request.state.user = await validate_access_key(
-                    access_key, query_from_session=True
-                )
-            else:  # [LOCAL] Validate token by headers(secret) and queries(key, timestamp) with session
-                print("queryparams:", query_params)
-                access_key, timestamp = await queries_params_to_key_and_timestamp(
-                    query_params
-                )
-                if "secret" not in headers.keys():
-                    raise ex.APIHeaderInvalidEx()
-                request.state.user = await validate_access_key(
-                    access_key,
-                    query_from_session=True,
-                    query_check=True,
-                    query_params=query_params,
-                    secret=headers["secret"],
-                    timestamp=timestamp,
-                )
+            # [LOCAL] Validate token by headers(secret) and queries(key, timestamp) with session
+            access_key, timestamp = await queries_params_to_key_and_timestamp(
+                query_params
+            )
+            if "secret" not in headers.keys():
+                raise ex.APIHeaderInvalidEx()
+            request.state.user = await validate_access_key(
+                access_key,
+                query_from_session=True,
+                query_check=True,
+                query_params=query_params,
+                secret=headers["secret"],
+                timestamp=timestamp,
+            )
 
         elif url.startswith("/api"):  # Api-non-services don't use session
             # Validate token by headers(Authorization)
@@ -123,11 +110,11 @@ async def validate_access_key(
     **kwargs
 ) -> UserToken:
     if query_from_session:  # Find API key from session
-        api_key_query = await ApiKeys.get_row_from_db(access_key=access_key)
-        if not api_key_query:
+        api_key_query = await ApiKeys.one_or_nothing(access_key=access_key)
+        if api_key_query is None:
             raise ex.NotFoundAccessKeyEx(api_key=access_key)
-        user_query = await Users.get_row_from_db(id=api_key_query.user_id)
-        if not user_query:
+        user_query = await Users.one_or_nothing(id=api_key_query.user_id)
+        if user_query is None:
             raise ex.NotFoundUserEx(user_id=api_key_query.user_id)
         user_info: dict = query_row_to_dict(user_query)
 
@@ -177,7 +164,6 @@ async def token_decode(access_key: str) -> dict:
 
 
 async def exception_handler(error: Exception) -> Union[SqlFailureEx, APIException]:
-    print("<!> Exception handler:", type(error), error, error.__dict__)
     if isinstance(error, OperationalError):
         return SqlFailureEx(ex=error)
     elif isinstance(error, APIException):

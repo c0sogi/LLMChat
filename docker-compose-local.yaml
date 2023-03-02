@@ -18,15 +18,8 @@ services:
     command:
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-      - "--entryPoints.web.http.redirections.entryPoint.to=websecure"
-      - "--entryPoints.web.http.redirections.entryPoint.scheme=https"
       - "--providers.docker"
       - "--api.insecure=true"
-      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
-      - "--certificatesresolvers.myresolver.acme.email=${MY_EMAIL}"
-      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
-      # - "--log.level=DEBUG"
-      # - "--certificatesresolvers.myresolver.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
     ports:
       - "80:80"
       - "443:443"
@@ -51,7 +44,10 @@ services:
       TZ: "Asia/Seoul"
     volumes:
       - mysql:/var/lib/mysql
-      # - ./my.cnf:/etc/mysql/conf.d/my.cnf
+    # command:
+    #   - mysql -u root -p mysql
+    #   - Rnoeot1591
+    #   - create user trafficer identified by 'hello';
     depends_on:
       - proxy
     networks:
@@ -59,6 +55,7 @@ services:
         ipv4_address: 172.16.0.11 # static IP
 
   api:
+    restart: always
     env_file:
       - .env
     build: .
@@ -66,14 +63,10 @@ services:
       - proxy
       - db
     labels:
-      - "traefik.http.routers.api.rule=HostRegexp(`${HOST_MAIN}`, `{subdomain:[a-z]+}.${HOST_MAIN}`, `${HOST_IP}`)"
-      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.rule=HOST(`localhost`, `192.168.0.3`)"
+      - "traefik.http.routers.api.entrypoints=web"
       - "traefik.http.services.api.loadbalancer.server.scheme=http"
       - "traefik.http.services.api.loadbalancer.server.port=8000"
-      - "traefik.http.routers.api.tls=true"
-      - "traefik.http.routers.api.tls.certresolver=myresolver"
-      - "traefik.http.routers.api.tls.domains[0].main=${HOST_MAIN}"
-      - "traefik.http.routers.api.tls.domains[0].sans=${HOST_SUB}"
     volumes:
       - .:/app
     networks:

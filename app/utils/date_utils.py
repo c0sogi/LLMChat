@@ -12,15 +12,11 @@ class UTC:
     @classmethod
     def date(cls, hour_diff: int = 0) -> date:
         return cls.now(hour_diff=hour_diff).date()
-    
+
     @classmethod
     def timestamp(cls, hour_diff: int = 0) -> int:
-        return int(cls.now(hour_diff=hour_diff).strftime('%y%m%d%H%M%S'))
+        return int(cls.now(hour_diff=hour_diff).strftime("%y%m%d%H%M%S"))
 
     @classmethod
     def date_code(cls, hour_diff: int = 0) -> int:
-        return int(cls.date(hour_diff=hour_diff).strftime('%Y%m%d'))
-
-
-if __name__ == '__main__':
-    print(UTC.timestamp())
+        return int(cls.date(hour_diff=hour_diff).strftime("%Y%m%d"))

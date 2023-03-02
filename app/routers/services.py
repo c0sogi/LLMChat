@@ -10,7 +10,6 @@ from starlette.requests import Request
 from app.errors import exceptions as ex
 from app.models import MessageOk, KakaoMsgBody, SendEmail
 from app.common.config import (
-    HOST_MAIN,
     KAKAO_RESTAPI_TOKEN,
     KAKAO_IMAGE_URL,
     AWS_ACCESS_KEY,
@@ -145,7 +144,7 @@ def send_email(**kwargs):
 
 @router.post("/email/send_by_ses")
 async def email_by_ses():
-    sender = encode_from_utf8(f"운영자 admin <admin@{HOST_MAIN}>")
+    sender = encode_from_utf8("운영자 admin <admin@walabi.store>")
     recipient = [AWS_AUTHORIZED_EMAIL]
 
     # If necessary, replace us-west-2 with the AWS Region you're using for Amazon SES.
@@ -158,7 +157,7 @@ async def email_by_ses():
     BODY_TEXT = "안녕하세요! 운영자 입니다.\r\n" "HTML 버전만 지원합니다!"
 
     # The HTML body of the email.
-    BODY_HTML = f"""<html>
+    BODY_HTML = """<html>
     <head></head>
     <body>
       <h1>안녕하세요! 반갑습니다.</h1>
@@ -166,7 +165,7 @@ async def email_by_ses():
 
 Amazon SES는 이러한 부담이 없으므로 몇 분 만에 이메일 발송을 시작할 수 있습니다. Amazon.com이 대규모의 자사 고객 기반을 지원하기 위해 구축한 정교한 이메일 인프라와 오랜 경험을 활용할 수 있습니다.</p>
       <p>링크를 통해 확인하세요!
-        <a href='https://{HOST_MAIN}'>ABCDEFG</a></p>
+        <a href='https://walabi.store'>Dingrr</a></p>
     </body>
     </html>
                 """

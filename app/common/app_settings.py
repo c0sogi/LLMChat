@@ -1,7 +1,6 @@
 from fastapi import FastAPI, Depends
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
-from dataclasses import asdict
 from typing import Union
 from app.common.config import (
     LocalConfig,
@@ -18,15 +17,14 @@ from app.dependencies import api_service_dependency, user_dependency
 def create_app(config: Union[LocalConfig, ProdConfig, TestConfig]) -> FastAPI:
     # App & DB
     new_app = FastAPI()
-    db.init_app(new_app, **asdict(config))
+    db.init_app(app=new_app, config=config)
 
     # Middlewares
     """
     Access control middleware: Authorized request only
     CORS middleware: Allowed sites only
-    Trusted host middleware: Allowed host only 
+    Trusted host middleware: Allowed host only
     """
-    # new_app.add_middleware(HTTPSRedirectMiddleware)
     new_app.add_middleware(dispatch=access_control, middleware_class=BaseHTTPMiddleware)
     new_app.add_middleware(
         CORSMiddleware,
@@ -64,7 +62,7 @@ def create_app(config: Union[LocalConfig, ProdConfig, TestConfig]) -> FastAPI:
     return new_app
 
 
-#
+# # Test function for manual Let's encrypt validation challenge
 # def create_app(config: Union[LocalConfig, ProdConfig, TestConfig]) -> FastAPI:
 #     # App & DB
 #     new_app = FastAPI()
