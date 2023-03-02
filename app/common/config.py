@@ -43,9 +43,6 @@ SAMPLE_JWT_TOKEN: str = environ.get("SAMPLE_JWT_TOKEN")
 SAMPLE_ACCESS_KEY: str = environ.get("SAMPLE_ACCESS_KEY")
 SAMPLE_SECRET_KEY: str = environ.get("SAMPLE_SECRET_KEY")
 KAKAO_RESTAPI_TOKEN: str = environ.get("KAKAO_RESTAPI_TOKEN")
-HOST_MAIN: str = environ.get("HOST_MAIN")
-HOST_IP: str = environ.get("HOST_IP")
-
 
 """
 400 Bad Request
@@ -118,16 +115,20 @@ class LocalConfig(Config, metaclass=SingletonMetaClass):
 @dataclass(frozen=True)
 class ProdConfig(Config, metaclass=SingletonMetaClass):
     trusted_hosts = [
-        HOST_MAIN,
+        "*.walabi.store",
+        "walabi.store",
         "localhost",
-        f"*.{HOST_MAIN}",
-        HOST_IP,
+        "127.0.0.1",
+        "192.168.0.3",
+        "152.67.192.154",
     ]
     allowed_sites = [
-        HOST_MAIN,
+        "*.walabi.store",
+        "walabi.store",
         "localhost",
-        f"*.{HOST_MAIN}",
-        HOST_IP,
+        "127.0.0.1",
+        "192.168.0.3",
+        "152.67.192.154",
     ]
 
 

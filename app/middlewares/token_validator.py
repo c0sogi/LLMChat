@@ -31,14 +31,10 @@ async def access_control(request: Request, call_next: RequestResponseEndpoint):
     headers, cookies = request.headers, request.cookies
     url = request.url.path
     query_params = str(request.query_params)
-    ip = (
-        request.headers["x-forwarded-for"]
-        if "x-forwarded-for" in request.headers.keys()
-        else request.client.host
-    )
+    ip = request.client.host
 
     response: Optional[Response] = None
-    error: Optional[SqlFailureEx, APIException] = None
+    error: Optional[Union[SqlFailureEx, APIException]] = None
     request.state.req_time = UTC.now()
     request.state.start = time()
     request.state.inspect = None
@@ -63,7 +59,6 @@ async def access_control(request: Request, call_next: RequestResponseEndpoint):
                     access_key, query_from_session=True
                 )
             else:  # [LOCAL] Validate token by headers(secret) and queries(key, timestamp) with session
-                print("queryparams:", query_params)
                 access_key, timestamp = await queries_params_to_key_and_timestamp(
                     query_params
                 )
@@ -177,7 +172,6 @@ async def token_decode(access_key: str) -> dict:
 
 
 async def exception_handler(error: Exception) -> Union[SqlFailureEx, APIException]:
-    print("<!> Exception handler:", type(error), error, error.__dict__)
     if isinstance(error, OperationalError):
         return SqlFailureEx(ex=error)
     elif isinstance(error, APIException):

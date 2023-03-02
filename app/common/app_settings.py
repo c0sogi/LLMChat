@@ -26,7 +26,6 @@ def create_app(config: Union[LocalConfig, ProdConfig, TestConfig]) -> FastAPI:
     CORS middleware: Allowed sites only
     Trusted host middleware: Allowed host only 
     """
-    # new_app.add_middleware(HTTPSRedirectMiddleware)
     new_app.add_middleware(dispatch=access_control, middleware_class=BaseHTTPMiddleware)
     new_app.add_middleware(
         CORSMiddleware,
@@ -64,7 +63,7 @@ def create_app(config: Union[LocalConfig, ProdConfig, TestConfig]) -> FastAPI:
     return new_app
 
 
-#
+# # Test function for manual Let's encrypt validation challenge
 # def create_app(config: Union[LocalConfig, ProdConfig, TestConfig]) -> FastAPI:
 #     # App & DB
 #     new_app = FastAPI()

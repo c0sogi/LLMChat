@@ -3,6 +3,47 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import '/src/models/models.dart';
 
+// * Request JWT User Authorization
+void main() async {
+  // Your inputs
+  String host = "YOUR_DOMAIN.com";
+  String registerAccountID = "TEST_ID";
+  String registerAccountPW = "TEST_PW";
+
+  // Register account
+  String authorization = await registerAccount(
+    host: host,
+    registerAccountID: registerAccountID,
+    registerAccountPW: registerAccountPW,
+    isNewUser: false,
+  );
+  print("Your Authorization: $authorization");
+
+  // Register a API key in your account
+  Map apiKey = await registerApiKey(
+    host: host,
+    authorization: authorization,
+  );
+  print("Your API access key: ${apiKey["access_key"]}");
+  print("Your API secret key: ${apiKey["secret_key"]}");
+
+  // Show all API keys in your account
+  List allApiKeys = await viewAllApiKeys(
+    host: host,
+    authorization: authorization,
+  );
+  print("Your all API access keys: $allApiKeys");
+
+  // Show your services GET method
+  Map service = await services(
+    host: host,
+    authorization: authorization,
+    accessKey: apiKey["access_key"],
+    secretKey: apiKey["secret_key"],
+  );
+  print("Your Service ID: $service");
+}
+
 String hashString({required String string, required String secretKey}) {
   var hmacSha256 =
       Hmac(sha256, utf8.encode(secretKey)); // Create a HMAC-SHA256 key
@@ -137,35 +178,3 @@ Future<Map> services({
         crud: Crud.get,
       ),
     );
-
-void main() async {
-  // Request JWT User Authorization
-
-  String host = "YOUR_DOMAIN.com";
-  String registerAccountID = "TEST_ID";
-  String registerAccountPW = "TEST_PW";
-
-  String authorization = await registerAccount(
-    host: host,
-    registerAccountID: registerAccountID,
-    registerAccountPW: registerAccountPW,
-    isNewUser: false,
-  );
-  print("Your Authorization: $authorization");
-
-  Map apiKey = await registerApiKey(host: host, authorization: authorization);
-  print("Your API access key: ${apiKey["access_key"]}");
-  print("Your API secret key: ${apiKey["secret_key"]}");
-
-  List allApiKeys =
-      await viewAllApiKeys(host: host, authorization: authorization);
-  print("Your all API access keys: $allApiKeys");
-
-  Map service = await services(
-    host: host,
-    authorization: authorization,
-    accessKey: apiKey["access_key"],
-    secretKey: apiKey["secret_key"],
-  );
-  print("Your Service ID: $service");
-}
