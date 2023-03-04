@@ -113,7 +113,7 @@ async def delete_api_keys(
 
 
 @router.get("/apikeys/{key_id}/whitelists", response_model=List[m.GetAPIWhiteLists])
-async def get_api_keys(
+async def get_api_keys_whitelists(
     request: Request, key_id: int, session: Session = Depends(db.get_db)
 ):
     user = request.state.user
@@ -125,7 +125,7 @@ async def get_api_keys(
 
 
 @router.post("/apikeys/{key_id}/whitelists", response_model=m.GetAPIWhiteLists)
-async def create_api_keys(
+async def create_api_keys_whitelists(
     request: Request,
     key_id: int,
     ip: m.CreateAPIWhiteLists,
@@ -152,7 +152,7 @@ async def create_api_keys(
 
 
 @router.delete("/apikeys/{key_id}/whitelists/{list_id}")
-async def delete_api_keys(
+async def delete_api_keys_whitelists(
     request: Request, key_id: int, list_id: int, session: Session = Depends(db.get_db)
 ):
     user = request.state.user

@@ -1,7 +1,7 @@
 from typing import Sequence
 from starlette.exceptions import HTTPException
 from starlette.datastructures import URL, Headers
-from starlette.responses import PlainTextResponse, RedirectResponse, Response
+from starlette.responses import PlainTextResponse, RedirectResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 from app.common.config import ERROR_RESPONSES
 
@@ -59,7 +59,7 @@ class TrustedHostMiddleware:
             if found_www_redirect and self.www_redirect:
                 url = URL(scope=scope)
                 redirect_url = url.replace(netloc="www." + url.netloc)
-                response = RedirectResponse(url=str(redirect_url))  # type: Response
+                response = RedirectResponse(url=str(redirect_url))
             else:
                 response = PlainTextResponse("Invalid host header", status_code=400)
             await response(scope, receive, send)

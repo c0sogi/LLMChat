@@ -32,15 +32,22 @@ services:
         ipv4_address: 172.16.0.10 # static IP
 
   db:
-    image: mysql:latest
+    image: mysql
     restart: always
     ports:
       - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD}"
       MYSQL_DATABASE: "${MYSQL_DATABASE}"
+      MYSQL_USER: "${MYSQL_USER}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD}"
+      TZ: "Asia/Seoul"
     volumes:
       - mysql:/var/lib/mysql
+    # command:
+    #   - mysql -u root -p mysql
+    #   - Rnoeot1591
+    #   - create user trafficer identified by 'hello';
     depends_on:
       - proxy
     networks:
@@ -51,9 +58,6 @@ services:
     restart: always
     env_file:
       - .env
-    environment:
-      DB_URL: "mysql+pymysql://root:${MYSQL_ROOT_PASSWORD}@db:3306/${MYSQL_DATABASE}?charset=utf8mb4"
-      TEST_DB_URL: "mysql+pymysql://root:${MYSQL_ROOT_PASSWORD}@db:3306/${MYSQL_TEST_DATABASE}?charset=utf8mb4"
     build: .
     depends_on:
       - proxy

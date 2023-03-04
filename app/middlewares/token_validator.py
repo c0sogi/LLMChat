@@ -8,7 +8,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from app.common.config import (
-    get_config,
+    Config,
     EXCEPT_PATH_LIST,
     EXCEPT_PATH_REGEX,
     JWT_SECRET,
@@ -24,7 +24,7 @@ from app.utils.logger import api_logger
 from app.utils.query_utils import query_row_to_dict
 from app.utils.encoding_and_hashing import hash_params
 
-config = get_config()
+config = Config.get()
 
 
 async def access_control(request: Request, call_next: RequestResponseEndpoint):
@@ -50,28 +50,20 @@ async def access_control(request: Request, call_next: RequestResponseEndpoint):
 
     try:
         if url.startswith("/api/services"):  # Api-services must use session
-            if config.debug:
-                # [NON-LOCAL] Validate token by headers(Authorization) with session
-                if "authorization" not in headers.keys():
-                    raise ex.NotAuthorized()
-                access_key = headers.get("authorization")
-                request.state.user = await validate_access_key(
-                    access_key, query_from_session=True
-                )
-            else:  # [LOCAL] Validate token by headers(secret) and queries(key, timestamp) with session
-                access_key, timestamp = await queries_params_to_key_and_timestamp(
-                    query_params
-                )
-                if "secret" not in headers.keys():
-                    raise ex.APIHeaderInvalidEx()
-                request.state.user = await validate_access_key(
-                    access_key,
-                    query_from_session=True,
-                    query_check=True,
-                    query_params=query_params,
-                    secret=headers["secret"],
-                    timestamp=timestamp,
-                )
+            # [LOCAL] Validate token by headers(secret) and queries(key, timestamp) with session
+            access_key, timestamp = await queries_params_to_key_and_timestamp(
+                query_params
+            )
+            if "secret" not in headers.keys():
+                raise ex.APIHeaderInvalidEx()
+            request.state.user = await validate_access_key(
+                access_key,
+                query_from_session=True,
+                query_check=True,
+                query_params=query_params,
+                secret=headers["secret"],
+                timestamp=timestamp,
+            )
 
         elif url.startswith("/api"):  # Api-non-services don't use session
             # Validate token by headers(Authorization)

@@ -1,14 +1,9 @@
-from typing import List
-from asyncio import run
-
 import pytest
+from asyncio import run
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
-from sqlalchemy import text
-
 from app.database.schema import Users, db
 from app.common.app_settings import create_app
-from app.common.config import get_config
+from app.common.config import Config
 from app.models import UserToken
 from app.routers.auth import create_access_token
 
@@ -17,13 +12,13 @@ from app.routers.auth import create_access_token
 1. DB 생성
 2. 테이블 생성
 3. 테스트 코드 작동
-4. 테이블 레코드 삭제 
+4. 테이블 레코드 삭제
 """
 
 
 @pytest.fixture(scope="session")
 def app():
-    return create_app(get_config(option="test"))
+    return create_app(Config.get(option="test"))
 
 
 @pytest.fixture(scope="session")
@@ -72,11 +67,3 @@ def user_2():
         "name": "테스트 유저2",
         "phone": "01022222222",
     }
-
-def clear_all_table_data(session: Session, metadata, except_tables: List[str] = None):
-    session.execute(text("SET FOREIGN_KEY_CHECKS = 0;"))
-    for table in metadata.sorted_tables:
-        if table.name not in except_tables:
-            session.execute(table.delete())
-    session.execute(text("SET FOREIGN_KEY_CHECKS = 1;"))
-    session.commit()

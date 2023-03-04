@@ -1,82 +1,156 @@
 from fastapi import FastAPI
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine.base import Engine
+from sqlalchemy.exc import OperationalError, ResourceClosedError
 from sqlalchemy.orm import sessionmaker, scoped_session, Session, declarative_base
 from time import sleep
+from typing import Union, Optional, Any, List
 import logging
+from app.common.config import TestConfig, ProdConfig, LocalConfig
 
 Base = declarative_base()
 
 
 class MySQL:
     @staticmethod
-    def is_db_exists(engine: Engine, schema_name: str) -> bool:
-        query = text(
-            f"SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{schema_name}';"
-        )
+    def get_query(engine: Engine, query: str) -> Optional[Any]:
         with engine.connect() as conn:
-            result_proxy = conn.execute(query)
-            result = result_proxy.scalar()
-            print(f">>> DB <{schema_name}> existence status:", bool(result))
-            return bool(result)
-
-    @staticmethod
-    def drop_db(engine: Engine, schema_name: str) -> None:
-        with engine.connect() as conn:
-            conn.execute(text(f"DROP DATABASE {schema_name};"))
-            print(">>> Dropped database:", schema_name)
-
-    @staticmethod
-    def create_db(engine: Engine, schema_name: str) -> None:
-        with engine.connect() as conn:
-            conn.execute(
-                text(
-                    f"CREATE DATABASE {schema_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;"
-                )
+            result = conn.execute(
+                text(query + ";" if not query.endswith(";") else query)
             )
-            print(">>> Created database:", schema_name)
+            try:
+                result = result.fetchall()
+            except ResourceClosedError:
+                result = None
+            print(f">>> Query '{query}' result:", result)
+            return result
+
+    @staticmethod
+    def clear_all_table_data(engine: Engine, except_tables: Optional[List[str]] = None):
+        with engine.connect() as conn:
+            conn.execute(text("SET FOREIGN_KEY_CHECKS = 0;"))
+            for table in Base.metadata.sorted_tables:
+                conn.execute(table.delete()) if table.name not in except_tables else ...
+            conn.execute(text("SET FOREIGN_KEY_CHECKS = 1;"))
+            conn.commit()
+
+    @classmethod
+    def is_db_exists(cls, engine: Engine, database_name: str) -> bool:
+        return bool(
+            cls.get_query(
+                engine=engine,
+                query=f"SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{database_name}';",
+            )
+        )
+
+    @classmethod
+    def drop_db(cls, engine: Engine, database_name: str) -> None:
+        return cls.get_query(
+            engine=engine,
+            query=f"DROP DATABASE {database_name};",
+        )
+
+    @classmethod
+    def create_db(cls, engine: Engine, database_name: str) -> None:
+        return cls.get_query(
+            engine=engine,
+            query=f"CREATE DATABASE {database_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;",
+        )
+
+    @classmethod
+    def create_user(
+        cls,
+        engine: Engine,
+        username: str,
+        password: str,
+        host: str,
+    ) -> None:
+        return cls.get_query(
+            engine=engine,
+            query=f"CREATE USER '{username}'@'{host}' IDENTIFIED BY '{password}'",
+        )
+
+    @classmethod
+    def grant_user(
+        cls,
+        engine: Engine,
+        grant: str,
+        on: str,
+        to_user: str,
+        user_host: str,
+    ) -> None:
+        return cls.get_query(
+            engine=engine,
+            query=f"GRANT {grant} ON {on} TO '{to_user}'@'{user_host}'",
+        )
 
 
 class SQLAlchemy:
-    def __init__(self, app: FastAPI = None, **kwargs):
-        self.engine = None
-        self.session_local = None
+    def __init__(
+        self,
+        app: FastAPI = None,
+        config: Optional[Union[LocalConfig, ProdConfig, TestConfig]] = None,
+    ):
+        self.engine: Optional[Engine] = None
+        self.session_local: Session = None
         if app is not None:
-            self.init_app(app=app, **kwargs)
+            self.init_app(app=app, config=config)
 
-    def init_app(self, app: FastAPI, **kwargs):
-        db_url = kwargs.get("db_url")
-        pool_recycle = kwargs.setdefault("db_pool_recycle", 900)
-        test_mode = kwargs.setdefault("test_mode", False)
-        echo = kwargs.setdefault("db_echo", True)
+    def init_app(
+        self, app: FastAPI, config: Union[LocalConfig, TestConfig, ProdConfig]
+    ):
+        print(">>> Current config status:", config)
         self.engine = create_engine(
-            db_url, echo=echo, pool_recycle=pool_recycle, pool_pre_ping=True
-        )
-
-        if test_mode:  # create schema
-            test_schema_name = kwargs.get("test_schema_name")
-            test_db_url = kwargs.get("test_db_url")
-            assert (
-                self.engine.url.host == "localhost"
-            ), "db host must be 'localhost' in test environment"
-            if MySQL.is_db_exists(self.engine, test_schema_name):
-                MySQL.drop_db(self.engine, test_schema_name)
-                MySQL.create_db(self.engine, test_schema_name)
-            else:
-                MySQL.create_db(self.engine, test_schema_name)
-            self.engine.dispose()
-            self.engine = create_engine(
-                test_db_url, echo=echo, pool_recycle=pool_recycle, pool_pre_ping=True
-            )
+            config.mysql_root_url,
+            echo=config.db_echo,
+            pool_recycle=config.db_pool_recycle,
+            pool_pre_ping=True,
+        )  # Root user
         while True:
             try:
-                Base().metadata.create_all(self.engine)
-            except Exception as e:
-                print(">>> SQL Connection Error:", e)
+                assert MySQL.is_db_exists(
+                    self.engine, database_name=config.mysql_database
+                ), f"Database {config.mysql_database} does not exists."
+            except OperationalError:
                 sleep(5)
             else:
                 break
 
+        if config.test_mode:  # create schema
+            assert isinstance(
+                config, TestConfig
+            ), "Config with 'test_mode == True' must be TestConfig! "
+            assert (
+                self.engine.url.host == "localhost"
+            ), "DB host must be 'localhost' in test environment!"
+            if MySQL.is_db_exists(
+                self.engine, database_name=config.mysql_test_database
+            ):
+                MySQL.drop_db(self.engine, database_name=config.mysql_test_database)
+            MySQL.create_db(self.engine, database_name=config.mysql_test_database)
+            self.engine.dispose()
+            self.engine = create_engine(
+                config.mysql_test_url,
+                echo=config.db_echo,
+                pool_recycle=config.db_pool_recycle,
+                pool_pre_ping=True,
+            )
+        else:  # create schema
+            assert isinstance(
+                config, Union[LocalConfig, ProdConfig]
+            ), "Config with 'test_mode == False' must be LocalConfig or ProdConfig!"
+            assert MySQL.is_db_exists(
+                self.engine, database_name=config.mysql_database
+            ), f"Database {config.mysql_database} does not exists!"
+            self.engine.dispose()
+            self.engine = create_engine(
+                config.mysql_url,
+                echo=config.db_echo,
+                pool_recycle=config.db_pool_recycle,
+                pool_pre_ping=True,
+            )
+            assert self.engine.url.username != "root", "Database user must not be root!"
+        Base.metadata.create_all(self.engine)
         self.session_local = scoped_session(
             sessionmaker(bind=self.engine, autocommit=False, autoflush=False)
         )
@@ -94,8 +168,9 @@ class SQLAlchemy:
             logging.info("DB disconnected")
 
     def get_db(self) -> Session:
-        if self.session_local is None:
-            raise Exception("must be called 'init_app'")
+        assert (
+            self.session_local is not None
+        ), "'init_app' must be called to get session!"
         local_session = self.session_local()
         try:
             yield local_session
