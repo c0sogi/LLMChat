@@ -1,10 +1,8 @@
-from typing import AsyncGenerator, AsyncIterator
+from typing import AsyncGenerator
 import pytest
-from asyncio import run
 from httpx import AsyncClient
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker
-from app.database.schema import Users, db
+from app.database.schema import Users
 from app.common.app_settings import create_app
 from app.common.config import Config
 from app.models import UserToken
@@ -21,15 +19,14 @@ from app.routers.auth import create_access_token
 
 @pytest.fixture(scope="session")
 def app():
-    return create_app(Config.get(option="test"))
+    _app = create_app(Config.get(option="test"))
+    return _app
 
 
-@pytest.fixture(scope="function")
-def get_db() -> AsyncIterator[async_sessionmaker]:
-    try:
-        yield db.session
-    finally:
-        db.session.close()
+# @pytest_asyncio.fixture(scope="function")
+# async def session(self) -> AsyncSession:
+#     async with self.session() as session:
+#         yield session
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -38,12 +35,12 @@ async def client(app) -> AsyncGenerator:
         yield ac
 
 
-@pytest.fixture(scope="function")
-def login_header(session, user_1):
+@pytest_asyncio.fixture(scope="function")
+async def login_header(user_1):
     """
     테스트 전 사용자 미리 등록
     """
-    new_user = run(Users.create_new(session, auto_commit=True, **user_1))
+    new_user = await Users.create_new(auto_commit=True, **user_1)
     access_token = create_access_token(
         data=UserToken.from_orm(new_user).dict(exclude={"pw", "marketing_agree"}),
     )
@@ -67,4 +64,14 @@ def user_2():
         "pw": "123",
         "name": "테스트 유저2",
         "phone": "01022222222",
+    }
+
+
+@pytest.fixture(scope="session")
+def user_3():
+    return {
+        "email": "cccc@test.com",
+        "pw": "123",
+        "name": "테스트 유저3",
+        "phone": "01033333333",
     }

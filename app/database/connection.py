@@ -1,4 +1,4 @@
-from asyncio import current_task
+from asyncio import current_task, run
 from typing import Union, Optional, Any, List
 from fastapi import FastAPI
 from sqlalchemy import text, create_engine
@@ -118,10 +118,8 @@ class SQLAlchemy:
                 assert MySQL.is_db_exists(
                     self.engine, database_name=config.mysql_database
                 ), f"Database {config.mysql_database} does not exists."
-            except OperationalError:
-
-                print(config.mysql_database)
-                print(config.mysql_root_url.replace("aiomysql", "pymysql"))
+            except Exception as e:
+                print(e)
                 sleep(5)
             else:
                 break
@@ -133,11 +131,12 @@ class SQLAlchemy:
             assert (
                 self.engine.url.host == "localhost"
             ), "DB host must be 'localhost' in test environment!"
-            if MySQL.is_db_exists(
+            if not MySQL.is_db_exists(
                 self.engine, database_name=config.mysql_test_database
             ):
-                MySQL.drop_db(self.engine, database_name=config.mysql_test_database)
-            MySQL.create_db(self.engine, database_name=config.mysql_test_database)
+                MySQL.create_db(self.engine, database_name=config.mysql_test_database)
+            Base.metadata.drop_all(self.engine)
+            Base.metadata.create_all(self.engine)
         else:  # Production or Local mode
             assert isinstance(
                 config, Union[LocalConfig, ProdConfig]
@@ -162,9 +161,7 @@ class SQLAlchemy:
 
         @app.on_event("startup")
         async def startup():
-            self.engine.connect()
-            async with self.engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
+            # self.engine.connect()
             logging.critical(">>> DB connected")
 
         @app.on_event("shutdown")

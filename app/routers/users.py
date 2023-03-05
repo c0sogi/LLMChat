@@ -49,10 +49,12 @@ async def create_api_keys(
     API KEY 생성
     """
     user = request.state.user
-    api_keys = await ApiKeys.filter_by_condition(
-        session, user_id=user.id, status="active"
-    )
-    if api_keys.count() == MAX_API_KEY:
+    # from sqlalchemy.engine import ScalarResult
+    # ScalarResult.
+    api_keys = (
+        await ApiKeys.filter_by_condition(session, user_id=user.id, status="active")
+    ).fetchall()
+    if len(api_keys) == MAX_API_KEY:
         raise ex.MaxKeyCountEx()
 
     alphabet = string.ascii_letters + string.digits
@@ -60,7 +62,9 @@ async def create_api_keys(
     uid = None
     while not uid:
         uid_candidate = f"{str(uuid4())[:-12]}{str(uuid4())}"
-        uid_check = await ApiKeys.one_or_nothing(access_key=uid_candidate)
+        uid_check = (
+            await ApiKeys.filter_by_condition(session, access_key=uid_candidate)
+        ).fetchall()
         if not uid_check:
             uid = uid_candidate
 
@@ -93,7 +97,7 @@ async def update_api_keys(
     if key_data is None:
         raise ex.NoKeyMatchEx()
     if key_data.user_id == user.id:
-        return key_data.update(auto_commit=True, **key_info.dict())
+        return await key_data.update(auto_commit=True, **key_info.dict())
 
 
 @router.delete("/apikeys/{key_id}")

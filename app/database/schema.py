@@ -1,5 +1,4 @@
 from sqlalchemy import (
-    ChunkedIteratorResult,
     Column,
     Integer,
     String,
@@ -10,11 +9,10 @@ from sqlalchemy import (
     ForeignKey,
     select,
 )
-from sqlalchemy.orm import relationship, Query
+from sqlalchemy.orm import relationship
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.connection import Base, db
-from typing import List, Optional, Union
-from app.utils.logger import logger
+from typing import List, Optional
 
 
 class CustomMixin:
@@ -67,9 +65,10 @@ class CustomMixin:
         query = select(cls).filter_by(**kwargs)
         if session is None:
             async with db.session() as session:
-                return (await session.execute(query)).scalars()
+                query_result = await session.execute(query)
+                return query_result.mappings()
         else:
-            return (await session.execute(query)).scalars()
+            return (await session.execute(query)).mappings()
 
     @classmethod
     async def filter_by_condition(
@@ -100,9 +99,9 @@ class CustomMixin:
         query = select(cls).filter(*conditions_to_query)
         if session is None:
             async with db.session() as session:
-                return await session.execute(query).scalars()
+                return (await session.execute(query)).mappings()
         else:
-            return await session.execute(query).scalars()
+            return (await session.execute(query)).mappings()
 
     @classmethod
     def get_column(cls, column_name: str) -> Column:
@@ -126,9 +125,9 @@ class CustomMixin:
             )
         if session is None:
             async with db.session() as session:
-                return await session.execute(query).scalars()
+                return await session.execute(query).mappings()
         else:
-            return await session.execute(query).scalars()
+            return await session.execute(query).mappings()
 
     async def update(
         self,

@@ -1,14 +1,17 @@
 from tests.conftest import *
-from requests import Response, get
+import pytest
 from app.utils.date_utils import UTC
 from app.utils.encoding_and_hashing import hash_params
 from app.utils.query_utils import parse_params
 
 
-def test_request_api(login_header, client):
-    def get_apikey(client, login_header):
-        res = client.post(
-            "api/user/apikeys", json={"user_memo": "user1__key"}, headers=login_header
+@pytest.mark.asyncio
+async def test_request_api(login_header, client):
+    async def get_apikey(client, authorized_header):
+        res = await client.post(
+            "api/user/apikeys",
+            json={"user_memo": "user1__key"},
+            headers=authorized_header,
         )
         res_body = res.json()
         assert res.status_code == 200
@@ -19,17 +22,18 @@ def test_request_api(login_header, client):
             "secret_key": res_body["secret_key"],
         }
 
-        res = client.get("api/user/apikeys", headers=login_header)
+        res = await client.get("api/user/apikeys", headers=authorized_header)
         res_body = res.json()
+        exit(res_body)
         assert res.status_code == 200
         assert "user1__key" in res_body[0]["user_memo"]
         return apikey
 
-    apikey = get_apikey(client=client, login_header=login_header)
+    apikey = await get_apikey(client=client, authorized_header=login_header)
     parsed_qs: str = parse_params(
         params={"key": apikey["access_key"], "timestamp": UTC.timestamp(hour_diff=9)}
     )
-    res = client.get(
+    res = await client.get(
         f"/api/services?{parsed_qs}",
         headers={"secret": hash_params(qs=parsed_qs, secret_key=apikey["secret_key"])},
     )

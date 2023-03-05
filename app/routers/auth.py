@@ -44,7 +44,6 @@ async def register(
             raise HTTPException(**ERROR_RESPONSES["email_already_taken"])
         hashed_pw = bcrypt.hashpw(reg_info.pw.encode("utf-8"), bcrypt.gensalt())
         new_user = await Users.create_new(
-            # session,
             auto_commit=True,
             pw=hashed_pw,
             email=reg_info.email,
@@ -63,13 +62,12 @@ async def register(
 async def login(
     sns_type: SnsType,
     user_info: UserRegister,
-    request: Request,
     session: AsyncSession = Depends(db.get_db),
 ) -> dict:
     if sns_type == SnsType.email:
         if (not user_info.email) or (not user_info.pw):
             raise HTTPException(**ERROR_RESPONSES["no_email_or_pw"])
-        query_result = await Users.filter_by_equality(email=user_info.email)
+        query_result = await Users.filter_by_equality(session, email=user_info.email)
         matched_user = query_result.one_or_none()
 
         if matched_user is None:
@@ -94,7 +92,6 @@ async def login(
 async def is_email_exist(session, email: str) -> bool:
     query_result = await session.execute(select(Users).filter_by(email=email))
     query_result = query_result.fetchone()
-    logger.warning(f"Email existence:{False if query_result is None else True}")
     return False if query_result is None else True
 
 
