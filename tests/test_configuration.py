@@ -28,9 +28,7 @@ def client(app):
 
 @pytest.fixture(scope="function")
 def session():
-    if db.session_local is None:
-        raise Exception("must be called 'init_app'")
-    local_session = db.session_local()
+    local_session = db.session()
     try:
         yield local_session
     finally:

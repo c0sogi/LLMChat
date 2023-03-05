@@ -1,7 +1,7 @@
-from datetime import datetime
+# from datetime import datetime
 from inspect import currentframe as frame
 from fastapi import APIRouter
-from fastapi.responses import Response, FileResponse
+from fastapi.responses import FileResponse, RedirectResponse  # Response
 from fastapi.requests import Request
 
 # from app.background_tasks import background_task_state
@@ -15,7 +15,7 @@ router = APIRouter(tags=["index"])
 
 @router.get("/")
 async def index():
-    now = f"API Time (UTC: {datetime.utcnow().strftime('%Y.%m.%d %H:%M:%S')})"
+    # now = f"UTC Time ({datetime.utcnow().strftime('%Y.%m.%d %H:%M:%S')})"
     # Users.create_db_model_instance(
     #     session=session,
     #     auto_commit=True,
@@ -24,10 +24,11 @@ async def index():
     #     email="www@www.com",
     # )
     # return Response()
-    return Response(
-        now,
-        media_type="application/json; charset=utf8mb4",
-    )
+    # return Response(
+    #     now,
+    #     media_type="application/json; charset=utf8mb4",
+    # )
+    return RedirectResponse(url="/redoc")
 
 
 @router.get("/favicon.ico", include_in_schema=False)

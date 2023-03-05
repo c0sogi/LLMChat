@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine.base import Engine
 from sqlalchemy.exc import OperationalError, ResourceClosedError
-from sqlalchemy.orm import sessionmaker, scoped_session, Session, declarative_base
+from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from time import sleep
 from typing import Union, Optional, Any, List
 import logging
@@ -92,7 +92,7 @@ class SQLAlchemy:
         config: Optional[Union[LocalConfig, ProdConfig, TestConfig]] = None,
     ):
         self.engine: Optional[Engine] = None
-        self.session_local: Session = None
+        self.session: Session = None
         if app is not None:
             self.init_app(app=app, config=config)
 
@@ -106,7 +106,7 @@ class SQLAlchemy:
             pool_recycle=config.db_pool_recycle,
             pool_pre_ping=True,
         )  # Root user
-        while True:
+        while True:  # Connection check
             try:
                 assert MySQL.is_db_exists(
                     self.engine, database_name=config.mysql_database
@@ -116,7 +116,7 @@ class SQLAlchemy:
             else:
                 break
 
-        if config.test_mode:  # create schema
+        if config.test_mode:  # Test mode
             assert isinstance(
                 config, TestConfig
             ), "Config with 'test_mode == True' must be TestConfig! "
@@ -135,7 +135,7 @@ class SQLAlchemy:
                 pool_recycle=config.db_pool_recycle,
                 pool_pre_ping=True,
             )
-        else:  # create schema
+        else:  # Production or Local mode
             assert isinstance(
                 config, Union[LocalConfig, ProdConfig]
             ), "Config with 'test_mode == False' must be LocalConfig or ProdConfig!"
@@ -151,9 +151,7 @@ class SQLAlchemy:
             )
             assert self.engine.url.username != "root", "Database user must not be root!"
         Base.metadata.create_all(self.engine)
-        self.session_local = scoped_session(
-            sessionmaker(bind=self.engine, autocommit=False, autoflush=False)
-        )
+        self.session = sessionmaker(bind=self.engine, autocommit=False, autoflush=False)
 
         @app.on_event("startup")
         async def startup():
@@ -163,15 +161,12 @@ class SQLAlchemy:
 
         @app.on_event("shutdown")
         async def shutdown():
-            self.session_local.remove()
+            self.session.remove()
             self.engine.dispose()
             logging.info("DB disconnected")
 
     def get_db(self) -> Session:
-        assert (
-            self.session_local is not None
-        ), "'init_app' must be called to get session!"
-        local_session = self.session_local()
+        local_session = self.session()
         try:
             yield local_session
         finally:

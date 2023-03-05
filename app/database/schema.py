@@ -49,19 +49,16 @@ class CustomMixin:
         Create data in DB and return this new DB model instance.
         """
         db_model_instance = cls()
-        with session.begin_nested():
-            try:
-                for column in db_model_instance.all_columns:
-                    setattr(
-                        db_model_instance, column.name, kwargs.get(column.name)
-                    ) if column.name in kwargs else None
-                session.add(db_model_instance)
-                session.flush()
-            except Exception as e:
-                print(e)
-                raise SqlFailureEx
-            else:
-                session.commit() if auto_commit else ...
+        try:
+            for column in db_model_instance.all_columns:
+                setattr(
+                    db_model_instance, column.name, kwargs.get(column.name)
+                ) if column.name in kwargs else None
+            session.add(db_model_instance)
+        except Exception:
+            raise SqlFailureEx
+        else:
+            session.commit() if auto_commit else ...
         return db_model_instance
 
     @classmethod
@@ -72,7 +69,7 @@ class CustomMixin:
         Get matched query(row) from DB
         """
         is_session_given = False if session is None else True
-        session = db.session_local() if session is None else session
+        session = db.session() if session is None else session
         try:
             query = session.query(cls).filter(
                 *[getattr(cls, col) == val for col, val in kwargs.items()]
@@ -81,8 +78,7 @@ class CustomMixin:
                 query.count() <= 1
             ), "Only one row is supposed to be returned, but got more than one."
             return query.first()
-        except Exception as e:
-            print(e)
+        except Exception:
             raise SqlFailureEx
         finally:
             session.close() if not is_session_given else ...
@@ -92,7 +88,6 @@ class CustomMixin:
         """
         Return a DB model instance with filtered queries. Those queries can be accessed by "._queries"
         """
-        session = db.session_local() if session is None else session
         try:
             conditions = {
                 "in": lambda col, val: col.in_(val),
@@ -121,8 +116,8 @@ class CustomMixin:
                 *conditions_to_query
             )
             return db_model_instance
-        except Exception as e:
-            print(e)
+        except Exception:
+            raise SqlFailureEx
 
     @classmethod
     def get_column(cls, column_name: str) -> Column:
@@ -146,7 +141,6 @@ class CustomMixin:
 
     def update(self, auto_commit: bool = False, **kwargs) -> Union[Query, None]:
         updated_queries_number = self._queries.update(kwargs)
-        self._session.flush()
         self._session.commit() if auto_commit else ...
         return self._queries.first() if updated_queries_number > 0 else None
 
