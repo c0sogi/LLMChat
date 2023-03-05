@@ -110,11 +110,11 @@ async def validate_access_key(
     **kwargs
 ) -> UserToken:
     if query_from_session:  # Find API key from session
-        api_key_query = await ApiKeys.get_row_from_db(access_key=access_key)
-        if not api_key_query:
+        api_key_query = await ApiKeys.one_or_nothing(access_key=access_key)
+        if api_key_query is None:
             raise ex.NotFoundAccessKeyEx(api_key=access_key)
-        user_query = await Users.get_row_from_db(id=api_key_query.user_id)
-        if not user_query:
+        user_query = await Users.one_or_nothing(id=api_key_query.user_id)
+        if user_query is None:
             raise ex.NotFoundUserEx(user_id=api_key_query.user_id)
         user_info: dict = query_row_to_dict(user_query)
 

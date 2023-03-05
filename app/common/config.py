@@ -40,12 +40,14 @@ class ErrorResponse:
         return asdict(self)
 
 
-MYSQL_URL_FORMAT: str = "mysql+pymysql://{}:{}@{}:3306/{}?charset=utf8mb4"
+MYSQL_URL_FORMAT: str = "mysql+aiomysql://{}:{}@{}:3306/{}?charset=utf8mb4"
 MYSQL_ROOT_PASSWORD: str = environ.get("MYSQL_ROOT_PASSWORD")
 MYSQL_USER: str = environ.get("MYSQL_USER")
 MYSQL_PASSWORD: str = environ.get("MYSQL_PASSWORD")
 MYSQL_DATABASE: str = environ.get("MYSQL_DATABASE")
 MYSQL_TEST_DATABASE: str = environ.get("MYSQL_TEST_DATABASE")
+MYSQL_HOST: str = "db"
+DOMAIN: str = "walabi.store"
 JWT_SECRET: str = environ.get("JWT_SECRET")
 AWS_ACCESS_KEY: str = environ.get("AWS_ACCESS_KEY")
 AWS_SECRET_KEY: str = environ.get("AWS_SECRET_KEY")
@@ -94,9 +96,17 @@ class Config(metaclass=SingletonMetaClass):
     debug: bool = False
     test_mode: bool = False
     mysql_database: str = MYSQL_DATABASE
-    mysql_root_url: str = MYSQL_URL_FORMAT.format(
-        "root", parse.quote(MYSQL_ROOT_PASSWORD), "db", "mysql"
+    mysql_user: str = MYSQL_USER
+    mysql_password: str = MYSQL_PASSWORD
+    mysql_host: str = MYSQL_HOST
+    mysql_url: str = MYSQL_URL_FORMAT.format(
+        MYSQL_USER, parse.quote(MYSQL_PASSWORD), MYSQL_HOST, MYSQL_DATABASE
     )
+    mysql_root_url: str = MYSQL_URL_FORMAT.format(
+        "root", parse.quote(MYSQL_ROOT_PASSWORD), MYSQL_HOST, "mysql"
+    )
+    trusted_hosts = ["*"]
+    allowed_sites = ["*"]
 
     @staticmethod
     def get(
@@ -111,43 +121,29 @@ class Config(metaclass=SingletonMetaClass):
 @dataclass(frozen=True)
 class LocalConfig(Config, metaclass=SingletonMetaClass):
     debug: bool = True
-    mysql_url: str = MYSQL_URL_FORMAT.format(
-        MYSQL_USER, parse.quote(MYSQL_PASSWORD), "db", MYSQL_DATABASE
-    )
-    trusted_hosts = ["*"]
-    allowed_sites = ["*"]
 
 
 @dataclass(frozen=True)
 class ProdConfig(Config, metaclass=SingletonMetaClass):
-    mysql_url: str = MYSQL_URL_FORMAT.format(
-        MYSQL_USER, parse.quote(MYSQL_PASSWORD), "db", MYSQL_DATABASE
-    )
     trusted_hosts = [
-        "*.walabi.store",
-        "walabi.store",
+        f"*.{DOMAIN}",
+        DOMAIN,
         "localhost",
-        "127.0.0.1",
-        "192.168.0.3",
     ]
     allowed_sites = [
-        "*.walabi.store",
-        "walabi.store",
+        f"*.{DOMAIN}",
+        DOMAIN,
         "localhost",
-        "127.0.0.1",
-        "192.168.0.3",
     ]
 
 
 @dataclass(frozen=True)
 class TestConfig(Config, metaclass=SingletonMetaClass):
     test_mode: bool = True
+    mysql_test_database: str = MYSQL_TEST_DATABASE
     mysql_root_url: str = MYSQL_URL_FORMAT.format(
-        "root", parse.quote(MYSQL_ROOT_PASSWORD), "localhost", "mysql"
+        "root", parse.quote(MYSQL_ROOT_PASSWORD), "localhost", MYSQL_TEST_DATABASE
     )
     mysql_test_url: str = MYSQL_URL_FORMAT.format(
         "root", parse.quote(MYSQL_ROOT_PASSWORD), "localhost", MYSQL_TEST_DATABASE
     )
-    mysql_test_database: str = MYSQL_TEST_DATABASE
-    trusted_hosts = ["*"]
-    allowed_sites = ["*"]

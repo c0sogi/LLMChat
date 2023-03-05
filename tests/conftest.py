@@ -1,6 +1,9 @@
+from typing import AsyncGenerator, AsyncIterator
 import pytest
 from asyncio import run
-from fastapi.testclient import TestClient
+from httpx import AsyncClient
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from app.database.schema import Users, db
 from app.common.app_settings import create_app
 from app.common.config import Config
@@ -21,18 +24,18 @@ def app():
     return create_app(Config.get(option="test"))
 
 
-@pytest.fixture(scope="session")
-def client(app):
-    return TestClient(app=app)
-
-
 @pytest.fixture(scope="function")
-def session():
-    local_session = db.session()
+def get_db() -> AsyncIterator[async_sessionmaker]:
     try:
-        yield local_session
+        yield db.session
     finally:
-        local_session.close()
+        db.session.close()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def client(app) -> AsyncGenerator:
+    async with AsyncClient(app=app, base_url="http://localhost") as ac:
+        yield ac
 
 
 @pytest.fixture(scope="function")
@@ -40,7 +43,7 @@ def login_header(session, user_1):
     """
     테스트 전 사용자 미리 등록
     """
-    new_user = run(Users.create_schema_instance(session, auto_commit=True, **user_1))
+    new_user = run(Users.create_new(session, auto_commit=True, **user_1))
     access_token = create_access_token(
         data=UserToken.from_orm(new_user).dict(exclude={"pw", "marketing_agree"}),
     )

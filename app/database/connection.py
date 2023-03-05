@@ -1,10 +1,17 @@
+from asyncio import current_task
+from typing import Union, Optional, Any, List
 from fastapi import FastAPI
-from sqlalchemy import create_engine, text
+from sqlalchemy import text, create_engine
 from sqlalchemy.engine.base import Engine
 from sqlalchemy.exc import OperationalError, ResourceClosedError
-from sqlalchemy.orm import sessionmaker, Session, declarative_base
+from sqlalchemy.ext.asyncio import (
+    async_sessionmaker,
+    async_scoped_session,
+    create_async_engine,
+    AsyncSession,
+)
+from sqlalchemy.orm import declarative_base
 from time import sleep
-from typing import Union, Optional, Any, List
 import logging
 from app.common.config import TestConfig, ProdConfig, LocalConfig
 
@@ -92,7 +99,7 @@ class SQLAlchemy:
         config: Optional[Union[LocalConfig, ProdConfig, TestConfig]] = None,
     ):
         self.engine: Optional[Engine] = None
-        self.session: Session = None
+        self.session: AsyncSession = None
         if app is not None:
             self.init_app(app=app, config=config)
 
@@ -101,7 +108,7 @@ class SQLAlchemy:
     ):
         print(">>> Current config status:", config)
         self.engine = create_engine(
-            config.mysql_root_url,
+            config.mysql_root_url.replace("aiomysql", "pymysql"),
             echo=config.db_echo,
             pool_recycle=config.db_pool_recycle,
             pool_pre_ping=True,
@@ -112,6 +119,9 @@ class SQLAlchemy:
                     self.engine, database_name=config.mysql_database
                 ), f"Database {config.mysql_database} does not exists."
             except OperationalError:
+
+                print(config.mysql_database)
+                print(config.mysql_root_url.replace("aiomysql", "pymysql"))
                 sleep(5)
             else:
                 break
@@ -128,13 +138,6 @@ class SQLAlchemy:
             ):
                 MySQL.drop_db(self.engine, database_name=config.mysql_test_database)
             MySQL.create_db(self.engine, database_name=config.mysql_test_database)
-            self.engine.dispose()
-            self.engine = create_engine(
-                config.mysql_test_url,
-                echo=config.db_echo,
-                pool_recycle=config.db_pool_recycle,
-                pool_pre_ping=True,
-            )
         else:  # Production or Local mode
             assert isinstance(
                 config, Union[LocalConfig, ProdConfig]
@@ -142,35 +145,37 @@ class SQLAlchemy:
             assert MySQL.is_db_exists(
                 self.engine, database_name=config.mysql_database
             ), f"Database {config.mysql_database} does not exists!"
-            self.engine.dispose()
-            self.engine = create_engine(
-                config.mysql_url,
-                echo=config.db_echo,
-                pool_recycle=config.db_pool_recycle,
-                pool_pre_ping=True,
-            )
             assert self.engine.url.username != "root", "Database user must not be root!"
-        Base.metadata.create_all(self.engine)
-        self.session = sessionmaker(bind=self.engine, autocommit=False, autoflush=False)
+        self.engine.dispose()
+        self.engine = create_async_engine(
+            config.mysql_url if not config.test_mode else config.mysql_test_url,
+            echo=config.db_echo,
+            pool_recycle=config.db_pool_recycle,
+            pool_pre_ping=True,
+        )
+        self.session = async_scoped_session(
+            async_sessionmaker(
+                bind=self.engine, autocommit=False, autoflush=False, future=True
+            ),
+            scopefunc=current_task,
+        )
 
         @app.on_event("startup")
         async def startup():
             self.engine.connect()
-            logging.info("DB connected.")
-            # create_task(background_task_state.run())
+            async with self.engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            logging.critical(">>> DB connected")
 
         @app.on_event("shutdown")
         async def shutdown():
             self.session.remove()
             self.engine.dispose()
-            logging.info("DB disconnected")
+            logging.critical(">>> DB disconnected")
 
-    def get_db(self) -> Session:
-        local_session = self.session()
-        try:
-            yield local_session
-        finally:
-            local_session.close()
+    async def get_db(self) -> AsyncSession:
+        async with self.session() as session:
+            yield session
 
 
 db = SQLAlchemy()

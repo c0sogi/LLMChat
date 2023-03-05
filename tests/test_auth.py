@@ -1,13 +1,16 @@
-from tests.test_configuration import *
-from fastapi import status
+from tests.conftest import *
 from asyncio import run
-from app.database.schema import Users
+import pytest
+from fastapi import status
+from httpx import AsyncClient
+from app.database.schema import Users, db
 from app.common.config import ERROR_RESPONSES
 
 
-def test_registration(client, user_1):
+@pytest.mark.asyncio
+async def test_registration(client: AsyncClient, user_1):
     user = user_1
-    response = client.post("api/auth/register/email", json=user)
+    response = await client.post("api/auth/register/email", json=user)
     response_body = response.json()
     assert response.status_code == status.HTTP_201_CREATED
     assert "Authorization" in response_body.keys()
@@ -21,9 +24,9 @@ def test_login(client, user_1):
     assert "Authorization" in response_body.keys()
 
 
-def test_registration_exist_email(client, session, user_2):
+def test_registration_exist_email(client, user_2):
     new_user = user_2
-    run(Users.create_schema_instance(session, auto_commit=True, **new_user))
+    run(Users.create_new(db.get_db(), auto_commit=True, **new_user))
     response = client.post("api/auth/register/email", json=new_user)
     response_body = response.json()
     assert response.status_code == ERROR_RESPONSES["email_already_taken"]["status_code"]

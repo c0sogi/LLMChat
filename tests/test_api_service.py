@@ -1,4 +1,4 @@
-from tests.test_configuration import *
+from tests.conftest import *
 from requests import Response, get
 from app.utils.date_utils import UTC
 from app.utils.encoding_and_hashing import hash_params
