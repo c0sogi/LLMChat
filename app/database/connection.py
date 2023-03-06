@@ -1,9 +1,9 @@
-from asyncio import current_task, run
+from asyncio import current_task
 from typing import Union, Optional, Any, List
 from fastapi import FastAPI
 from sqlalchemy import text, create_engine
 from sqlalchemy.engine.base import Engine
-from sqlalchemy.exc import OperationalError, ResourceClosedError
+from sqlalchemy.exc import ResourceClosedError
 from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     async_scoped_session,
@@ -95,59 +95,32 @@ class MySQL:
 class SQLAlchemy:
     def __init__(
         self,
-        app: FastAPI = None,
-        config: Optional[Union[LocalConfig, ProdConfig, TestConfig]] = None,
     ):
         self.engine: Optional[Engine] = None
         self.session: AsyncSession = None
-        if app is not None:
-            self.init_app(app=app, config=config)
 
-    def init_app(
-        self, app: FastAPI, config: Union[LocalConfig, TestConfig, ProdConfig]
-    ):
-        print(">>> Current config status:", config)
-        self.engine = create_engine(
+    def init_db(
+        self, app: FastAPI, config: Union[TestConfig, ProdConfig, LocalConfig]
+    ) -> None:
+        logging.critical(f"Current config status: {config}")
+        root_engine = create_engine(
             config.mysql_root_url.replace("aiomysql", "pymysql"),
             echo=config.db_echo,
-            pool_recycle=config.db_pool_recycle,
-            pool_pre_ping=True,
-        )  # Root user
-        while True:  # Connection check
-            try:
-                assert MySQL.is_db_exists(
-                    self.engine, database_name=config.mysql_database
-                ), f"Database {config.mysql_database} does not exists."
-            except Exception as e:
-                print(e)
-                sleep(5)
-            else:
-                break
-
-        if config.test_mode:  # Test mode
-            assert isinstance(
-                config, TestConfig
-            ), "Config with 'test_mode == True' must be TestConfig! "
-            assert (
-                self.engine.url.host == "localhost"
-            ), "DB host must be 'localhost' in test environment!"
-            if not MySQL.is_db_exists(
-                self.engine, database_name=config.mysql_test_database
-            ):
-                MySQL.create_db(self.engine, database_name=config.mysql_test_database)
-            Base.metadata.drop_all(self.engine)
-            Base.metadata.create_all(self.engine)
-        else:  # Production or Local mode
-            assert isinstance(
-                config, Union[LocalConfig, ProdConfig]
-            ), "Config with 'test_mode == False' must be LocalConfig or ProdConfig!"
-            assert MySQL.is_db_exists(
-                self.engine, database_name=config.mysql_database
-            ), f"Database {config.mysql_database} does not exists!"
-            assert self.engine.url.username != "root", "Database user must not be root!"
-        self.engine.dispose()
+        )
+        self.check_connectivity(
+            root_engine=root_engine, database_name=config.mysql_database
+        )
+        root_engine.dispose()
+        engine = create_engine(
+            config.mysql_url.replace("aiomysql", "pymysql"),
+            echo=config.db_echo,
+        )
+        with engine.connect() as conn:
+            Base.metadata.drop_all(conn) if config.test_mode else ...
+            Base.metadata.create_all(conn)
+        engine.dispose()
         self.engine = create_async_engine(
-            config.mysql_url if not config.test_mode else config.mysql_test_url,
+            config.mysql_url,
             echo=config.db_echo,
             pool_recycle=config.db_pool_recycle,
             pool_pre_ping=True,
@@ -166,9 +139,26 @@ class SQLAlchemy:
 
         @app.on_event("shutdown")
         async def shutdown():
-            self.session.remove()
-            self.engine.dispose()
+            await self.session.remove()
+            await self.engine.dispose()
             logging.critical(">>> DB disconnected")
+
+    def check_connectivity(self, root_engine: Engine, database_name: str) -> None:
+        is_assertion_error_occured = False
+        while True:  # Connection check
+            try:
+                assert MySQL.is_db_exists(root_engine, database_name=database_name)
+            except AssertionError:
+                if is_assertion_error_occured:
+                    raise Exception("Infinite-looping error")
+                is_assertion_error_occured = True
+                print(f"Database {database_name} not exists. Creating new database...")
+                MySQL.create_db(root_engine, database_name=database_name)
+            except Exception as e:
+                print(e)
+                sleep(5)
+            else:
+                return
 
     async def get_db(self) -> AsyncSession:
         async with self.session() as session:

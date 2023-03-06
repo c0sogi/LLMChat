@@ -81,7 +81,9 @@ async def access_control(request: Request, call_next: RequestResponseEndpoint):
         response = await call_next(request)
 
     except Exception as exception:  # If any error occurs...
-        error: Union[SqlFailureEx, APIException] = await exception_handler(exception)
+        error: Union[Exception, SqlFailureEx, APIException] = await exception_handler(
+            exception
+        )
         response = JSONResponse(
             status_code=error.status_code,
             content={
@@ -107,13 +109,17 @@ async def validate_access_key(
     access_key: str,
     query_from_session: bool = False,
     query_check: bool = False,
-    **kwargs
+    **kwargs,
 ) -> UserToken:
     if query_from_session:  # Find API key from session
-        api_key_query = await ApiKeys.one_or_nothing(access_key=access_key)
+        api_key_query = (
+            await ApiKeys.filter_by_equality(access_key=access_key)
+        ).one_or_none()
         if api_key_query is None:
             raise ex.NotFoundAccessKeyEx(api_key=access_key)
-        user_query = await Users.one_or_nothing(id=api_key_query.user_id)
+        user_query = (
+            await Users.filter_by_equality(id=api_key_query.user_id)
+        ).one_or_none()
         if user_query is None:
             raise ex.NotFoundUserEx(user_id=api_key_query.user_id)
         user_info: dict = query_row_to_dict(user_query)

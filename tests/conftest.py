@@ -2,6 +2,7 @@ from typing import AsyncGenerator
 import pytest
 from httpx import AsyncClient
 import pytest_asyncio
+from uuid import uuid4
 from app.database.schema import Users
 from app.common.app_settings import create_app
 from app.common.config import Config
@@ -36,42 +37,23 @@ async def client(app) -> AsyncGenerator:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def login_header(user_1):
+async def login_header(random_user):
     """
     테스트 전 사용자 미리 등록
     """
-    new_user = await Users.create_new(auto_commit=True, **user_1)
+    new_user = await Users.create_new(auto_commit=True, **random_user)
     access_token = create_access_token(
         data=UserToken.from_orm(new_user).dict(exclude={"pw", "marketing_agree"}),
     )
     return {"Authorization": f"Bearer {access_token}"}
 
 
-@pytest.fixture(scope="session")
-def user_1():
+@pytest.fixture(scope="function")
+def random_user():
+    random_8_digits = str(hash(uuid4()))[:8]
     return {
-        "email": "aaaa@test.com",
+        "email": f"{random_8_digits}@test.com",
         "pw": "123",
-        "name": "테스트 유저1",
-        "phone": "01011111111",
-    }
-
-
-@pytest.fixture(scope="session")
-def user_2():
-    return {
-        "email": "bbbb@test.com",
-        "pw": "123",
-        "name": "테스트 유저2",
-        "phone": "01022222222",
-    }
-
-
-@pytest.fixture(scope="session")
-def user_3():
-    return {
-        "email": "cccc@test.com",
-        "pw": "123",
-        "name": "테스트 유저3",
-        "phone": "01033333333",
+        "name": f"{random_8_digits}",
+        "phone": f"010{random_8_digits}",
     }

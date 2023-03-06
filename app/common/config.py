@@ -1,9 +1,8 @@
 from __future__ import annotations
-from dataclasses import dataclass, asdict  # field
+from dataclasses import dataclass, asdict
 from os import environ
 from typing import Union, Optional
 from pathlib import Path
-from urllib import parse
 
 
 # from app.utils.encoding_and_hashing import SecretConfigSetup
@@ -40,7 +39,9 @@ class ErrorResponse:
         return asdict(self)
 
 
-MYSQL_URL_FORMAT: str = "mysql+aiomysql://{}:{}@{}:3306/{}?charset=utf8mb4"
+DATABASE_URL_FORMAT: str = (
+    "{dialect}+{driver}://{user}:{password}@{host}:3306/{database}?charset=utf8mb4"
+)
 MYSQL_ROOT_PASSWORD: str = environ.get("MYSQL_ROOT_PASSWORD")
 MYSQL_USER: str = environ.get("MYSQL_USER")
 MYSQL_PASSWORD: str = environ.get("MYSQL_PASSWORD")
@@ -92,19 +93,15 @@ ERROR_RESPONSES = {
 @dataclass(frozen=True)
 class Config(metaclass=SingletonMetaClass):
     db_pool_recycle: int = 900
-    db_echo: bool = False
+    db_echo: bool = True
     debug: bool = False
     test_mode: bool = False
-    mysql_database: str = MYSQL_DATABASE
+    database_url_format: str = DATABASE_URL_FORMAT
+    mysql_root_password: str = MYSQL_ROOT_PASSWORD
     mysql_user: str = MYSQL_USER
     mysql_password: str = MYSQL_PASSWORD
+    mysql_database: str = MYSQL_DATABASE
     mysql_host: str = MYSQL_HOST
-    mysql_url: str = MYSQL_URL_FORMAT.format(
-        MYSQL_USER, parse.quote(MYSQL_PASSWORD), MYSQL_HOST, MYSQL_DATABASE
-    )
-    mysql_root_url: str = MYSQL_URL_FORMAT.format(
-        "root", parse.quote(MYSQL_ROOT_PASSWORD), MYSQL_HOST, "mysql"
-    )
     trusted_hosts = ["*"]
     allowed_sites = ["*"]
 
@@ -121,6 +118,7 @@ class Config(metaclass=SingletonMetaClass):
 @dataclass(frozen=True)
 class LocalConfig(Config, metaclass=SingletonMetaClass):
     debug: bool = True
+    mysql_host: str = "localhost"
 
 
 @dataclass(frozen=True)
@@ -140,10 +138,9 @@ class ProdConfig(Config, metaclass=SingletonMetaClass):
 @dataclass(frozen=True)
 class TestConfig(Config, metaclass=SingletonMetaClass):
     test_mode: bool = True
-    mysql_test_database: str = MYSQL_TEST_DATABASE
-    mysql_root_url: str = MYSQL_URL_FORMAT.format(
-        "root", parse.quote(MYSQL_ROOT_PASSWORD), "localhost", MYSQL_TEST_DATABASE
-    )
-    mysql_test_url: str = MYSQL_URL_FORMAT.format(
-        "root", parse.quote(MYSQL_ROOT_PASSWORD), "localhost", MYSQL_TEST_DATABASE
-    )
+    mysql_host: str = "localhost"
+    mysql_database: str = MYSQL_TEST_DATABASE
+
+
+if __name__ == "__main__":
+    print(Config())
