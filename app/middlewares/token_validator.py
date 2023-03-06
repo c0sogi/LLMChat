@@ -81,7 +81,9 @@ async def access_control(request: Request, call_next: RequestResponseEndpoint):
         response = await call_next(request)
 
     except Exception as exception:  # If any error occurs...
-        error: Union[SqlFailureEx, APIException] = await exception_handler(exception)
+        error: Union[Exception, SqlFailureEx, APIException] = await exception_handler(
+            exception
+        )
         response = JSONResponse(
             status_code=error.status_code,
             content={

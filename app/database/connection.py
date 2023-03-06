@@ -139,8 +139,8 @@ class SQLAlchemy:
 
         @app.on_event("shutdown")
         async def shutdown():
-            self.session.remove()
-            self.engine.dispose()
+            await self.session.remove()
+            await self.engine.dispose()
             logging.critical(">>> DB disconnected")
 
     def check_connectivity(self, root_engine: Engine, database_name: str) -> None:

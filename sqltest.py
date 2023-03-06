@@ -1,7 +1,13 @@
+from dotenv import load_dotenv
+
+load_dotenv()
 from asyncio import current_task
-from typing import Optional, Any, List, Union
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import ResourceClosedError
+from typing import Optional, Any, List, Union, Callable
+from uuid import uuid4
+from sqlalchemy import (
+    create_engine,
+    text,
+)
 from sqlalchemy.engine.base import Engine
 from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
@@ -9,13 +15,11 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
     AsyncSession,
 )
-from sqlalchemy.orm import declarative_base
 from time import sleep
 import logging
 from datetime import datetime
-from app.common.config import TestConfig, ProdConfig, LocalConfig
-
-Base = declarative_base()
+from app.common.config import TestConfig, ProdConfig, LocalConfig, SingletonMetaClass
+from sqltestschema import Base, Users
 
 
 def log(msg) -> None:
@@ -24,12 +28,9 @@ def log(msg) -> None:
 
 class MySQL:
     @staticmethod
-    def get_query(engine: Engine, query: str) -> Optional[Any]:
+    def execute(engine: Engine, query: str) -> Optional[Any]:
         with engine.connect() as conn:
-            result = conn.execute(
-                text(query + ";" if not query.endswith(";") else query)
-            )
-            return result.all()
+            return conn.execute(text(query + ";" if not query.endswith(";") else query))
 
     @staticmethod
     def clear_all_table_data(engine: Engine, except_tables: Optional[List[str]] = None):
@@ -43,7 +44,7 @@ class MySQL:
     @classmethod
     def is_db_exists(cls, engine: Engine, database_name: str) -> bool:
         return bool(
-            cls.get_query(
+            cls.execute(
                 engine=engine,
                 query=f"SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{database_name}';",
             )
@@ -51,14 +52,14 @@ class MySQL:
 
     @classmethod
     def drop_db(cls, engine: Engine, database_name: str) -> None:
-        return cls.get_query(
+        return cls.execute(
             engine=engine,
             query=f"DROP DATABASE {database_name};",
         )
 
     @classmethod
     def create_db(cls, engine: Engine, database_name: str) -> None:
-        return cls.get_query(
+        return cls.execute(
             engine=engine,
             query=f"CREATE DATABASE {database_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;",
         )
@@ -71,7 +72,7 @@ class MySQL:
         password: str,
         host: str,
     ) -> None:
-        return cls.get_query(
+        return cls.execute(
             engine=engine,
             query=f"CREATE USER '{username}'@'{host}' IDENTIFIED BY '{password}'",
         )
@@ -85,29 +86,23 @@ class MySQL:
         to_user: str,
         user_host: str,
     ) -> None:
-        return cls.get_query(
+        return cls.execute(
             engine=engine,
             query=f"GRANT {grant} ON {on} TO '{to_user}'@'{user_host}'",
         )
 
 
-class SQLAlchemy:
-    def __init__(
-        self,
-    ):
-        self.engine: Optional[Engine] = None
-        self.session: AsyncSession = None
-
-    def init_db(self, config: Union[TestConfig, ProdConfig, LocalConfig]) -> None:
+class SQLAlchemy(metaclass=SingletonMetaClass):
+    def __init__(self, config: Union[TestConfig, ProdConfig, LocalConfig]) -> None:
         log(f"Current config status: {config}")
-        root_engine = create_engine(
-            config.mysql_root_url.replace("aiomysql", "pymysql"),
-            echo=config.db_echo,
-        )
-        self.check_connectivity(
-            root_engine=root_engine, database_name=config.mysql_database
-        )
-        root_engine.dispose()
+        # root_engine = create_engine(
+        #     config.mysql_root_url.replace("aiomysql", "pymysql"),
+        #     echo=config.db_echo,
+        # )
+        # self.check_connectivity(
+        #     root_engine=root_engine, database_name=config.mysql_database
+        # )
+        # root_engine.dispose()
         engine = create_engine(
             config.mysql_url.replace("aiomysql", "pymysql"),
             echo=config.db_echo,
@@ -150,7 +145,42 @@ class SQLAlchemy:
             else:
                 return
 
+    async def _run_in_session(
+        self,
+        session: AsyncSession,
+        _func: Callable[[AsyncSession, dict], Any],
+        **kwargs,
+    ):
+        if session is None:
+            session = self.session
+            async with session() as db:
+                return await _func(db, **kwargs)
+        else:
+            return await _func(session, **kwargs)
+
+    async def add_by_attributes(
+        self, schema: Base, session: Optional[AsyncSession] = None, **kwargs
+    ):
+        async def _func(db: AsyncSession, **kwargs) -> None:
+            instance = schema(**kwargs)
+            db.add(instance)
+            await db.commit()
+            await db.refresh(instance)
+            return instance
+
+        return await self._run_in_session(session, _func=_func, **kwargs)
+
+
+async def main():
+    sql_alchemy = SQLAlchemy(config=TestConfig())
+    random_name = str(uuid4())[:20]
+    print("\n" * 10)
+    await sql_alchemy.add_by_attributes(Users, username=random_name)
+    await sql_alchemy.session.close()
+    await sql_alchemy.engine.dispose()
+
 
 if __name__ == "__main__":
-    sql_alchemy = SQLAlchemy()
-    sql_alchemy.init_db(config=TestConfig())
+    from asyncio import run
+
+    run(main())
