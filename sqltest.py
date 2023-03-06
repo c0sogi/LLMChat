@@ -1,9 +1,8 @@
 from asyncio import current_task
-from typing import Union, Optional, Any, List
-from fastapi import FastAPI
-from sqlalchemy import text, create_engine
-from sqlalchemy.engine.base import Engine
+from typing import Optional, Any, List, Union
+from sqlalchemy import create_engine, text
 from sqlalchemy.exc import ResourceClosedError
+from sqlalchemy.engine.base import Engine
 from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     async_scoped_session,
@@ -13,9 +12,14 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import declarative_base
 from time import sleep
 import logging
+from datetime import datetime
 from app.common.config import TestConfig, ProdConfig, LocalConfig
 
 Base = declarative_base()
+
+
+def log(msg) -> None:
+    logging.critical(f"[{datetime.now()}] {msg}")
 
 
 class MySQL:
@@ -25,12 +29,7 @@ class MySQL:
             result = conn.execute(
                 text(query + ";" if not query.endswith(";") else query)
             )
-            try:
-                result = result.fetchall()
-            except ResourceClosedError:
-                result = None
-            print(f">>> Query '{query}' result:", result)
-            return result
+            return result.all()
 
     @staticmethod
     def clear_all_table_data(engine: Engine, except_tables: Optional[List[str]] = None):
@@ -99,10 +98,8 @@ class SQLAlchemy:
         self.engine: Optional[Engine] = None
         self.session: AsyncSession = None
 
-    def init_db(
-        self, app: FastAPI, config: Union[TestConfig, ProdConfig, LocalConfig]
-    ) -> None:
-        logging.critical(f"Current config status: {config}")
+    def init_db(self, config: Union[TestConfig, ProdConfig, LocalConfig]) -> None:
+        log(f"Current config status: {config}")
         root_engine = create_engine(
             config.mysql_root_url.replace("aiomysql", "pymysql"),
             echo=config.db_echo,
@@ -132,16 +129,9 @@ class SQLAlchemy:
             scopefunc=current_task,
         )
 
-        @app.on_event("startup")
-        async def startup():
-            # self.engine.connect()
-            logging.critical(">>> DB connected")
-
-        @app.on_event("shutdown")
-        async def shutdown():
-            self.session.remove()
-            self.engine.dispose()
-            logging.critical(">>> DB disconnected")
+    async def get_db(self) -> AsyncSession:
+        async with self.session() as session:
+            yield session
 
     def check_connectivity(self, root_engine: Engine, database_name: str) -> None:
         is_assertion_error_occured = False
@@ -160,9 +150,7 @@ class SQLAlchemy:
             else:
                 return
 
-    async def get_db(self) -> AsyncSession:
-        async with self.session() as session:
-            yield session
 
-
-db = SQLAlchemy()
+if __name__ == "__main__":
+    sql_alchemy = SQLAlchemy()
+    sql_alchemy.init_db(config=TestConfig())

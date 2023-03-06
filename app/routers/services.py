@@ -21,11 +21,12 @@ import boto3
 from botocore.exceptions import ClientError
 
 router = APIRouter(prefix="/services")
+router.redirect_slashes = False
 
 
 @router.get("/")
 async def get_all_services(request: Request):
-    return dict(your_email=request.state.user.email)
+    return {"your_email": request.state.user.email}
 
 
 @router.post("/kakao/send")

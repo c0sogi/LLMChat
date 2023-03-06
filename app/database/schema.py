@@ -66,9 +66,9 @@ class CustomMixin:
         if session is None:
             async with db.session() as session:
                 query_result = await session.execute(query)
-                return query_result.mappings()
+                return query_result.scalars()
         else:
-            return (await session.execute(query)).mappings()
+            return (await session.execute(query)).scalars()
 
     @classmethod
     async def filter_by_condition(
@@ -99,9 +99,9 @@ class CustomMixin:
         query = select(cls).filter(*conditions_to_query)
         if session is None:
             async with db.session() as session:
-                return (await session.execute(query)).mappings()
+                return (await session.execute(query)).scalars()
         else:
-            return (await session.execute(query)).mappings()
+            return (await session.execute(query)).scalars()
 
     @classmethod
     def get_column(cls, column_name: str) -> Column:
@@ -125,9 +125,9 @@ class CustomMixin:
             )
         if session is None:
             async with db.session() as session:
-                return await session.execute(query).mappings()
+                return await session.execute(query).scalars()
         else:
-            return await session.execute(query).mappings()
+            return await session.execute(query).scalars()
 
     async def update(
         self,

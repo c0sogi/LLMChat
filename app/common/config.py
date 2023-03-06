@@ -92,7 +92,7 @@ ERROR_RESPONSES = {
 @dataclass(frozen=True)
 class Config(metaclass=SingletonMetaClass):
     db_pool_recycle: int = 900
-    db_echo: bool = False
+    db_echo: bool = True
     debug: bool = False
     test_mode: bool = False
     mysql_database: str = MYSQL_DATABASE
@@ -121,6 +121,12 @@ class Config(metaclass=SingletonMetaClass):
 @dataclass(frozen=True)
 class LocalConfig(Config, metaclass=SingletonMetaClass):
     debug: bool = True
+    mysql_url: str = MYSQL_URL_FORMAT.format(
+        MYSQL_USER, parse.quote(MYSQL_PASSWORD), "localhost", MYSQL_DATABASE
+    )
+    mysql_root_url: str = MYSQL_URL_FORMAT.format(
+        "root", parse.quote(MYSQL_ROOT_PASSWORD), "localhost", "mysql"
+    )
 
 
 @dataclass(frozen=True)
@@ -140,10 +146,10 @@ class ProdConfig(Config, metaclass=SingletonMetaClass):
 @dataclass(frozen=True)
 class TestConfig(Config, metaclass=SingletonMetaClass):
     test_mode: bool = True
-    mysql_test_database: str = MYSQL_TEST_DATABASE
-    mysql_root_url: str = MYSQL_URL_FORMAT.format(
+    mysql_database: str = MYSQL_TEST_DATABASE
+    mysql_url: str = MYSQL_URL_FORMAT.format(
         "root", parse.quote(MYSQL_ROOT_PASSWORD), "localhost", MYSQL_TEST_DATABASE
     )
-    mysql_test_url: str = MYSQL_URL_FORMAT.format(
-        "root", parse.quote(MYSQL_ROOT_PASSWORD), "localhost", MYSQL_TEST_DATABASE
+    mysql_root_url: str = MYSQL_URL_FORMAT.format(
+        "root", parse.quote(MYSQL_ROOT_PASSWORD), "localhost", "mysql"
     )

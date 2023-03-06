@@ -17,7 +17,7 @@ from app.dependencies import api_service_dependency, user_dependency
 def create_app(config: Union[LocalConfig, ProdConfig, TestConfig]) -> FastAPI:
     # App & DB
     new_app = FastAPI()
-    db.init_app(app=new_app, config=config)
+    db.init_db(app=new_app, config=config)
 
     # Middlewares
     """
@@ -59,6 +59,7 @@ def create_app(config: Union[LocalConfig, ProdConfig, TestConfig]) -> FastAPI:
         tags=["Users"],
         dependencies=[Depends(user_dependency)],
     )
+
     return new_app
 
 

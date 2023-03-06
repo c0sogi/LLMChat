@@ -69,6 +69,7 @@ async def login(
             raise HTTPException(**ERROR_RESPONSES["no_email_or_pw"])
         query_result = await Users.filter_by_equality(session, email=user_info.email)
         matched_user = query_result.one_or_none()
+        logger.critical(matched_user.__dict__)
 
         if matched_user is None:
             raise HTTPException(**ERROR_RESPONSES["no_matched_user"])
