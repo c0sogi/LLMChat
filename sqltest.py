@@ -1,12 +1,15 @@
 from dotenv import load_dotenv
 
 load_dotenv()
+from collections.abc import Iterable
 from asyncio import current_task
 from typing import Optional, Any, List, Union, Callable
 from uuid import uuid4
 from sqlalchemy import (
+    ScalarResult,
     create_engine,
     text,
+    select,
 )
 from sqlalchemy.engine.base import Engine
 from sqlalchemy.ext.asyncio import (
@@ -145,39 +148,115 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
             else:
                 return
 
-    async def _run_in_session(
-        self,
-        session: AsyncSession,
-        _func: Callable[[AsyncSession, dict], Any],
-        **kwargs,
-    ):
-        if session is None:
-            session = self.session
-            async with session() as db:
-                return await _func(db, **kwargs)
-        else:
-            return await _func(session, **kwargs)
+    def _run_in_session(self, _func: Callable[[AsyncSession, dict], Any]):
+        async def _wrapper(
+            schema: Base,
+            session: Optional[AsyncSession] = None,
+            autocommit: bool = False,
+            stmt: Any = None,
+            **kwargs,
+        ):
+            if session is None:
+                async with self.session() as tmp_session:
+                    result = await _func(schema, tmp_session, stmt, **kwargs)
+                    await tmp_session.commit() if autocommit else ...
+            else:
+                result = await _func(schema, session, stmt, **kwargs)
+                await session.commit() if autocommit else ...
+            return result
 
-    async def add_by_attributes(
-        self, schema: Base, session: Optional[AsyncSession] = None, **kwargs
-    ):
-        async def _func(db: AsyncSession, **kwargs) -> None:
-            instance = schema(**kwargs)
-            db.add(instance)
-            await db.commit()
-            await db.refresh(instance)
-            return instance
+        return _wrapper
 
-        return await self._run_in_session(session, _func=_func, **kwargs)
+
+sa = SQLAlchemy(config=TestConfig())
+
+
+@sa._run_in_session
+async def add_by(
+    schema: Base, session: Optional[AsyncSession] = None, stmt: dict = None
+):
+    if stmt is not None:
+        instance = schema(**stmt)
+        session.add(instance)
+        return instance
+
+
+@sa._run_in_session
+async def add_by_list(
+    schema: Base,
+    session: Optional[AsyncSession] = None,
+    stmt: Iterable[dict] = None,
+):
+    if stmt is not None:
+        instances = [schema(**attributes) for attributes in stmt]
+        session.add_all(instances)
+        return instances
+
+
+@sa._run_in_session
+async def where_all(
+    schema: Base, session: Optional[AsyncSession] = None, stmt: bool = None
+) -> List[Base]:
+    return (
+        [result for result in await session.scalars(select(schema).where(stmt))]
+        if stmt is not None
+        else None
+    )
+
+
+@sa._run_in_session
+async def where_first(
+    schema: Base, session: Optional[AsyncSession] = None, stmt: bool = None
+) -> Optional[Base]:
+    return (
+        (await session.scalars(select(schema).where(stmt))).first()
+        if stmt is not None
+        else None
+    )
+
+
+@sa._run_in_session
+async def get_by_primary_key(
+    schema: Base, session: Optional[AsyncSession] = None, stmt: bool = None
+) -> Optional[Base]:
+    session.get()
+    return (
+        (await session.scalars(select(schema).where(stmt))).first()
+        if stmt is not None
+        else None
+    )
 
 
 async def main():
-    sql_alchemy = SQLAlchemy(config=TestConfig())
-    random_name = str(uuid4())[:20]
+    random_name = str(uuid4())[:18]
+    random_name2 = str(uuid4())[:18]
+    random_name3 = str(uuid4())[:18]
     print("\n" * 10)
-    await sql_alchemy.add_by_attributes(Users, username=random_name)
-    await sql_alchemy.session.close()
-    await sql_alchemy.engine.dispose()
+
+    # Create instances
+    two_users = await add_by_list(
+        Users,
+        autocommit=True,
+        stmt=[{"username": random_name}, {"username": random_name2}],
+    )
+    one_user = await add_by(
+        Users,
+        autocommit=True,
+        stmt={"username": random_name3, "password": 123},
+    )
+
+    # Find instances
+    two_users = await where_all(
+        Users, stmt=Users.username.in_([random_name, random_name2])
+    )
+    for user in two_users:
+        print("Queried user:", user.__dict__)
+    one_user = await where_first(
+        Users, stmt=(Users.username == random_name3 and Users.password == 123)
+    )
+    print("Queried another user:", one_user)
+    await sa.session.close()
+    await sa.engine.dispose()
 
 
 if __name__ == "__main__":

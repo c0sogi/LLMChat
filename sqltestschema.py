@@ -5,7 +5,6 @@ from sqlalchemy import (
     func,
     String,
     Integer,
-    select,
     Enum,
     Boolean,
     ForeignKey,
@@ -23,7 +22,7 @@ Base = declarative_base()
 
 
 class Mixin:
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
     created_at: Mapped[datetime] = mapped_column(default=func.utc_timestamp())
     updated_at: Mapped[datetime] = mapped_column(
         default=func.utc_timestamp(),
@@ -61,7 +60,7 @@ class ApiKeys(Base, Mixin):
     status: Mapped[str] = mapped_column(
         Enum("active", "stopped", "deleted"), default="active"
     )
-    access_key: Mapped[str] = mapped_column(String(length=64), index=True)
+    access_key: Mapped[str] = mapped_column(String(length=64), index=True, unique=True)
     secret_key: Mapped[str] = mapped_column(String(length=64))
     user_memo: Mapped[Optional[str]] = mapped_column(String(length=40))
     is_whitelisted: Mapped[bool] = mapped_column(default=False)
