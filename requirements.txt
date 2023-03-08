@@ -34,6 +34,7 @@ requests
 s3transfer
 six
 SQLAlchemy
+sqlalchemy-utils
 starlette
 toml
 urllib3

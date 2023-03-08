@@ -1,6 +1,5 @@
 from typing import Optional, List
 from sqlalchemy import (
-    text,
     Column,
     func,
     String,
@@ -9,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
 )
+from sqlalchemy.orm.decl_api import DeclarativeMeta
 from sqlalchemy.orm import (
     declarative_base,
     relationship,
@@ -18,7 +18,7 @@ from sqlalchemy.orm import (
 from datetime import datetime
 
 
-Base = declarative_base()
+Base: DeclarativeMeta = declarative_base()
 
 
 class Mixin:
@@ -30,8 +30,8 @@ class Mixin:
     )
     ip_address: Mapped[Optional[str]] = mapped_column(String(length=40))
 
-    # def __hash__(self) -> int:
-    #     return hash(self.id)
+    def __hash__(self) -> int:
+        return hash(self.id)
 
     @property
     def all_columns(self) -> List[Column]:
@@ -78,3 +78,8 @@ class ApiWhiteLists(Base, Mixin):
     __tablename__ = "api_whitelists"
     api_key_id: Mapped[int] = Column(Integer, ForeignKey("api_keys.id"))
     ip_address: Mapped[str] = Column(String(length=64))
+
+
+class Debugging(Base):
+    __tablename__ = "debugging"
+    id: Mapped[int] = mapped_column(primary_key=True)

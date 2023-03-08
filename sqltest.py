@@ -3,16 +3,19 @@ from dotenv import load_dotenv
 load_dotenv()
 from collections.abc import Iterable
 from asyncio import current_task
-from typing import Optional, Any, List, Union, Callable, Type
+from typing import Optional, Any, List, Union, Callable, Type, Tuple
 from uuid import uuid4
+from urllib import parse
 from sqlalchemy import (
+    # ScalarResult,
+    Result,
     ScalarResult,
     Select,
     create_engine,
     text,
     select,
 )
-from sqlalchemy.engine.base import Engine
+from sqlalchemy.engine.base import Engine, Connection
 from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     async_scoped_session,
@@ -31,10 +34,36 @@ def log(msg) -> None:
 
 
 class MySQL:
+    query_set: dict = {
+        "is_user_exists": "SELECT EXISTS(SELECT 1 FROM mysql.user WHERE user = '{user}');",
+        "is_db_exists": "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{database}';",
+        "is_user_granted": (
+            "SELECT * FROM information_schema.schema_privileges "
+            "WHERE table_schema = '{database}' AND grantee = '{user}';"
+        ),
+        "create_user": "CREATE USER '{user}'@'{host}' IDENTIFIED BY '{password}'",
+        "grant_user": "GRANT {grant} ON {on} TO '{to_user}'@'{user_host}'",
+        "create_db": "CREATE DATABASE {database} CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;",
+        "drop_db": "DROP DATABASE {database};",
+    }
+
     @staticmethod
-    def execute(engine: Engine, query: str) -> Optional[Any]:
-        with engine.connect() as conn:
-            return conn.execute(text(query + ";" if not query.endswith(";") else query))
+    def execute(
+        query: str, engine_or_conn: Union[Engine, Connection], scalar: bool = False
+    ) -> Optional[Any]:
+        if isinstance(engine_or_conn, Engine) and not isinstance(
+            engine_or_conn, Connection
+        ):
+            with engine_or_conn.connect() as conn:
+                cursor = conn.execute(
+                    text(query + ";" if not query.endswith(";") else query)
+                )
+                return cursor.scalar() if scalar else None
+        elif isinstance(engine_or_conn, Connection):
+            cursor = engine_or_conn.execute(
+                text(query + ";" if not query.endswith(";") else query)
+            )
+            return cursor.scalar() if scalar else None
 
     @staticmethod
     def clear_all_table_data(engine: Engine, except_tables: Optional[List[str]] = None):
@@ -46,81 +75,138 @@ class MySQL:
             conn.commit()
 
     @classmethod
-    def is_db_exists(cls, engine: Engine, database_name: str) -> bool:
+    def is_db_exists(
+        cls, database: str, engine_or_conn: Union[Engine, Connection]
+    ) -> bool:
         return bool(
             cls.execute(
-                engine=engine,
-                query=f"SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{database_name}';",
+                cls.query_set["is_db_exists"].format(database=database),
+                engine_or_conn,
+                scalar=True,
             )
         )
 
     @classmethod
-    def drop_db(cls, engine: Engine, database_name: str) -> None:
-        return cls.execute(
-            engine=engine,
-            query=f"DROP DATABASE {database_name};",
+    def is_user_exists(
+        cls, user: str, engine_or_conn: Union[Engine, Connection]
+    ) -> bool:
+        return bool(
+            cls.execute(
+                cls.query_set["is_user_exists"].format(user=user),
+                engine_or_conn,
+                scalar=True,
+            )
         )
 
     @classmethod
-    def create_db(cls, engine: Engine, database_name: str) -> None:
+    def is_user_granted(
+        cls, user: str, database: str, engine_or_conn: Union[Engine, Connection]
+    ) -> bool:
+        return bool(
+            cls.execute(
+                cls.query_set["is_user_granted"].format(user=user, database=database),
+                engine_or_conn,
+                scalar=True,
+            )
+        )
+
+    @classmethod
+    def drop_db(cls, database: str, engine_or_conn: Union[Engine, Connection]) -> None:
         return cls.execute(
-            engine=engine,
-            query=f"CREATE DATABASE {database_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;",
+            cls.query_set["drop_db"].format(database=database),
+            engine_or_conn,
+        )
+
+    @classmethod
+    def create_db(
+        cls, database: str, engine_or_conn: Union[Engine, Connection]
+    ) -> None:
+        return cls.execute(
+            cls.query_set["create_db"].format(database=database),
+            engine_or_conn,
         )
 
     @classmethod
     def create_user(
         cls,
-        engine: Engine,
-        username: str,
+        user: str,
         password: str,
         host: str,
+        engine_or_conn: Union[Engine, Connection],
     ) -> None:
         return cls.execute(
-            engine=engine,
-            query=f"CREATE USER '{username}'@'{host}' IDENTIFIED BY '{password}'",
+            cls.query_set["create_user"].format(
+                user=user, password=password, host=host
+            ),
+            engine_or_conn,
         )
 
     @classmethod
     def grant_user(
         cls,
-        engine: Engine,
         grant: str,
         on: str,
         to_user: str,
         user_host: str,
+        engine_or_conn: Union[Engine, Connection],
     ) -> None:
         return cls.execute(
-            engine=engine,
-            query=f"GRANT {grant} ON {on} TO '{to_user}'@'{user_host}'",
+            cls.query_set["grant_user"].format(
+                grant=grant, on=on, to_user=to_user, user_host=user_host
+            ),
+            engine_or_conn,
         )
 
 
 class SQLAlchemy(metaclass=SingletonMetaClass):
     def __init__(self, config: Union[TestConfig, ProdConfig, LocalConfig]) -> None:
         log(f"Current config status: {config}")
-        # root_engine = create_engine(
-        #     config.mysql_root_url.replace("aiomysql", "pymysql"),
-        #     echo=config.db_echo,
-        # )
-        # self.check_connectivity(
-        #     root_engine=root_engine, database_name=config.mysql_database
-        # )
-        # root_engine.dispose()
-        engine = create_engine(
-            config.mysql_url.replace("aiomysql", "pymysql"),
-            echo=config.db_echo,
+        "{dialect}+{driver}://{user}:{password}@{host}:3306/{database}?charset=utf8mb4"
+        root_url = config.database_url_format.format(
+            dialect="mysql",
+            driver="pymysql",
+            user="root",
+            password=parse.quote(config.mysql_root_password),
+            host=config.mysql_host,
+            database=config.mysql_database,
         )
-        with engine.connect() as conn:
+        database_url = config.database_url_format.format(
+            dialect="mysql",
+            driver="aiomysql",
+            user=config.mysql_user,
+            password=parse.quote(config.mysql_password),
+            host=config.mysql_host,
+            database=config.mysql_database,
+        )
+        root_engine = create_engine(root_url, echo=True)
+        with root_engine.connect() as conn:
+            if not MySQL.is_user_exists(config.mysql_user, engine_or_conn=conn):
+                MySQL.create_user(
+                    config.mysql_user, config.mysql_password, "%", engine_or_conn=conn
+                )
+            if not MySQL.is_db_exists(config.mysql_database, engine_or_conn=conn):
+                MySQL.create_db(config.mysql_database, engine_or_conn=conn)
+            if not MySQL.is_user_granted(
+                config.mysql_user, config.mysql_database, engine_or_conn=conn
+            ):
+                MySQL.grant_user(
+                    "ALL PRIVILEGES",
+                    "testing_db.*",
+                    config.mysql_user,
+                    "%",
+                    engine_or_conn=conn,
+                )
             Base.metadata.drop_all(conn) if config.test_mode else ...
             Base.metadata.create_all(conn)
-        engine.dispose()
+            conn.commit()
+        root_engine.dispose()
         self.engine = create_async_engine(
-            config.mysql_url,
+            database_url,
             echo=config.db_echo,
             pool_recycle=config.db_pool_recycle,
             pool_pre_ping=True,
         )
+        print(database_url)
         self.session = async_scoped_session(
             async_sessionmaker(
                 bind=self.engine, autocommit=False, autoflush=False, future=True
@@ -129,20 +215,20 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         )
 
     async def get_db(self) -> AsyncSession:
-        async with self.session() as session:
-            yield session
+        async with self.session() as transaction:
+            yield transaction
 
     def check_connectivity(self, root_engine: Engine, database_name: str) -> None:
         is_assertion_error_occured = False
         while True:  # Connection check
             try:
-                assert MySQL.is_db_exists(root_engine, database_name=database_name)
+                assert MySQL.is_db_exists(root_engine, database=database_name)
             except AssertionError:
                 if is_assertion_error_occured:
                     raise Exception("Infinite-looping error")
                 is_assertion_error_occured = True
                 print(f"Database {database_name} not exists. Creating new database...")
-                MySQL.create_db(root_engine, database_name=database_name)
+                MySQL.create_db(root_engine, database=database_name)
             except Exception as e:
                 print(e)
                 sleep(5)
@@ -157,9 +243,10 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
             **kwargs,
         ):
             if session is None:
-                async with self.session() as tmp_session:
-                    result = await _func(tmp_session, *args, **kwargs)
-                    await tmp_session.commit() if autocommit else ...
+                async with self.session() as transaction:
+                    result = await _func(transaction, *args, **kwargs)
+                    print(result)
+                    await transaction.commit() if autocommit else ...
             else:
                 result = await _func(session, *args, **kwargs)
                 await session.commit() if autocommit else ...
@@ -174,28 +261,30 @@ sa = SQLAlchemy(config=TestConfig())
 class SaBeginMethods:
     @staticmethod
     @sa.run_in_session
-    async def execute(session: AsyncSession, stmt: Union[text, Select]):
+    async def execute(session: AsyncSession, stmt: Union[text, Select]) -> Result:
         return await session.execute(stmt)
 
     @staticmethod
     @sa.run_in_session
-    async def scalar(session: AsyncSession, stmt: Select):
+    async def scalar(session: AsyncSession, stmt: Select) -> Any:
         return await session.scalar(stmt)
 
     @staticmethod
     @sa.run_in_session
-    async def scalars(session: AsyncSession, stmt: Select):
+    async def scalars(session: AsyncSession, stmt: Select) -> ScalarResult:
         return await session.scalars(stmt)
 
     @staticmethod
     @sa.run_in_session
-    async def add(session: AsyncSession, instance: Base):
+    async def add(session: AsyncSession, instance: Base) -> Base:
         session.add(instance)
         return instance
 
     @staticmethod
     @sa.run_in_session
-    async def add_all(session: AsyncSession, instances: Iterable[Base]):
+    async def add_all(
+        session: AsyncSession, instances: Iterable[Base]
+    ) -> Iterable[Base]:
         session.add_all(instances)
         return instances
 
@@ -205,7 +294,6 @@ class SaNestedMethods:
     async def scalars__fetchall(
         stmt: Select, session: Optional[AsyncSession] = None
     ) -> List[Base]:
-        # (await session.ad(stmt)).fetchall
         return (
             await SaBeginMethods.scalars(session=session, autocommit=False, stmt=stmt)
         ).fetchall()
@@ -218,13 +306,40 @@ class SaNestedMethods:
             await SaBeginMethods.scalars(session=session, autocommit=False, stmt=stmt)
         ).one()
 
+    @staticmethod
+    async def scalars__one_or_none(
+        stmt: Select, session: Optional[AsyncSession] = None
+    ) -> Optional[Base]:
+        return (
+            await SaBeginMethods.scalars(session=session, autocommit=False, stmt=stmt)
+        ).one_or_none()
+
+
+# Default methods =======================================================
+
+
+async def fetchall_scalars(
+    stmt: Select, session: Optional[AsyncSession] = None
+) -> List[Base]:
+    return await SaNestedMethods.scalars__fetchall(stmt=stmt, session=session)
+
+
+async def one_scalars(stmt: Select, session: Optional[AsyncSession] = None) -> Base:
+    return await SaNestedMethods.scalars__one(stmt=stmt, session=session)
+
+
+async def one_or_none_scalars(
+    stmt: Select, session: Optional[AsyncSession] = None
+) -> Optional[Base]:
+    return await SaNestedMethods.scalars__one_or_none(stmt=stmt, session=session)
+
 
 async def add_all(
     schema: Type[Base],
     *args: dict,
     autocommit: bool = False,
     session: Optional[AsyncSession] = None,
-):
+) -> List[Base]:
     instances = [schema(**arg) for arg in args]
     await SaBeginMethods.add_all(
         session=session, autocommit=autocommit, instances=instances
@@ -237,38 +352,44 @@ async def add(
     autocommit: bool = False,
     session: Optional[AsyncSession] = None,
     **kwargs: Any,
-):
+) -> Base:
     instance = schema(**kwargs)
     await SaBeginMethods.add(session=session, autocommit=autocommit, instance=instance)
     return instance
 
 
+# Other custom methods =======================================================
+
+
 async def fetchall_filtered_by(
     schema: Type[Base], session: Optional[AsyncSession] = None, **kwargs: Any
-):
-    stmt = select(schema).filter_by(**kwargs)
+) -> List[Base]:
+    stmt: Select[Tuple] = select(schema).filter_by(**kwargs)
     return await SaNestedMethods.scalars__fetchall(stmt=stmt, session=session)
 
 
 async def one_filtered_by(
     schema: Type[Base], session: Optional[AsyncSession] = None, **kwargs: Any
-):
-    stmt = select(schema).filter_by(**kwargs)
+) -> Base:
+    stmt: Select[Tuple] = select(schema).filter_by(**kwargs)
     return await SaNestedMethods.scalars__one(stmt=stmt, session=session)
 
 
 async def fetchall_filtered(
-    schema: Type[Base], *criteria: Any, session: Optional[AsyncSession] = None
-):
-    stmt = select(schema).filter(*criteria)
+    schema: Type[Base], *criteria: bool, session: Optional[AsyncSession] = None
+) -> List[Base]:
+    stmt: Select[Tuple] = select(schema).filter(*criteria)
     return await SaNestedMethods.scalars__fetchall(stmt=stmt, session=session)
 
 
 async def one_filtered(
-    schema: Type[Base], *criteria: Any, session: Optional[AsyncSession] = None
-):
-    stmt = select(schema).filter(*criteria)
+    schema: Type[Base], *criteria: bool, session: Optional[AsyncSession] = None
+) -> Base:
+    stmt: Select[Tuple] = select(schema).filter(*criteria)
     return await SaNestedMethods.scalars__one(stmt=stmt, session=session)
+
+
+# Test section =======================================================
 
 
 async def main():
@@ -293,13 +414,13 @@ async def main():
             Users, autocommit=True, username=random_name3, password=123
         )
         log(created_user.__dict__, "created_user")
-
         # Find instances
-        queried_users = await fetchall_filtered(
-            Users, Users.username.in_([random_name, random_name2])
-        )
+        # queried_users = await fetchall_filtered(
+        #     Users, Users.username.in_([random_name, random_name2])
+        # )
+        stmt = select(Users).filter(Users.username.in_([random_name, random_name2]))
+        queried_users = await fetchall_scalars(stmt)
         log([queried_user.__dict__ for queried_user in queried_users], "queried_users")
-
         queried_user = await one_filtered_by(Users, username=random_name3, password=123)
         log(queried_user.__dict__, "queried_user")
         queried_user2 = await fetchall_filtered_by(Users, username=random_name3)
@@ -313,7 +434,7 @@ async def main():
     finally:
         print("==" * 10, "Outputs", "==" * 10)
         for output in outputs:
-            print(output, '\n')
+            print(output, "\n")
 
 
 if __name__ == "__main__":
