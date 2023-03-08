@@ -30,6 +30,9 @@ class Mixin:
     )
     ip_address: Mapped[Optional[str]] = mapped_column(String(length=40))
 
+    # def __hash__(self) -> int:
+    #     return hash(self.id)
+
     @property
     def all_columns(self) -> List[Column]:
         return [

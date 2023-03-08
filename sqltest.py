@@ -3,10 +3,11 @@ from dotenv import load_dotenv
 load_dotenv()
 from collections.abc import Iterable
 from asyncio import current_task
-from typing import Optional, Any, List, Union, Callable
+from typing import Optional, Any, List, Union, Callable, Type
 from uuid import uuid4
 from sqlalchemy import (
     ScalarResult,
+    Select,
     create_engine,
     text,
     select,
@@ -148,20 +149,19 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
             else:
                 return
 
-    def _run_in_session(self, _func: Callable[[AsyncSession, dict], Any]):
+    def run_in_session(self, _func: Callable[[AsyncSession, bool, list, dict], Any]):
         async def _wrapper(
-            schema: Base,
             session: Optional[AsyncSession] = None,
             autocommit: bool = False,
-            stmt: Any = None,
+            *args: list,
             **kwargs,
         ):
             if session is None:
                 async with self.session() as tmp_session:
-                    result = await _func(schema, tmp_session, stmt, **kwargs)
+                    result = await _func(tmp_session, *args, **kwargs)
                     await tmp_session.commit() if autocommit else ...
             else:
-                result = await _func(schema, session, stmt, **kwargs)
+                result = await _func(session, *args, **kwargs)
                 await session.commit() if autocommit else ...
             return result
 
@@ -171,92 +171,149 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
 sa = SQLAlchemy(config=TestConfig())
 
 
-@sa._run_in_session
-async def add_by(
-    schema: Base, session: Optional[AsyncSession] = None, stmt: dict = None
-):
-    if stmt is not None:
-        instance = schema(**stmt)
+class SaBeginMethods:
+    @staticmethod
+    @sa.run_in_session
+    async def execute(session: AsyncSession, stmt: Union[text, Select]):
+        return await session.execute(stmt)
+
+    @staticmethod
+    @sa.run_in_session
+    async def scalar(session: AsyncSession, stmt: Select):
+        return await session.scalar(stmt)
+
+    @staticmethod
+    @sa.run_in_session
+    async def scalars(session: AsyncSession, stmt: Select):
+        return await session.scalars(stmt)
+
+    @staticmethod
+    @sa.run_in_session
+    async def add(session: AsyncSession, instance: Base):
         session.add(instance)
         return instance
 
-
-@sa._run_in_session
-async def add_by_list(
-    schema: Base,
-    session: Optional[AsyncSession] = None,
-    stmt: Iterable[dict] = None,
-):
-    if stmt is not None:
-        instances = [schema(**attributes) for attributes in stmt]
+    @staticmethod
+    @sa.run_in_session
+    async def add_all(session: AsyncSession, instances: Iterable[Base]):
         session.add_all(instances)
         return instances
 
 
-@sa._run_in_session
-async def where_all(
-    schema: Base, session: Optional[AsyncSession] = None, stmt: bool = None
-) -> List[Base]:
-    return (
-        [result for result in await session.scalars(select(schema).where(stmt))]
-        if stmt is not None
-        else None
+class SaNestedMethods:
+    @staticmethod
+    async def scalars__fetchall(
+        stmt: Select, session: Optional[AsyncSession] = None
+    ) -> List[Base]:
+        # (await session.ad(stmt)).fetchall
+        return (
+            await SaBeginMethods.scalars(session=session, autocommit=False, stmt=stmt)
+        ).fetchall()
+
+    @staticmethod
+    async def scalars__one(
+        stmt: Select, session: Optional[AsyncSession] = None
+    ) -> Base:
+        return (
+            await SaBeginMethods.scalars(session=session, autocommit=False, stmt=stmt)
+        ).one()
+
+
+async def add_all(
+    schema: Type[Base],
+    *args: dict,
+    autocommit: bool = False,
+    session: Optional[AsyncSession] = None,
+):
+    instances = [schema(**arg) for arg in args]
+    await SaBeginMethods.add_all(
+        session=session, autocommit=autocommit, instances=instances
     )
+    return instances
 
 
-@sa._run_in_session
-async def where_first(
-    schema: Base, session: Optional[AsyncSession] = None, stmt: bool = None
-) -> Optional[Base]:
-    return (
-        (await session.scalars(select(schema).where(stmt))).first()
-        if stmt is not None
-        else None
-    )
+async def add(
+    schema: Type[Base],
+    autocommit: bool = False,
+    session: Optional[AsyncSession] = None,
+    **kwargs: Any,
+):
+    instance = schema(**kwargs)
+    await SaBeginMethods.add(session=session, autocommit=autocommit, instance=instance)
+    return instance
 
 
-@sa._run_in_session
-async def get_by_primary_key(
-    schema: Base, session: Optional[AsyncSession] = None, stmt: bool = None
-) -> Optional[Base]:
-    session.get()
-    return (
-        (await session.scalars(select(schema).where(stmt))).first()
-        if stmt is not None
-        else None
-    )
+async def fetchall_filtered_by(
+    schema: Type[Base], session: Optional[AsyncSession] = None, **kwargs: Any
+):
+    stmt = select(schema).filter_by(**kwargs)
+    return await SaNestedMethods.scalars__fetchall(stmt=stmt, session=session)
+
+
+async def one_filtered_by(
+    schema: Type[Base], session: Optional[AsyncSession] = None, **kwargs: Any
+):
+    stmt = select(schema).filter_by(**kwargs)
+    return await SaNestedMethods.scalars__one(stmt=stmt, session=session)
+
+
+async def fetchall_filtered(
+    schema: Type[Base], *criteria: Any, session: Optional[AsyncSession] = None
+):
+    stmt = select(schema).filter(*criteria)
+    return await SaNestedMethods.scalars__fetchall(stmt=stmt, session=session)
+
+
+async def one_filtered(
+    schema: Type[Base], *criteria: Any, session: Optional[AsyncSession] = None
+):
+    stmt = select(schema).filter(*criteria)
+    return await SaNestedMethods.scalars__one(stmt=stmt, session=session)
 
 
 async def main():
+    def log(result: Any, logged_as: str) -> None:
+        outputs.append({logged_as: result})
+
+    outputs = []
     random_name = str(uuid4())[:18]
     random_name2 = str(uuid4())[:18]
     random_name3 = str(uuid4())[:18]
     print("\n" * 10)
+    try:
+        # Create instances
+        created_users = await add_all(
+            Users,
+            {"username": random_name},
+            {"username": random_name2},
+            autocommit=True,
+        )
+        log([created_user.__dict__ for created_user in created_users], "created_users")
+        created_user = await add(
+            Users, autocommit=True, username=random_name3, password=123
+        )
+        log(created_user.__dict__, "created_user")
 
-    # Create instances
-    two_users = await add_by_list(
-        Users,
-        autocommit=True,
-        stmt=[{"username": random_name}, {"username": random_name2}],
-    )
-    one_user = await add_by(
-        Users,
-        autocommit=True,
-        stmt={"username": random_name3, "password": 123},
-    )
+        # Find instances
+        queried_users = await fetchall_filtered(
+            Users, Users.username.in_([random_name, random_name2])
+        )
+        log([queried_user.__dict__ for queried_user in queried_users], "queried_users")
 
-    # Find instances
-    two_users = await where_all(
-        Users, stmt=Users.username.in_([random_name, random_name2])
-    )
-    for user in two_users:
-        print("Queried user:", user.__dict__)
-    one_user = await where_first(
-        Users, stmt=(Users.username == random_name3 and Users.password == 123)
-    )
-    print("Queried another user:", one_user)
-    await sa.session.close()
-    await sa.engine.dispose()
+        queried_user = await one_filtered_by(Users, username=random_name3, password=123)
+        log(queried_user.__dict__, "queried_user")
+        queried_user2 = await fetchall_filtered_by(Users, username=random_name3)
+        log([queried_user.__dict__ for queried_user in queried_user2], "queried_user2")
+        await sa.session.close()
+        await sa.engine.dispose()
+    except Exception as e:
+
+        print("<" * 10, "Test failed!", ">" * 10)
+        print("Detailed error:\n", e)
+    finally:
+        print("==" * 10, "Outputs", "==" * 10)
+        for output in outputs:
+            print(output, '\n')
 
 
 if __name__ == "__main__":
