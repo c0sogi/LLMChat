@@ -3,17 +3,14 @@ from dotenv import load_dotenv
 load_dotenv()
 from collections.abc import Iterable
 from asyncio import current_task
-from typing import Optional, Any, List, Union, Callable, Type, Tuple
-from uuid import uuid4
+from typing import Optional, Any, List, Union, Callable, Type
 from urllib import parse
 from sqlalchemy import (
-    # ScalarResult,
     Result,
     ScalarResult,
     Select,
     create_engine,
     text,
-    select,
 )
 from sqlalchemy.engine.base import Engine, Connection
 from sqlalchemy.ext.asyncio import (
@@ -22,15 +19,13 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
     AsyncSession,
 )
-from time import sleep
 import logging
 from datetime import datetime
 from app.common.config import TestConfig, ProdConfig, LocalConfig, SingletonMetaClass
-from sqltestschema import Base, Users
+from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm.decl_api import DeclarativeMeta
 
-
-def log(msg) -> None:
-    logging.critical(f"[{datetime.now()}] {msg}")
+Base: DeclarativeMeta = declarative_base()
 
 
 class MySQL:
@@ -160,8 +155,8 @@ class MySQL:
 
 class SQLAlchemy(metaclass=SingletonMetaClass):
     def __init__(self, config: Union[TestConfig, ProdConfig, LocalConfig]) -> None:
-        log(f"Current config status: {config}")
-        "{dialect}+{driver}://{user}:{password}@{host}:3306/{database}?charset=utf8mb4"
+        self.is_test_mode = True if config.test_mode else False
+        SQLAlchemy.log(f"Current config status: {config}")
         root_url = config.database_url_format.format(
             dialect="mysql",
             driver="pymysql",
@@ -178,8 +173,8 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
             host=config.mysql_host,
             database=config.mysql_database,
         )
-        root_engine = create_engine(root_url, echo=True)
-        with root_engine.connect() as conn:
+        self.root_engine = create_engine(root_url, echo=True)
+        with self.root_engine.connect() as conn:
             if not MySQL.is_user_exists(config.mysql_user, engine_or_conn=conn):
                 MySQL.create_user(
                     config.mysql_user, config.mysql_password, "%", engine_or_conn=conn
@@ -191,22 +186,18 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
             ):
                 MySQL.grant_user(
                     "ALL PRIVILEGES",
-                    "testing_db.*",
+                    f"{config.mysql_database}.*",
                     config.mysql_user,
                     "%",
                     engine_or_conn=conn,
                 )
-            Base.metadata.drop_all(conn) if config.test_mode else ...
-            Base.metadata.create_all(conn)
             conn.commit()
-        root_engine.dispose()
         self.engine = create_async_engine(
             database_url,
             echo=config.db_echo,
             pool_recycle=config.db_pool_recycle,
             pool_pre_ping=True,
         )
-        print(database_url)
         self.session = async_scoped_session(
             async_sessionmaker(
                 bind=self.engine, autocommit=False, autoflush=False, future=True
@@ -214,28 +205,19 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
             scopefunc=current_task,
         )
 
+    def __pos_init__(self):
+        try:
+            with self.root_engine.connect() as conn:
+                Base.metadata.drop_all(conn) if self.is_test_mode else ...
+                Base.metadata.create_all(conn)
+        finally:
+            self.root_engine.dispose()
+
     async def get_db(self) -> AsyncSession:
         async with self.session() as transaction:
             yield transaction
 
-    def check_connectivity(self, root_engine: Engine, database_name: str) -> None:
-        is_assertion_error_occured = False
-        while True:  # Connection check
-            try:
-                assert MySQL.is_db_exists(root_engine, database=database_name)
-            except AssertionError:
-                if is_assertion_error_occured:
-                    raise Exception("Infinite-looping error")
-                is_assertion_error_occured = True
-                print(f"Database {database_name} not exists. Creating new database...")
-                MySQL.create_db(root_engine, database=database_name)
-            except Exception as e:
-                print(e)
-                sleep(5)
-            else:
-                return
-
-    def run_in_session(self, _func: Callable[[AsyncSession, bool, list, dict], Any]):
+    def run_in_session(self, func: Callable[..., Any]) -> Callable[..., Any]:
         async def _wrapper(
             session: Optional[AsyncSession] = None,
             autocommit: bool = False,
@@ -244,200 +226,118 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         ):
             if session is None:
                 async with self.session() as transaction:
-                    result = await _func(transaction, *args, **kwargs)
-                    print(result)
+                    result = await func(transaction, *args, **kwargs)
                     await transaction.commit() if autocommit else ...
             else:
-                result = await _func(session, *args, **kwargs)
+                result = await func(session, *args, **kwargs)
                 await session.commit() if autocommit else ...
             return result
 
         return _wrapper
 
-
-sa = SQLAlchemy(config=TestConfig())
-
-
-class SaBeginMethods:
     @staticmethod
-    @sa.run_in_session
-    async def execute(session: AsyncSession, stmt: Union[text, Select]) -> Result:
+    def log(msg) -> None:
+        logging.critical(f"[{datetime.now()}] {msg}")
+
+    async def _execute(  # To be decorated
+        self, session: AsyncSession, stmt: Union[text, Select]
+    ) -> Result:
         return await session.execute(stmt)
 
-    @staticmethod
-    @sa.run_in_session
-    async def scalar(session: AsyncSession, stmt: Select) -> Any:
+    async def _scalar(  # To be decorated
+        self,
+        session: AsyncSession,
+        stmt: Select,
+    ) -> Any:
         return await session.scalar(stmt)
 
-    @staticmethod
-    @sa.run_in_session
-    async def scalars(session: AsyncSession, stmt: Select) -> ScalarResult:
+    async def _scalars(  # To be decorated
+        self,
+        session: AsyncSession,
+        stmt: Select,
+    ) -> ScalarResult:
         return await session.scalars(stmt)
 
-    @staticmethod
-    @sa.run_in_session
-    async def add(session: AsyncSession, instance: Base) -> Base:
+    async def _add(  # To be decorated
+        self,
+        session: AsyncSession,
+        instance: Base,
+    ) -> Base:
         session.add(instance)
         return instance
 
-    @staticmethod
-    @sa.run_in_session
-    async def add_all(
-        session: AsyncSession, instances: Iterable[Base]
+    async def _add_all(  # To be decorated
+        self,
+        session: AsyncSession,
+        instances: Iterable[Base],
     ) -> Iterable[Base]:
         session.add_all(instances)
         return instances
 
-
-class SaNestedMethods:
-    @staticmethod
     async def scalars__fetchall(
-        stmt: Select, session: Optional[AsyncSession] = None
+        self, stmt: Select, session: Optional[AsyncSession] = None
     ) -> List[Base]:
         return (
-            await SaBeginMethods.scalars(session=session, autocommit=False, stmt=stmt)
+            await self.run_in_session(self._scalars)(
+                session=session, autocommit=False, stmt=stmt
+            )
         ).fetchall()
 
-    @staticmethod
     async def scalars__one(
-        stmt: Select, session: Optional[AsyncSession] = None
+        self, stmt: Select, session: Optional[AsyncSession] = None
     ) -> Base:
         return (
-            await SaBeginMethods.scalars(session=session, autocommit=False, stmt=stmt)
+            await self.run_in_session(self._scalars)(
+                session=session, autocommit=False, stmt=stmt
+            )
         ).one()
 
-    @staticmethod
     async def scalars__one_or_none(
-        stmt: Select, session: Optional[AsyncSession] = None
+        self, stmt: Select, session: Optional[AsyncSession] = None
     ) -> Optional[Base]:
         return (
-            await SaBeginMethods.scalars(session=session, autocommit=False, stmt=stmt)
+            await self.run_in_session(self._scalars)(
+                session=session, autocommit=False, stmt=stmt
+            )
         ).one_or_none()
 
+    async def fetchall_scalars(
+        self, stmt: Select, session: Optional[AsyncSession] = None
+    ) -> List[Base]:
+        return await self.scalars__fetchall(stmt=stmt, session=session)
 
-# Default methods =======================================================
+    async def one_scalars(
+        self, stmt: Select, session: Optional[AsyncSession] = None
+    ) -> Base:
+        return await self.scalars__one(stmt=stmt, session=session)
 
+    async def one_or_none_scalars(
+        self, stmt: Select, session: Optional[AsyncSession] = None
+    ) -> Optional[Base]:
+        return await self.scalars__one_or_none(stmt=stmt, session=session)
 
-async def fetchall_scalars(
-    stmt: Select, session: Optional[AsyncSession] = None
-) -> List[Base]:
-    return await SaNestedMethods.scalars__fetchall(stmt=stmt, session=session)
-
-
-async def one_scalars(stmt: Select, session: Optional[AsyncSession] = None) -> Base:
-    return await SaNestedMethods.scalars__one(stmt=stmt, session=session)
-
-
-async def one_or_none_scalars(
-    stmt: Select, session: Optional[AsyncSession] = None
-) -> Optional[Base]:
-    return await SaNestedMethods.scalars__one_or_none(stmt=stmt, session=session)
-
-
-async def add_all(
-    schema: Type[Base],
-    *args: dict,
-    autocommit: bool = False,
-    session: Optional[AsyncSession] = None,
-) -> List[Base]:
-    instances = [schema(**arg) for arg in args]
-    await SaBeginMethods.add_all(
-        session=session, autocommit=autocommit, instances=instances
-    )
-    return instances
-
-
-async def add(
-    schema: Type[Base],
-    autocommit: bool = False,
-    session: Optional[AsyncSession] = None,
-    **kwargs: Any,
-) -> Base:
-    instance = schema(**kwargs)
-    await SaBeginMethods.add(session=session, autocommit=autocommit, instance=instance)
-    return instance
-
-
-# Other custom methods =======================================================
-
-
-async def fetchall_filtered_by(
-    schema: Type[Base], session: Optional[AsyncSession] = None, **kwargs: Any
-) -> List[Base]:
-    stmt: Select[Tuple] = select(schema).filter_by(**kwargs)
-    return await SaNestedMethods.scalars__fetchall(stmt=stmt, session=session)
-
-
-async def one_filtered_by(
-    schema: Type[Base], session: Optional[AsyncSession] = None, **kwargs: Any
-) -> Base:
-    stmt: Select[Tuple] = select(schema).filter_by(**kwargs)
-    return await SaNestedMethods.scalars__one(stmt=stmt, session=session)
-
-
-async def fetchall_filtered(
-    schema: Type[Base], *criteria: bool, session: Optional[AsyncSession] = None
-) -> List[Base]:
-    stmt: Select[Tuple] = select(schema).filter(*criteria)
-    return await SaNestedMethods.scalars__fetchall(stmt=stmt, session=session)
-
-
-async def one_filtered(
-    schema: Type[Base], *criteria: bool, session: Optional[AsyncSession] = None
-) -> Base:
-    stmt: Select[Tuple] = select(schema).filter(*criteria)
-    return await SaNestedMethods.scalars__one(stmt=stmt, session=session)
-
-
-# Test section =======================================================
-
-
-async def main():
-    def log(result: Any, logged_as: str) -> None:
-        outputs.append({logged_as: result})
-
-    outputs = []
-    random_name = str(uuid4())[:18]
-    random_name2 = str(uuid4())[:18]
-    random_name3 = str(uuid4())[:18]
-    print("\n" * 10)
-    try:
-        # Create instances
-        created_users = await add_all(
-            Users,
-            {"username": random_name},
-            {"username": random_name2},
-            autocommit=True,
+    async def add_all(
+        self,
+        schema: Type[Base],
+        *args: dict,
+        autocommit: bool = False,
+        session: Optional[AsyncSession] = None,
+    ) -> List[Base]:
+        instances = [schema(**arg) for arg in args]
+        await self.run_in_session(self._add_all)(
+            session=session, autocommit=autocommit, instances=instances
         )
-        log([created_user.__dict__ for created_user in created_users], "created_users")
-        created_user = await add(
-            Users, autocommit=True, username=random_name3, password=123
+        return instances
+
+    async def add(
+        self,
+        schema: Type[Base],
+        autocommit: bool = False,
+        session: Optional[AsyncSession] = None,
+        **kwargs: Any,
+    ) -> Base:
+        instance = schema(**kwargs)
+        await self.run_in_session(self._add)(
+            session=session, autocommit=autocommit, instance=instance
         )
-        log(created_user.__dict__, "created_user")
-        # Find instances
-        # queried_users = await fetchall_filtered(
-        #     Users, Users.username.in_([random_name, random_name2])
-        # )
-        stmt = select(Users).filter(Users.username.in_([random_name, random_name2]))
-        queried_users = await fetchall_scalars(stmt)
-        log([queried_user.__dict__ for queried_user in queried_users], "queried_users")
-        queried_user = await one_filtered_by(Users, username=random_name3, password=123)
-        log(queried_user.__dict__, "queried_user")
-        queried_user2 = await fetchall_filtered_by(Users, username=random_name3)
-        log([queried_user.__dict__ for queried_user in queried_user2], "queried_user2")
-        await sa.session.close()
-        await sa.engine.dispose()
-    except Exception as e:
-
-        print("<" * 10, "Test failed!", ">" * 10)
-        print("Detailed error:\n", e)
-    finally:
-        print("==" * 10, "Outputs", "==" * 10)
-        for output in outputs:
-            print(output, "\n")
-
-
-if __name__ == "__main__":
-    from asyncio import run
-
-    run(main())
+        return instance
