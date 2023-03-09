@@ -1,13 +1,24 @@
+from cryptography.fernet import Fernet, InvalidToken
+from cryptography.hazmat.primitives.hashes import HashAlgorithm, SHA256
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from datetime import datetime, timedelta
+from jwt import decode as jwt_decode
+from jwt import encode as jwt_encode
+from jwt.exceptions import ExpiredSignatureError, DecodeError
+from string import ascii_letters, digits
+from secrets import choice
+from uuid import uuid4
 from os import urandom
 from os.path import exists
 from hmac import HMAC, new
 from re import findall
 from base64 import urlsafe_b64encode, b64encode
 from typing import Any
-from cryptography.fernet import Fernet, InvalidToken
-from cryptography.hazmat.primitives.hashes import HashAlgorithm, SHA256
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import json
+from app.errors.exceptions import Responses_401
+from app.database.schema import ApiKeys
+from app.models import AddApiKey
+from app.common.config import JWT_ALGORITHM, JWT_SECRET
 
 
 class SecretConfigSetup:
@@ -91,10 +102,56 @@ def encode_from_utf8(text):
         return text
 
 
-def hash_params(qs: str, secret_key: str) -> str:
+def hash_params(query_params: str, secret_key: str) -> str:
     mac: HMAC = new(
         key=bytes(secret_key, encoding="utf-8"),
-        msg=bytes(qs, encoding="utf-8"),
+        msg=bytes(query_params, encoding="utf-8"),
         digestmod="sha256",
     )
     return str(b64encode(mac.digest()).decode("utf-8"))
+
+
+async def generate_api_key(user_id: int, additional_key_info: AddApiKey) -> ApiKeys:
+    alnums = ascii_letters + digits
+    secret_key = "".join(choice(alnums) for _ in range(40))
+    uid = f"{str(uuid4())[:-12]}{str(uuid4())}"
+    new_api_key = ApiKeys(
+        secret_key=secret_key,
+        user_id=user_id,
+        access_key=uid,
+        **additional_key_info.dict(),
+    )
+    return new_api_key
+
+
+def create_access_token(*, data: dict = None, expires_delta: int = None) -> str:
+    to_encode: dict = data.copy()
+    if expires_delta is not None:
+        to_encode.update({"exp": datetime.utcnow() + timedelta(hours=expires_delta)})
+    return jwt_encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+async def token_decode(authorization: str) -> dict:
+    try:
+        authorization = authorization.replace("Bearer ", "")
+        payload = jwt_decode(authorization, key=JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except ExpiredSignatureError:
+        raise Responses_401.token_expired
+    except DecodeError:
+        raise Responses_401.token_decode_failure
+    return payload
+
+
+# from app.utils.encoding_and_hashing import SecretConfigSetup
+# password_from_environ = environ.get("SECRET_CONFIGS_PASSWORD", None)
+# secret_config_setup = SecretConfigSetup(
+#     password=password_from_environ
+#     if password_from_environ is not None
+#     else input("Enter Passwords:"),
+#     json_file_name="secret_configs.json",
+# )
+#
+#
+# @dataclass(frozen=True)
+# class SecretConfig(metaclass=SingletonMetaClass):
+#     secret_config: dict = field(default_factory=secret_config_setup.initialize)

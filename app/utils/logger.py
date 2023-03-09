@@ -7,7 +7,7 @@ from fastapi.logger import logger
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app.errors.exceptions import APIException, SqlFailureEx
+from app.errors.exceptions import APIException, InternalServerError
 
 
 logger.setLevel(logging.INFO)
@@ -23,7 +23,7 @@ async def hide_email(email: str) -> str:
 
 
 async def error_log_generator(
-    error: Union[SqlFailureEx, APIException], request: Request
+    error: Union[InternalServerError, APIException], request: Request
 ):
     if request.state.inspect is not None:
         frame = request.state.inspect
@@ -44,33 +44,30 @@ async def error_log_generator(
 async def api_logger(
     request: Request,
     response: Response = None,
-    error: Optional[Union[SqlFailureEx, APIException]] = None,
+    error: Optional[Union[InternalServerError, APIException]] = None,
     **kwargs,
 ):
     processed_time = time() - request.state.start
     status_code = error.status_code if error else response.status_code
     user = request.state.user
     utc_now = datetime.utcnow()
-
-    log = json.dumps(
-        {
-            "url": request.url.hostname + request.url.path,
-            "method": str(request.method),
-            "statusCode": status_code,
-            "errorDetail": await error_log_generator(error=error, request=request)
-            if error is not None
+    json_data = {
+        "url": request.url.hostname + request.url.path,
+        "method": str(request.method),
+        "statusCode": status_code,
+        "errorDetail": await error_log_generator(error=error, request=request)
+        if error is not None
+        else None,
+        "client": {
+            "client": request.state.ip,
+            "user": user.id if user and user.id else None,
+            "email": (await hide_email(email=user.email))
+            if user and user.email
             else None,
-            "client": {
-                "client": request.state.ip,
-                "user": user.id if user and user.id else None,
-                "email": (await hide_email(email=user.email))
-                if user and user.email
-                else None,
-            },
-            "processedTime": str(round(processed_time * 1000, 5)) + "ms",
-            "datetimeUTC": utc_now.strftime("%Y/%m/%d %H:%M:%S"),
-            "datetimeKST": (utc_now + timedelta(hours=9)).strftime("%Y/%m/%d %H:%M:%S"),
-        }
-        | kwargs
-    )
+        },
+        "processedTime": str(round(processed_time * 1000, 5)) + "ms",
+        "datetimeUTC": utc_now.strftime("%Y/%m/%d %H:%M:%S"),
+        "datetimeKST": (utc_now + timedelta(hours=9)).strftime("%Y/%m/%d %H:%M:%S"),
+    } | kwargs
+    log = json.dumps(json_data)
     logger.error(log) if error and error.status_code >= 500 else logger.info(log)

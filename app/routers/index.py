@@ -4,10 +4,11 @@ from fastapi import APIRouter
 from fastapi.responses import FileResponse, RedirectResponse  # Response
 from fastapi.requests import Request
 
+from app.errors.exceptions import APIException
+
 # from app.background_tasks import background_task_state
 # from sqlalchemy.orm import AsyncSession
 # from fastapi import Depends
-# from app.database.connection import db
 # from app.database.schema import Users
 
 router = APIRouter(tags=["index"])
@@ -16,14 +17,6 @@ router = APIRouter(tags=["index"])
 @router.get("/")
 async def index():
     # now = f"UTC Time ({datetime.utcnow().strftime('%Y.%m.%d %H:%M:%S')})"
-    # Users.create_db_model_instance(
-    #     session=session,
-    #     auto_commit=True,
-    #     status="active",
-    #     name="name_test",
-    #     email="www@www.com",
-    # )
-    # return Response()
     # return Response(
     #     now,
     #     media_type="application/json; charset=utf8mb4",
@@ -45,6 +38,6 @@ async def test(req: Request):
         ...
     except Exception as exception:
         req.state.inspect = frame()
-        raise exception
+        raise APIException(ex=exception)
     else:
         return {"user_status": req.state.user}

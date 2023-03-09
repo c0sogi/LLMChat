@@ -1,13 +1,15 @@
 import json
+from typing import Any
 import os
 from time import sleep
 import yagmail
 import requests
 from fastapi import APIRouter
 from fastapi.logger import logger
+from fastapi.responses import JSONResponse
 from starlette.background import BackgroundTasks
 from starlette.requests import Request
-from app.errors import exceptions as ex
+from app.errors.exceptions import Responses_400
 from app.models import MessageOk, KakaoMsgBody, SendEmail
 from app.common.config import (
     KAKAO_RESTAPI_TOKEN,
@@ -15,8 +17,10 @@ from app.common.config import (
     AWS_ACCESS_KEY,
     AWS_SECRET_KEY,
     AWS_AUTHORIZED_EMAIL,
+    WEATHERBIT_API_KEY,
 )
 from app.utils.encoding_and_hashing import encode_from_utf8
+from app.utils.weather import fetch_weather_data
 import boto3
 from botocore.exceptions import ClientError
 
@@ -29,18 +33,27 @@ async def get_all_services(request: Request):
     return {"your_email": request.state.user.email}
 
 
+@router.get("/weather", status_code=200)
+async def weather(latitude: float, longitude: float):
+    weather_data: Any = await fetch_weather_data(
+        lat=latitude,
+        lon=longitude,
+        api_key=WEATHERBIT_API_KEY,
+        source="weatherbit",
+    )
+    return JSONResponse(
+        weather_data,
+    )
+
+
 @router.post("/kakao/send")
 async def send_kakao(request: Request, body: KakaoMsgBody):
-    # img_url = "https://image.dcinside.com/viewimage.php?id=29bfd4&no=63f39f2fe8d577a\
-    # 26fabd7e443826b309fd497bfe24120ad0b3b1bda1d1ec75fde00e611c0c1f8c69bd527f702af05ea602a4d320bd8e9e86634ef8f2211"
-    link_1 = "https://namu.wiki"
-    link_2 = "https://chat.openai.com"
+    link_1 = "https://google.com"
+    link_2 = "https://duckduckgo.com"
     headers = {
         "Authorization": KAKAO_RESTAPI_TOKEN,
         "Content-Type": "application/x-www-form-urlencoded",
     }
-    # body_json = {"object_type": "text", "text": body.msg,
-    #              "link": {"web_url": "localhost", "mobile_url": "localhost", "button_title": "지금 확인"}}
 
     template_object = json.dumps(
         {
@@ -82,7 +95,7 @@ async def send_kakao(request: Request, body: KakaoMsgBody):
             raise Exception("KAKAO SEND FAILED")
     except Exception as e:
         logger.warning(e)
-        raise ex.KakaoSendFailureEx
+        raise Responses_400.kakao_send_failure
     return MessageOk()
 
 
@@ -125,12 +138,12 @@ async def email_by_gmail2(
 
 def send_email(**kwargs):
     mailing_list = kwargs.get("mailing_list", None)
-    email_pw = os.environ.get("EMAIL_PW", None)
+    email_password = os.environ.get("EMAIL_PW", None)
     email_addr = os.environ.get("EMAIL_ADDR", None)
     last_email = ""
     if mailing_list:
         try:
-            yag = yagmail.SMTP({email_addr: "라이언X코알라"}, email_pw)
+            yag = yagmail.SMTP({email_addr: "라이언X코알라"}, email_password)
             # https://myaccount.google.com/u/1/lesssecureapps
             for m_l in mailing_list:
                 contents = [email_content.format(m_l.name)]

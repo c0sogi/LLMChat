@@ -127,7 +127,8 @@ Future<String> registerAccount({
           "accept": "application/json",
           "Content-Type": "application/json",
         },
-        body: jsonEncode({"email": registerAccountID, "pw": registerAccountPW}),
+        body: jsonEncode(
+            {"email": registerAccountID, "password": registerAccountPW}),
         crud: Crud.post,
       ),
     )["Authorization"];

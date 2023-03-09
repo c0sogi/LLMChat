@@ -7,18 +7,20 @@ from app.common.config import (
     ProdConfig,
     TestConfig,
 )
-from app.database.connection import db
+from app.database.schema import db
 from app.middlewares.token_validator import access_control
 from app.middlewares.trusted_hosts import TrustedHostMiddleware
 from app.routers import index, auth, services, users
-from app.dependencies import api_service_dependency, user_dependency
+from app.dependencies import (
+    api_service_dependency,
+    user_dependency,
+)
+import logging
 
 
 def create_app(config: Union[LocalConfig, ProdConfig, TestConfig]) -> FastAPI:
     # App & DB
     new_app = FastAPI()
-    db.init_db(app=new_app, config=config)
-
     # Middlewares
     """
     Access control middleware: Authorized request only
@@ -46,12 +48,9 @@ def create_app(config: Union[LocalConfig, ProdConfig, TestConfig]) -> FastAPI:
         services.router,
         prefix="/api",
         tags=["Services"],
-        dependencies=[Depends(user_dependency)],
-    ) if config.debug else new_app.include_router(
-        services.router,
-        prefix="/api",
-        tags=["Services"],
-        dependencies=[Depends(user_dependency), Depends(api_service_dependency)],
+        dependencies=[Depends(user_dependency)]
+        if config.test_mode
+        else [Depends(api_service_dependency)],
     )
     new_app.include_router(
         users.router,
@@ -60,12 +59,15 @@ def create_app(config: Union[LocalConfig, ProdConfig, TestConfig]) -> FastAPI:
         dependencies=[Depends(user_dependency)],
     )
 
+    @new_app.on_event("startup")
+    async def startup():
+        # self.engine.connect()
+        logging.critical(">>> DB connected")
+
+    @new_app.on_event("shutdown")
+    async def shutdown():
+        await db.session.remove()
+        await db.engine.dispose()
+        logging.critical(">>> DB disconnected")
+
     return new_app
-
-
-# # Test function for manual Let's encrypt validation challenge
-# def create_app(config: Union[LocalConfig, ProdConfig, TestConfig]) -> FastAPI:
-#     # App & DB
-#     new_app = FastAPI()
-#     new_app.mount("/", StaticFiles(directory="/home/ubuntu/app/"))
-#     return new_app

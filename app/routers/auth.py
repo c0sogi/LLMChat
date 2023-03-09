@@ -1,14 +1,12 @@
-from datetime import datetime, timedelta
 import bcrypt
-import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Response
 from fastapi.requests import Request
-from sqlalchemy import select
-from app.common.config import ERROR_RESPONSES, JWT_ALGORITHM, JWT_SECRET
-from app.database.connection import AsyncSession, db
+from app.common.config import TOKEN_EXPIRE_HOURS
+from app.database.crud import is_email_exist, register_new_user
 from app.database.schema import Users
+from app.errors.exceptions import Responses_400, Responses_404
 from app.models import SnsType, Token, UserRegister, UserToken
-from app.utils.logger import logger
+from app.utils.encoding_and_hashing import create_access_token
 
 router = APIRouter(prefix="/auth")
 
@@ -28,76 +26,74 @@ router = APIRouter(prefix="/auth")
 """
 
 
-@router.post(
-    "/register/{sns_type}", status_code=status.HTTP_201_CREATED, response_model=Token
-)
+@router.post("/register/{sns_type}", status_code=201, response_model=Token)
 async def register(
+    request: Request,
+    response: Response,
     sns_type: SnsType,
     reg_info: UserRegister,
-    request: Request,
-    session: AsyncSession = Depends(db.get_db),
-) -> dict:
+) -> Token:
     if sns_type == SnsType.email:
-        if (not reg_info.email) or (not reg_info.pw):
-            raise HTTPException(**ERROR_RESPONSES["no_email_or_pw"])
-        if await is_email_exist(session, reg_info.email):
-            raise HTTPException(**ERROR_RESPONSES["email_already_taken"])
-        hashed_pw = bcrypt.hashpw(reg_info.pw.encode("utf-8"), bcrypt.gensalt())
-        new_user = await Users.create_new(
-            auto_commit=True,
-            pw=hashed_pw,
+        if not (reg_info.email and reg_info.password):
+            raise Responses_400.no_email_or_password
+        if await is_email_exist(reg_info.email):
+            raise Responses_400.email_already_exists
+        hashed_password: bytes = bcrypt.hashpw(
+            password=reg_info.password.encode("utf-8"),
+            salt=bcrypt.gensalt(),
+        )
+        new_user: Users = await register_new_user(
             email=reg_info.email,
+            hashed_password=hashed_password,
             ip_address=request.client.host,
         )
-        data_to_be_tokenized = UserToken.from_orm(new_user).dict(
-            exclude={"pw", "marketing_agree"}
+        data_to_be_tokenized: dict = UserToken.from_orm(new_user).dict(
+            exclude={"password", "marketing_agree"}
         )
-        return {
-            "Authorization": f"Bearer {create_access_token(data=data_to_be_tokenized)}"
-        }  # token
-    raise HTTPException(**ERROR_RESPONSES["not_supported_feature"])
+        token: str = create_access_token(
+            data=data_to_be_tokenized, expires_delta=TOKEN_EXPIRE_HOURS
+        )
+        response.set_cookie(
+            key="Authorization",
+            value=f"Bearer {token}",
+            max_age=TOKEN_EXPIRE_HOURS * 3600,
+            secure=True,
+            httponly=True,
+        )
+        return Token(Authorization=f"Bearer {token}")
+    raise Responses_400.not_supported_feature
 
 
 @router.post("/login/{sns_type}", status_code=200, response_model=Token)
 async def login(
+    response: Response,
     sns_type: SnsType,
     user_info: UserRegister,
-    session: AsyncSession = Depends(db.get_db),
-) -> dict:
+) -> Token:
     if sns_type == SnsType.email:
-        if (not user_info.email) or (not user_info.pw):
-            raise HTTPException(**ERROR_RESPONSES["no_email_or_pw"])
-        query_result = await Users.filter_by_equality(session, email=user_info.email)
-        matched_user = query_result.one_or_none()
-        logger.critical(matched_user.__dict__)
-
+        if not (user_info.email and user_info.password):
+            raise Responses_400.no_email_or_password
+        matched_user: Users = await Users.first_filtered_by(email=user_info.email)
         if matched_user is None:
-            raise HTTPException(**ERROR_RESPONSES["no_matched_user"])
+            raise Responses_404.not_found_user
         if not bcrypt.checkpw(
-            user_info.pw.encode("utf-8"), matched_user.pw.encode("utf-8")
+            password=user_info.password.encode("utf-8"),
+            hashed_password=matched_user.password.encode("utf-8"),
         ):
-            raise HTTPException(**ERROR_RESPONSES["no_matched_user"])
-        data_to_be_tokenized = UserToken.from_orm(matched_user).dict(
-            exclude={"pw", "marketing_agree"}
+            raise Responses_404.not_found_user
+        data_to_be_tokenized: dict = UserToken.from_orm(matched_user).dict(
+            exclude={"password", "marketing_agree"}
         )
-        return {
-            "Authorization": f"Bearer {create_access_token(data=data_to_be_tokenized)}"
-        }  # token
+        token: str = create_access_token(
+            data=data_to_be_tokenized, expires_delta=TOKEN_EXPIRE_HOURS
+        )
+        response.set_cookie(
+            key="Authorization",
+            value=f"Bearer {token}",
+            max_age=TOKEN_EXPIRE_HOURS * 3600,
+            secure=True,
+            httponly=True,
+        )
+        return Token(Authorization=f"Bearer {token}")
     else:
-        raise HTTPException(**ERROR_RESPONSES["not_supported_feature"])
-
-
-# from sqlalchemy.engine import ChunkedIteratorResult
-
-
-async def is_email_exist(session, email: str) -> bool:
-    query_result = await session.execute(select(Users).filter_by(email=email))
-    query_result = query_result.fetchone()
-    return False if query_result is None else True
-
-
-def create_access_token(*, data: dict = None, expires_delta: int = None) -> str:
-    to_encode = data.copy()
-    if expires_delta is not None:
-        to_encode.update({"exp": datetime.utcnow() + timedelta(hours=expires_delta)})
-    return jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
+        raise Responses_400.not_supported_feature

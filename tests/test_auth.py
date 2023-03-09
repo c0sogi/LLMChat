@@ -1,7 +1,7 @@
-from tests.conftest import *
 import pytest
 from fastapi import status
-from app.common.config import ERROR_RESPONSES
+
+from app.errors.exceptions import Responses_400
 
 
 # @pytest.mark.asyncio
@@ -25,8 +25,8 @@ async def test_auth(client, random_user):
     response = await client.post("api/auth/register/email", json=user)
     response_body = response.json()
     assert (
-        response.status_code == ERROR_RESPONSES["email_already_taken"]["status_code"]
+        response.status_code == Responses_400.email_already_exists.status_code
     ), "Email duplication check failure"
     assert (
-        response_body["detail"] == ERROR_RESPONSES["email_already_taken"]["detail"]
+        response_body["detail"] == Responses_400.email_already_exists.detail
     ), "Email duplication check failure"

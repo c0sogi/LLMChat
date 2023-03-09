@@ -1,33 +1,43 @@
+from typing import Optional, List
 from sqlalchemy import (
     Column,
-    Integer,
-    String,
-    DateTime,
     func,
+    String,
+    Integer,
     Enum,
     Boolean,
     ForeignKey,
+    Select,
     select,
+    update,
 )
-from sqlalchemy.orm import relationship
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database.connection import Base, db
-from typing import List, Optional
+from typing import Any, Tuple
+from sqlalchemy.orm import (
+    relationship,
+    Mapped,
+    mapped_column,
+)
+from datetime import datetime
+from app.database.connection import Base, SQLAlchemy
+from app.common.config import config
+
+db = SQLAlchemy()
+# ========================== Schema section begins ==========================
 
 
-class CustomMixin:
-    id = Column(Integer, primary_key=True, index=True)
-    created_at = Column(DateTime, nullable=False, default=func.utc_timestamp())
-    updated_at = Column(
-        DateTime,
-        nullable=False,
+class Mixin:
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(default=func.utc_timestamp())
+    updated_at: Mapped[datetime] = mapped_column(
         default=func.utc_timestamp(),
         onupdate=func.utc_timestamp(),
     )
-    ip_address = Column(String(length=40), nullable=True)
+    ip_address: Mapped[Optional[str]] = mapped_column(String(length=40))
 
-    def __hash__(self) -> int:
-        return hash(self.id)
+    def set_values_as(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
     @property
     def all_columns(self) -> List[Column]:
@@ -38,142 +48,142 @@ class CustomMixin:
         ]
 
     @classmethod
-    async def create_new(
-        cls, session: Optional[AsyncSession] = None, auto_commit: bool = False, **kwargs
-    ) -> Base:
-        """
-        Create data in DB and return this new DB model instance.
-        """
-        instance = cls()
-        for column in instance.all_columns:
-            setattr(
-                instance, column.name, kwargs.get(column.name)
-            ) if column.name in kwargs else None
-        if session is None:
-            async with db.session() as session:
-                session.add(instance)
-                await session.commit() if auto_commit else ...
-                await session.refresh(instance) if auto_commit else ...
-        else:
-            session.add(instance)
-            await session.commit() if auto_commit else ...
-            await session.refresh(instance) if auto_commit else ...
-        return instance
-
-    @classmethod
-    async def filter_by_equality(cls, session: Optional[AsyncSession] = None, **kwargs):
-        query = select(cls).filter_by(**kwargs)
-        if session is None:
-            async with db.session() as session:
-                query_result = await session.execute(query)
-                return query_result.scalars()
-        else:
-            return (await session.execute(query)).scalars()
-
-    @classmethod
-    async def filter_by_condition(
-        cls, session: Optional[AsyncSession] = None, **kwargs
-    ):
-        """
-        Return a DB model instance with filtered queries. Those queries can be accessed by "._queries"
-        """
-        conditions = {
-            "in": lambda col, val: col.in_(val),
-            "eq": lambda col, val: col == val,
-            "gt": lambda col, val: col > val,
-            "gte": lambda col, val: col >= val,
-            "lt": lambda col, val: col < val,
-            "lte": lambda col, val: col <= val,
-        }
-        conditions_to_query = []
-        for filtering_statement, filtering_value in kwargs.items():
-            filtering_statement = filtering_statement.split("__")
-            assert len(filtering_statement) <= 2, "No 2 more double underscores"
-            filtering_condition = (
-                filtering_statement[1] if len(filtering_statement) == 2 else "eq"
-            )
-            column_to_be_filtered = getattr(cls, filtering_statement[0])
-            conditions_to_query.append(
-                conditions[filtering_condition](column_to_be_filtered, filtering_value)
-            )
-        query = select(cls).filter(*conditions_to_query)
-        if session is None:
-            async with db.session() as session:
-                return (await session.execute(query)).scalars()
-        else:
-            return (await session.execute(query)).scalars()
-
-    @classmethod
-    def get_column(cls, column_name: str) -> Column:
-        return getattr(cls, column_name)
-
-    @classmethod
-    def get_class(cls) -> Base:
-        return cls
-
-    @classmethod
-    async def order_by(cls, session: Optional[AsyncSession] = None, *args: str):
-        query = select(cls)
-        for arg in args:
-            is_ascending_order = False if arg.startswith("-") else True
-            column_name = arg[1:] if arg.startswith("-") else arg
-            column = cls.get_column(column_name)
-            query = (
-                query.order_by(column.asc())
-                if is_ascending_order
-                else query.order_by(column.desc())
-            )
-        if session is None:
-            async with db.session() as session:
-                return await session.execute(query).scalars()
-        else:
-            return await session.execute(query).scalars()
-
-    async def update(
-        self,
+    async def add_all(
+        cls,
+        *args: dict,
+        autocommit: bool = False,
+        refresh: bool = False,
         session: Optional[AsyncSession] = None,
-        auto_commit: bool = False,
-        **kwargs: str
-    ):
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-        if session is None:
-            async with db.session() as session:
-                await session.commit() if auto_commit else ...
-                await session.refresh(self) if auto_commit else ...
-        else:
-            await session.commit() if auto_commit else ...
-            await session.refresh(self) if auto_commit else ...
-        return self
+    ) -> List[Base]:
+        return await db.add_all(
+            cls, *args, autocommit=autocommit, refresh=refresh, session=session
+        )
+
+    @classmethod
+    async def add_one(
+        cls,
+        autocommit: bool = False,
+        refresh: bool = False,
+        session: Optional[AsyncSession] = None,
+        **kwargs: Any,
+    ) -> Base:
+        return await db.add(
+            cls, autocommit=autocommit, refresh=refresh, session=session, **kwargs
+        )
+
+    @classmethod
+    async def update_where(
+        cls,
+        filter_by: dict,
+        updated: dict,
+        autocommit: bool = False,
+        refresh: bool = False,
+        session: Optional[AsyncSession] = None,
+    ) -> Base:
+        stmt = update(cls).filter_by(**filter_by).values(**updated)
+        return await db.run_in_session(db._execute)(
+            session, autocommit=autocommit, refresh=refresh, stmt=stmt
+        )
+
+    @classmethod
+    async def fetchall_filtered_by(
+        cls, session: Optional[AsyncSession] = None, **kwargs: Any
+    ) -> List[Base]:
+        stmt: Select[Tuple] = select(cls).filter_by(**kwargs)
+        return await db.scalars__fetchall(stmt=stmt, session=session)
+
+    @classmethod
+    async def one_filtered_by(
+        cls, session: Optional[AsyncSession] = None, **kwargs: Any
+    ) -> Base:
+        stmt: Select[Tuple] = select(cls).filter_by(**kwargs)
+        return await db.scalars__one(stmt=stmt, session=session)
+
+    @classmethod
+    async def first_filtered_by(
+        cls, session: Optional[AsyncSession] = None, **kwargs: Any
+    ) -> Base:
+        stmt: Select[Tuple] = select(cls).filter_by(**kwargs)
+        return await db.scalars__first(stmt=stmt, session=session)
+
+    @classmethod
+    async def one_or_none_filtered_by(
+        cls, session: Optional[AsyncSession] = None, **kwargs: Any
+    ) -> Optional[Base]:
+        stmt: Select[Tuple] = select(cls).filter_by(**kwargs)
+        return await db.scalars__one_or_none(stmt=stmt, session=session)
+
+    @classmethod
+    async def fetchall_filtered(
+        cls, *criteria: bool, session: Optional[AsyncSession] = None
+    ) -> List[Base]:
+        stmt: Select[Tuple] = select(cls).filter(*criteria)
+        return await db.scalars__fetchall(stmt=stmt, session=session)
+
+    @classmethod
+    async def one_filtered(
+        cls, *criteria: bool, session: Optional[AsyncSession] = None
+    ) -> Base:
+        stmt: Select[Tuple] = select(cls).filter(*criteria)
+        return await db.scalars__one(stmt=stmt, session=session)
+
+    @classmethod
+    async def first_filtered(
+        cls, *criteria: bool, session: Optional[AsyncSession] = None
+    ) -> Base:
+        stmt: Select[Tuple] = select(cls).filter(*criteria)
+        return await db.scalars__first(stmt=stmt, session=session)
+
+    @classmethod
+    async def one_or_none_filtered(
+        cls, *criteria: bool, session: Optional[AsyncSession] = None
+    ) -> Optional[Base]:
+        stmt: Select[Tuple] = select(cls).filter(*criteria)
+        return await db.scalars__one_or_none(stmt=stmt, session=session)
 
 
-class Users(CustomMixin, Base):
+class Users(Base, Mixin):
     __tablename__ = "users"
-    # id = Column(Integer, primary_key=True, index=True)
-    status = Column(Enum("active", "deleted", "blocked"), default="active")
-    email = Column(String(length=255), nullable=True)
-    pw = Column(String(length=2000), nullable=True)
-    name = Column(String(length=255), nullable=True)
-    phone_number = Column(String(length=20), nullable=True, unique=True)
-    profile_img = Column(String(length=1000), nullable=True)
-    sns_type = Column(Enum("FB", "G", "K"), nullable=True)
-    marketing_agree = Column(Boolean, nullable=True, default=True)
-    keys = relationship("ApiKeys", back_populates="users")
+    status: Mapped[str] = mapped_column(
+        Enum("active", "deleted", "blocked"), default="active"
+    )
+    email: Mapped[str] = mapped_column(String(length=20))
+    password: Mapped[Optional[str]] = mapped_column(String(length=72))
+    name: Mapped[Optional[str]] = mapped_column(String(length=20))
+    phone_number: Mapped[Optional[str]] = mapped_column(String(length=20))
+    profile_img: Mapped[Optional[str]] = mapped_column(String(length=100))
+    marketing_agree: Mapped[bool] = mapped_column(Boolean, default=True)
+    api_keys = relationship(
+        "ApiKeys", back_populates="users", cascade="all, delete-orphan"
+    )
 
 
-class ApiKeys(Base, CustomMixin):
+class ApiKeys(Base, Mixin):
     __tablename__ = "api_keys"
-    access_key = Column(String(length=64), nullable=False, index=True)
-    secret_key = Column(String(length=64), nullable=False)
-    user_memo = Column(String(length=40), nullable=True)
-    status = Column(Enum("active", "stopped", "deleted"), default="active")
-    is_whitelisted = Column(Boolean, default=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    whitelist = relationship("ApiWhiteLists", backref="api_keys")
-    users = relationship("Users", back_populates="keys")
+    status: Mapped[str] = mapped_column(
+        Enum("active", "stopped", "deleted"), default="active"
+    )
+    access_key: Mapped[str] = mapped_column(String(length=64), index=True, unique=True)
+    secret_key: Mapped[str] = mapped_column(String(length=64))
+    user_memo: Mapped[Optional[str]] = mapped_column(String(length=40))
+    is_whitelisted: Mapped[bool] = mapped_column(default=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    users: Mapped["Users"] = relationship(back_populates="api_keys")
+    whitelists: Mapped["ApiWhiteLists"] = relationship(
+        backref="api_keys", cascade="all, delete-orphan"
+    )
 
 
-class ApiWhiteLists(Base, CustomMixin):
+class ApiWhiteLists(Base, Mixin):
     __tablename__ = "api_whitelists"
-    ip_addr = Column(String(length=64), nullable=False)
-    api_key_id = Column(Integer, ForeignKey("api_keys.id"), nullable=False)
+    api_key_id: Mapped[int] = Column(Integer, ForeignKey("api_keys.id"))
+    ip_address: Mapped[str] = Column(String(length=64))
+
+
+class Debugging(Base):
+    __tablename__ = "debugging"
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+
+# ========================== Schema section ends ==========================
+db.init(config=config)
