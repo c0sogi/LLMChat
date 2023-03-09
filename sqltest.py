@@ -9,6 +9,8 @@ from sqlalchemy import (
     Result,
     ScalarResult,
     Select,
+    Delete,
+    Update,
     create_engine,
     text,
 )
@@ -218,29 +220,40 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
             yield transaction
 
     def run_in_session(self, func: Callable[..., Any]) -> Callable[..., Any]:
-        async def _wrapper(
+        async def wrapper(
             session: Optional[AsyncSession] = None,
             autocommit: bool = False,
-            *args: list,
-            **kwargs,
+            refresh: bool = False,
+            *args: Any,
+            **kwargs: Any,
         ):
             if session is None:
                 async with self.session() as transaction:
                     result = await func(transaction, *args, **kwargs)
-                    await transaction.commit() if autocommit else ...
+                    if autocommit:
+                        await transaction.commit()
+                    if refresh:
+                        [await transaction.refresh(r) for r in result] if isinstance(
+                            result, Iterable
+                        ) else await transaction.refresh(result)
             else:
                 result = await func(session, *args, **kwargs)
-                await session.commit() if autocommit else ...
+                if autocommit:
+                    await session.commit()
+                if refresh:
+                    [await session.refresh(r) for r in result] if isinstance(
+                        result, Iterable
+                    ) else await session.refresh(result)
             return result
 
-        return _wrapper
+        return wrapper
 
     @staticmethod
     def log(msg) -> None:
         logging.critical(f"[{datetime.now()}] {msg}")
 
     async def _execute(  # To be decorated
-        self, session: AsyncSession, stmt: Union[text, Select]
+        self, session: AsyncSession, stmt: Union[text, Update, Delete, Select]
     ) -> Result:
         return await session.execute(stmt)
 
@@ -274,70 +287,87 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         session.add_all(instances)
         return instances
 
-    async def scalars__fetchall(
-        self, stmt: Select, session: Optional[AsyncSession] = None
-    ) -> List[Base]:
-        return (
-            await self.run_in_session(self._scalars)(
-                session=session, autocommit=False, stmt=stmt
-            )
-        ).fetchall()
-
-    async def scalars__one(
-        self, stmt: Select, session: Optional[AsyncSession] = None
+    async def _delete(  # To be decorated
+        self,
+        session: AsyncSession,
+        instance: Base,
     ) -> Base:
-        return (
-            await self.run_in_session(self._scalars)(
-                session=session, autocommit=False, stmt=stmt
-            )
-        ).one()
+        await session.delete(instance)
+        return instance
 
-    async def scalars__one_or_none(
-        self, stmt: Select, session: Optional[AsyncSession] = None
-    ) -> Optional[Base]:
-        return (
-            await self.run_in_session(self._scalars)(
-                session=session, autocommit=False, stmt=stmt
-            )
-        ).one_or_none()
+    async def execute(
+        self,
+        stmt: Union[text, Update, Delete, Select],
+        autocommit: bool = False,
+        refresh: bool = False,
+        session: Optional[AsyncSession] = None,
+    ) -> Result:
+        return await self.run_in_session(self._execute)(
+            session, autocommit=autocommit, refresh=refresh, stmt=stmt
+        )
 
-    async def fetchall_scalars(
-        self, stmt: Select, session: Optional[AsyncSession] = None
-    ) -> List[Base]:
-        return await self.scalars__fetchall(stmt=stmt, session=session)
+    async def scalar(self, stmt: Select, session: Optional[AsyncSession] = None) -> Any:
+        return await self.run_in_session(self._scalar)(session, stmt=stmt)
 
-    async def one_scalars(
+    async def scalars(
         self, stmt: Select, session: Optional[AsyncSession] = None
+    ) -> ScalarResult:
+        return await self.run_in_session(self._scalars)(session, stmt=stmt)
+
+    async def add(
+        self,
+        schema: Type[Base],
+        autocommit: bool = False,
+        refresh: bool = False,
+        session: Optional[AsyncSession] = None,
+        **kwargs: Any,
     ) -> Base:
-        return await self.scalars__one(stmt=stmt, session=session)
-
-    async def one_or_none_scalars(
-        self, stmt: Select, session: Optional[AsyncSession] = None
-    ) -> Optional[Base]:
-        return await self.scalars__one_or_none(stmt=stmt, session=session)
+        instance = schema(**kwargs)
+        return await self.run_in_session(self._add)(
+            session, autocommit=autocommit, refresh=refresh, instance=instance
+        )
 
     async def add_all(
         self,
         schema: Type[Base],
         *args: dict,
         autocommit: bool = False,
+        refresh: bool = False,
         session: Optional[AsyncSession] = None,
     ) -> List[Base]:
         instances = [schema(**arg) for arg in args]
-        await self.run_in_session(self._add_all)(
-            session=session, autocommit=autocommit, instances=instances
+        return await self.run_in_session(self._add_all)(
+            session, autocommit=autocommit, refresh=refresh, instances=instances
         )
-        return instances
 
-    async def add(
+    async def delete(
         self,
-        schema: Type[Base],
+        instance: Base,
         autocommit: bool = False,
         session: Optional[AsyncSession] = None,
-        **kwargs: Any,
     ) -> Base:
-        instance = schema(**kwargs)
-        await self.run_in_session(self._add)(
-            session=session, autocommit=autocommit, instance=instance
+        return await self.run_in_session(self._delete)(
+            session, autocommit=autocommit, instance=instance
         )
-        return instance
+
+    async def scalars__fetchall(
+        self, stmt: Select, session: Optional[AsyncSession] = None
+    ) -> List[Base]:
+        return (await self.run_in_session(self._scalars)(session, stmt=stmt)).fetchall()
+
+    async def scalars__one(
+        self, stmt: Select, session: Optional[AsyncSession] = None
+    ) -> Base:
+        return (await self.run_in_session(self._scalars)(session, stmt=stmt)).one()
+
+    async def scalars__first(
+        self, stmt: Select, session: Optional[AsyncSession] = None
+    ) -> Base:
+        return (await self.run_in_session(self._scalars)(session, stmt=stmt)).first()
+
+    async def scalars__one_or_none(
+        self, stmt: Select, session: Optional[AsyncSession] = None
+    ) -> Optional[Base]:
+        return (
+            await self.run_in_session(self._scalars)(session, stmt=stmt)
+        ).one_or_none()

@@ -7,11 +7,17 @@ from sqlalchemy import (
     Enum,
     Boolean,
     ForeignKey,
-    select,
     Select,
+    select,
+    update,
+    text,
+    Update,
+    Delete,
+    Result,
+    ScalarResult,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Any, Tuple
+from typing import Any, Tuple, Union
 from uuid import uuid4
 from sqlalchemy.orm import (
     relationship,
@@ -35,9 +41,6 @@ class Mixin:
     )
     ip_address: Mapped[Optional[str]] = mapped_column(String(length=40))
 
-    def __hash__(self) -> int:
-        return hash(self.id)
-
     @property
     def all_columns(self) -> List[Column]:
         return [
@@ -51,18 +54,38 @@ class Mixin:
         cls,
         *args: dict,
         autocommit: bool = False,
+        refresh: bool = False,
         session: Optional[AsyncSession] = None,
     ) -> List[Base]:
-        return await sa.add_all(cls, *args, autocommit=autocommit, session=session)
+        return await sa.add_all(
+            cls, *args, autocommit=autocommit, refresh=refresh, session=session
+        )
 
     @classmethod
-    async def add(
+    async def add_one(
         cls,
         autocommit: bool = False,
+        refresh: bool = False,
         session: Optional[AsyncSession] = None,
         **kwargs: Any,
     ) -> Base:
-        return await sa.add(cls, autocommit=autocommit, session=session, **kwargs)
+        return await sa.add(
+            cls, autocommit=autocommit, refresh=refresh, session=session, **kwargs
+        )
+
+    @classmethod
+    async def update_where(
+        cls,
+        filter_by: dict,
+        updated: dict,
+        autocommit: bool = False,
+        refresh: bool = False,
+        session: Optional[AsyncSession] = None,
+    ) -> Base:
+        stmt = update(cls).filter_by(**filter_by).values(**updated)
+        return await sa.run_in_session(sa._execute)(
+            session, autocommit=autocommit, refresh=refresh, stmt=stmt
+        )
 
     @classmethod
     async def fetchall_filtered_by(
@@ -79,6 +102,20 @@ class Mixin:
         return await sa.scalars__one(stmt=stmt, session=session)
 
     @classmethod
+    async def first_filtered_by(
+        cls, session: Optional[AsyncSession] = None, **kwargs: Any
+    ) -> Base:
+        stmt: Select[Tuple] = select(cls).filter_by(**kwargs)
+        return await sa.scalars__first(stmt=stmt, session=session)
+
+    @classmethod
+    async def one_or_none_filtered_by(
+        cls, session: Optional[AsyncSession] = None, **kwargs: Any
+    ) -> Optional[Base]:
+        stmt: Select[Tuple] = select(cls).filter_by(**kwargs)
+        return await sa.scalars__one_or_none(stmt=stmt, session=session)
+
+    @classmethod
     async def fetchall_filtered(
         cls, *criteria: bool, session: Optional[AsyncSession] = None
     ) -> List[Base]:
@@ -91,6 +128,20 @@ class Mixin:
     ) -> Base:
         stmt: Select[Tuple] = select(cls).filter(*criteria)
         return await sa.scalars__one(stmt=stmt, session=session)
+
+    @classmethod
+    async def first_filtered(
+        cls, *criteria: bool, session: Optional[AsyncSession] = None
+    ) -> Base:
+        stmt: Select[Tuple] = select(cls).filter(*criteria)
+        return await sa.scalars__first(stmt=stmt, session=session)
+
+    @classmethod
+    async def one_or_none_filtered(
+        cls, *criteria: bool, session: Optional[AsyncSession] = None
+    ) -> Optional[Base]:
+        stmt: Select[Tuple] = select(cls).filter(*criteria)
+        return await sa.scalars__one_or_none(stmt=stmt, session=session)
 
 
 class Users(Base, Mixin):
@@ -143,47 +194,63 @@ sa.__pos_init__()
 if __name__ == "__main__":
     from asyncio import run
 
-    async def main():
+    async def main() -> None:
         def log(result: Any, logged_as: str) -> None:
             outputs.append({logged_as: result})
 
+        def gen_uuid() -> str:
+            return str(uuid4())[:18]
+
+        def gen_user() -> dict[str, str]:
+            return {"username": gen_uuid(), "password": gen_uuid()}
+
+        def get_user(user: Users):
+            return f"<Users> username: {user.username} | password: {user.password}"
+
         outputs = []
-        random_name = str(uuid4())[:18]
-        random_name2 = str(uuid4())[:18]
-        random_name3 = str(uuid4())[:18]
+        random_users = [gen_user() for _ in range(4)]
         print("\n" * 10)
         try:
             # Create instances
-            created_users = await Users.add_all(
-                {"username": random_name},
-                {"username": random_name2},
-                autocommit=True,
+            users = await Users.add_all(
+                random_users[0], random_users[1], autocommit=True, refresh=True
             )
             log(
-                [created_user.__dict__ for created_user in created_users],
-                "created_users",
+                [get_user(user) for user in users],
+                "[add_all]",
             )
-            created_user = await Users.add(
-                autocommit=True, username=random_name3, password=123
-            )
-            log(created_user.__dict__, "created_user")
+            user = await Users.add_one(autocommit=True, refresh=True, **random_users[2])
+            log(get_user(user), "[add]")
 
             # Query instances
-            stmt = select(Users).filter(Users.username.in_([random_name, random_name2]))
-            queried_users = await sa.fetchall_scalars(stmt)
+            stmt = select(Users).filter(
+                Users.username.in_(
+                    [random_users[0]["username"], random_users[1]["username"]]
+                )
+            )
+            users = await sa.scalars__fetchall(stmt)
             log(
-                [queried_user.__dict__ for queried_user in queried_users],
-                "queried_users",
+                [get_user(user) for user in users],
+                "[scalars__fetchall / in]",
             )
-            queried_user = await Users.one_filtered_by(
-                username=random_name3, password=123
+            result = await Users.update_where(
+                random_users[0],
+                {"username": "UPDATED", "password": "updated"},
+                autocommit=True,
             )
-            log(queried_user.__dict__, "queried_user")
-            queried_user2 = await Users.fetchall_filtered_by(username=random_name3)
+            log(result, "[updated_where]")
+            user = await Users.one_filtered_by(**random_users[2])
+            log(get_user(user), "[one_filtered_by]")
+            print("/" * 1000)
+            user = await sa.delete(user, autocommit=True)
+
+            log(get_user(user), "[delete]")
+            users = await Users.fetchall_filtered_by(**random_users[3])
             log(
-                [queried_user.__dict__ for queried_user in queried_user2],
-                "queried_user2",
+                [get_user(user) for user in users],
+                "[fetchall_filtered_by]",
             )
+
         except Exception as e:
             print("<" * 10, "Test failed!", ">" * 10)
             print("Detailed error:\n")
