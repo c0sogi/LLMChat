@@ -1,23 +1,8 @@
 from __future__ import annotations
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from os import environ
 from typing import Union, Optional
 from pathlib import Path
-
-
-# from app.utils.encoding_and_hashing import SecretConfigSetup
-# password_from_environ = environ.get("SECRET_CONFIGS_PASSWORD", None)
-# secret_config_setup = SecretConfigSetup(
-#     password=password_from_environ
-#     if password_from_environ is not None
-#     else input("Enter Passwords:"),
-#     json_file_name="secret_configs.json",
-# )
-#
-#
-# @dataclass(frozen=True)
-# class SecretConfig(metaclass=SingletonMetaClass):
-#     secret_config: dict = field(default_factory=secret_config_setup.initialize)
 
 
 class SingletonMetaClass(type):
@@ -80,7 +65,7 @@ BASE_DIR = Path(__file__).parents[2]
 
 
 ERROR_RESPONSES = {
-    "no_email_or_pw": ErrorResponse(400, "Email and PW must be provided.").asdict,
+    "no_email_or_password": ErrorResponse(400, "Email and PW must be provided.").asdict,
     "email_already_taken": ErrorResponse(400, "Email already exists.").asdict,
     "not_supported_feature": ErrorResponse(400, "Not supported.").asdict,
     "no_matched_user": ErrorResponse(400, "No matched user.").asdict,
@@ -102,8 +87,8 @@ class Config(metaclass=SingletonMetaClass):
     mysql_password: str = MYSQL_PASSWORD
     mysql_database: str = MYSQL_DATABASE
     mysql_host: str = MYSQL_HOST
-    trusted_hosts = ["*"]
-    allowed_sites = ["*"]
+    trusted_hosts: list = field(default_factory=lambda: ["*"])
+    allowed_sites: list = field(default_factory=lambda: ["*"])
 
     @staticmethod
     def get(
@@ -123,16 +108,20 @@ class LocalConfig(Config, metaclass=SingletonMetaClass):
 
 @dataclass(frozen=True)
 class ProdConfig(Config, metaclass=SingletonMetaClass):
-    trusted_hosts = [
-        f"*.{DOMAIN}",
-        DOMAIN,
-        "localhost",
-    ]
-    allowed_sites = [
-        f"*.{DOMAIN}",
-        DOMAIN,
-        "localhost",
-    ]
+    trusted_hosts: list = field(
+        default_factory=lambda: [
+            f"*.{DOMAIN}",
+            DOMAIN,
+            "localhost",
+        ]
+    )
+    allowed_sites: list = field(
+        default_factory=lambda: [
+            f"*.{DOMAIN}",
+            DOMAIN,
+            "localhost",
+        ]
+    )
 
 
 @dataclass(frozen=True)

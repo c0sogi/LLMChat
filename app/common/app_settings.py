@@ -7,18 +7,17 @@ from app.common.config import (
     ProdConfig,
     TestConfig,
 )
-from app.database.connection import db
+from app.database.schema import db
 from app.middlewares.token_validator import access_control
 from app.middlewares.trusted_hosts import TrustedHostMiddleware
 from app.routers import index, auth, services, users
 from app.dependencies import api_service_dependency, user_dependency
+import logging
 
 
 def create_app(config: Union[LocalConfig, ProdConfig, TestConfig]) -> FastAPI:
     # App & DB
     new_app = FastAPI()
-    db.init_db(app=new_app, config=config)
-
     # Middlewares
     """
     Access control middleware: Authorized request only
@@ -59,6 +58,17 @@ def create_app(config: Union[LocalConfig, ProdConfig, TestConfig]) -> FastAPI:
         tags=["Users"],
         dependencies=[Depends(user_dependency)],
     )
+
+    @new_app.on_event("startup")
+    async def startup():
+        # self.engine.connect()
+        logging.critical(">>> DB connected")
+
+    @new_app.on_event("shutdown")
+    async def shutdown():
+        await db.session.remove()
+        await db.engine.dispose()
+        logging.critical(">>> DB disconnected")
 
     return new_app
 

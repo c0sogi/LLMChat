@@ -1,8 +1,12 @@
+from os import environ
+
+environ["API_ENV"] = "test"
 from typing import AsyncGenerator
 import pytest
 from httpx import AsyncClient
 import pytest_asyncio
 from uuid import uuid4
+from os import environ
 from app.database.schema import Users
 from app.common.app_settings import create_app
 from app.common.config import Config
@@ -20,7 +24,8 @@ from app.routers.auth import create_access_token
 
 @pytest.fixture(scope="session")
 def app():
-    _app = create_app(Config.get(option="test"))
+    # raise Exception(environ.get("API_ENV"))
+    _app = create_app(Config.get())
     return _app
 
 
@@ -41,9 +46,9 @@ async def login_header(random_user):
     """
     테스트 전 사용자 미리 등록
     """
-    new_user = await Users.create_new(auto_commit=True, **random_user)
+    new_user = await Users.add_one(autocommit=True, refresh=True, **random_user)
     access_token = create_access_token(
-        data=UserToken.from_orm(new_user).dict(exclude={"pw", "marketing_agree"}),
+        data=UserToken.from_orm(new_user).dict(exclude={"password", "marketing_agree"}),
     )
     return {"Authorization": f"Bearer {access_token}"}
 
@@ -53,7 +58,7 @@ def random_user():
     random_8_digits = str(hash(uuid4()))[:8]
     return {
         "email": f"{random_8_digits}@test.com",
-        "pw": "123",
+        "password": "123",
         "name": f"{random_8_digits}",
-        "phone": f"010{random_8_digits}",
+        "phone_number": f"010{random_8_digits}",
     }

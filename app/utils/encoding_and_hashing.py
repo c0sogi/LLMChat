@@ -1,3 +1,6 @@
+from string import ascii_letters, digits
+from secrets import choice
+from uuid import uuid4
 from os import urandom
 from os.path import exists
 from hmac import HMAC, new
@@ -8,6 +11,8 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.hashes import HashAlgorithm, SHA256
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import json
+from app.database.schema import ApiKeys
+from app.models import AddApiKey
 
 
 class SecretConfigSetup:
@@ -98,3 +103,31 @@ def hash_params(qs: str, secret_key: str) -> str:
         digestmod="sha256",
     )
     return str(b64encode(mac.digest()).decode("utf-8"))
+
+
+# from app.utils.encoding_and_hashing import SecretConfigSetup
+# password_from_environ = environ.get("SECRET_CONFIGS_PASSWORD", None)
+# secret_config_setup = SecretConfigSetup(
+#     password=password_from_environ
+#     if password_from_environ is not None
+#     else input("Enter Passwords:"),
+#     json_file_name="secret_configs.json",
+# )
+#
+#
+# @dataclass(frozen=True)
+# class SecretConfig(metaclass=SingletonMetaClass):
+#     secret_config: dict = field(default_factory=secret_config_setup.initialize)
+
+
+async def generate_api_key(user_id: int, additional_key_info: AddApiKey) -> ApiKeys:
+    alnums = ascii_letters + digits
+    secret_key = "".join(choice(alnums) for _ in range(40))
+    uid = f"{str(uuid4())[:-12]}{str(uuid4())}"
+    new_api_key = ApiKeys(
+        secret_key=secret_key,
+        user_id=user_id,
+        access_key=uid,
+        **additional_key_info.dict(),
+    )
+    return new_api_key

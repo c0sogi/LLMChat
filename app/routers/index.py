@@ -7,7 +7,6 @@ from fastapi.requests import Request
 # from app.background_tasks import background_task_state
 # from sqlalchemy.orm import AsyncSession
 # from fastapi import Depends
-# from app.database.connection import db
 # from app.database.schema import Users
 
 router = APIRouter(tags=["index"])

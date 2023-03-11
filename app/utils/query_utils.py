@@ -1,7 +1,7 @@
 from typing import List
 
 
-def query_row_to_dict(model, *args, exclude: List = None):
+def row_to_dict(model, *args, exclude: List = None):
     q_dict = {}
     for c in model.__table__.columns:
         if not args or c.name in args:

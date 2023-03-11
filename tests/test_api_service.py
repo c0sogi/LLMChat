@@ -38,4 +38,4 @@ async def test_request_api(login_header, client):
         f"/api/services?{parsed_qs}",
         headers={"secret": hash_params(qs=parsed_qs, secret_key=apikey["secret_key"])},
     )
-    assert (res.status_code == 200) or (res.status_code == 307)
+    assert res.status_code in (200, 307)

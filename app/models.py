@@ -4,12 +4,13 @@ from typing import List
 
 from pydantic import Field
 from pydantic.main import BaseModel
+
 # from pydantic.networks import EmailStr, IPvAnyAddress
 
 
 class UserRegister(BaseModel):
     email: str = None
-    pw: str = None
+    password: str = None
 
 
 class SnsType(str, Enum):

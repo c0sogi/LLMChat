@@ -3,10 +3,9 @@ import bcrypt
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.requests import Request
-from sqlalchemy import select
 from app.common.config import ERROR_RESPONSES, JWT_ALGORITHM, JWT_SECRET
-from app.database.connection import AsyncSession, db
-from app.database.schema import Users
+from app.database.crud import is_email_exist, register_new_user
+from app.database.schema import db, Users, AsyncSession
 from app.models import SnsType, Token, UserRegister, UserToken
 from app.utils.logger import logger
 
@@ -35,22 +34,22 @@ async def register(
     sns_type: SnsType,
     reg_info: UserRegister,
     request: Request,
-    session: AsyncSession = Depends(db.get_db),
 ) -> dict:
     if sns_type == SnsType.email:
-        if (not reg_info.email) or (not reg_info.pw):
-            raise HTTPException(**ERROR_RESPONSES["no_email_or_pw"])
-        if await is_email_exist(session, reg_info.email):
+        if not (reg_info.email and reg_info.password):
+            raise HTTPException(**ERROR_RESPONSES["no_email_or_password"])
+        if await is_email_exist(reg_info.email):
             raise HTTPException(**ERROR_RESPONSES["email_already_taken"])
-        hashed_pw = bcrypt.hashpw(reg_info.pw.encode("utf-8"), bcrypt.gensalt())
-        new_user = await Users.create_new(
-            auto_commit=True,
-            pw=hashed_pw,
+        hashed_password = bcrypt.hashpw(
+            reg_info.password.encode("utf-8"), bcrypt.gensalt()
+        )
+        new_user = await register_new_user(
             email=reg_info.email,
+            hashed_password=hashed_password,
             ip_address=request.client.host,
         )
         data_to_be_tokenized = UserToken.from_orm(new_user).dict(
-            exclude={"pw", "marketing_agree"}
+            exclude={"password", "marketing_agree"}
         )
         return {
             "Authorization": f"Bearer {create_access_token(data=data_to_be_tokenized)}"
@@ -62,23 +61,19 @@ async def register(
 async def login(
     sns_type: SnsType,
     user_info: UserRegister,
-    session: AsyncSession = Depends(db.get_db),
 ) -> dict:
     if sns_type == SnsType.email:
-        if (not user_info.email) or (not user_info.pw):
-            raise HTTPException(**ERROR_RESPONSES["no_email_or_pw"])
-        query_result = await Users.filter_by_equality(session, email=user_info.email)
-        matched_user = query_result.one_or_none()
-        logger.critical(matched_user.__dict__)
-
+        if not (user_info.email and user_info.password):
+            raise HTTPException(**ERROR_RESPONSES["no_email_or_password"])
+        matched_user: Users = await Users.first_filtered_by(email=user_info.email)
         if matched_user is None:
             raise HTTPException(**ERROR_RESPONSES["no_matched_user"])
         if not bcrypt.checkpw(
-            user_info.pw.encode("utf-8"), matched_user.pw.encode("utf-8")
+            user_info.password.encode("utf-8"), matched_user.password.encode("utf-8")
         ):
             raise HTTPException(**ERROR_RESPONSES["no_matched_user"])
         data_to_be_tokenized = UserToken.from_orm(matched_user).dict(
-            exclude={"pw", "marketing_agree"}
+            exclude={"password", "marketing_agree"}
         )
         return {
             "Authorization": f"Bearer {create_access_token(data=data_to_be_tokenized)}"
@@ -88,14 +83,6 @@ async def login(
 
 
 # from sqlalchemy.engine import ChunkedIteratorResult
-
-
-async def is_email_exist(session, email: str) -> bool:
-    query_result = await session.execute(select(Users).filter_by(email=email))
-    query_result = query_result.fetchone()
-    return False if query_result is None else True
-
-
 def create_access_token(*, data: dict = None, expires_delta: int = None) -> str:
     to_encode = data.copy()
     if expires_delta is not None:

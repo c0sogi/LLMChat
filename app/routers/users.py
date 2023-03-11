@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from starlette.requests import Request
 from app.common.config import MAX_API_KEY, MAX_API_WHITELIST
 from app.database.schema import Users, ApiKeys, ApiWhiteLists, db, AsyncSession
+from app.database.crud import create_new_api_key, get_all_api_keys
 from app import models as m
 from app.errors import exceptions as ex
 import string
@@ -36,9 +37,7 @@ async def get_api_keys(request: Request, session: AsyncSession = Depends(db.get_
     """
     API KEY 조회
     """
-    user = request.state.user
-    api_keys = await ApiKeys.filter_by_condition(session, user_id=user.id)
-    return api_keys.all()
+    return await get_all_api_keys(user_id=request.state.user.id)
 
 
 @router.post("/apikeys", response_model=m.GetApiKeys)
@@ -49,36 +48,7 @@ async def create_api_keys(
     API KEY 생성
     """
     user = request.state.user
-    # from sqlalchemy.engine import ScalarResult
-    # ScalarResult.
-    api_keys = (
-        await ApiKeys.filter_by_condition(session, user_id=user.id, status="active")
-    ).fetchall()
-    if len(api_keys) == MAX_API_KEY:
-        raise ex.MaxKeyCountEx()
-
-    alphabet = string.ascii_letters + string.digits
-    s_key = "".join(secrets.choice(alphabet) for _ in range(40))
-    uid = None
-    while not uid:
-        uid_candidate = f"{str(uuid4())[:-12]}{str(uuid4())}"
-        uid_check = (
-            await ApiKeys.filter_by_condition(session, access_key=uid_candidate)
-        ).fetchall()
-        if not uid_check:
-            uid = uid_candidate
-
-    key_info = key_info.dict()
-    new_api_key = await ApiKeys.create_new(
-        session,
-        auto_commit=True,
-        secret_key=s_key,
-        user_id=user.id,
-        access_key=uid,
-        **key_info,
-    )
-    session.commit()
-    return new_api_key
+    return await create_new_api_key(user_id=user.id, additional_key_info=key_info)
 
 
 @router.put("/apikeys/{key_id}", response_model=m.GetApiKeyList)

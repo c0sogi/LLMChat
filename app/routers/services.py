@@ -125,12 +125,12 @@ async def email_by_gmail2(
 
 def send_email(**kwargs):
     mailing_list = kwargs.get("mailing_list", None)
-    email_pw = os.environ.get("EMAIL_PW", None)
+    email_password = os.environ.get("EMAIL_PW", None)
     email_addr = os.environ.get("EMAIL_ADDR", None)
     last_email = ""
     if mailing_list:
         try:
-            yag = yagmail.SMTP({email_addr: "라이언X코알라"}, email_pw)
+            yag = yagmail.SMTP({email_addr: "라이언X코알라"}, email_password)
             # https://myaccount.google.com/u/1/lesssecureapps
             for m_l in mailing_list:
                 contents = [email_content.format(m_l.name)]
