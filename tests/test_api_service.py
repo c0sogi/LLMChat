@@ -1,4 +1,3 @@
-from tests.conftest import *
 import pytest
 from time import sleep
 from app.utils.date_utils import UTC

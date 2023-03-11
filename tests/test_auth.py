@@ -1,4 +1,3 @@
-from tests.conftest import *
 import pytest
 from fastapi import status
 from app.common.config import ERROR_RESPONSES

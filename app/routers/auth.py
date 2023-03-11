@@ -1,13 +1,11 @@
-from datetime import datetime, timedelta
 import bcrypt
-import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from fastapi.requests import Request
-from app.common.config import ERROR_RESPONSES, JWT_ALGORITHM, JWT_SECRET
+from app.common.config import ERROR_RESPONSES
 from app.database.crud import is_email_exist, register_new_user
-from app.database.schema import db, Users, AsyncSession
+from app.database.schema import Users
 from app.models import SnsType, Token, UserRegister, UserToken
-from app.utils.logger import logger
+from app.utils.encoding_and_hashing import create_access_token
 
 router = APIRouter(prefix="/auth")
 
@@ -80,11 +78,3 @@ async def login(
         }  # token
     else:
         raise HTTPException(**ERROR_RESPONSES["not_supported_feature"])
-
-
-# from sqlalchemy.engine import ChunkedIteratorResult
-def create_access_token(*, data: dict = None, expires_delta: int = None) -> str:
-    to_encode = data.copy()
-    if expires_delta is not None:
-        to_encode.update({"exp": datetime.utcnow() + timedelta(hours=expires_delta)})
-    return jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)

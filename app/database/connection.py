@@ -29,7 +29,6 @@ from datetime import datetime
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm.decl_api import DeclarativeMeta
 from app.common.config import TestConfig, ProdConfig, LocalConfig, SingletonMetaClass
-from os import environ
 
 Base: DeclarativeMeta = declarative_base()
 

@@ -35,6 +35,10 @@ class Mixin:
     )
     ip_address: Mapped[Optional[str]] = mapped_column(String(length=40))
 
+    def set_values_as(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
     @property
     def all_columns(self) -> List[Column]:
         return [

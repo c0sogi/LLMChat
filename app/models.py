@@ -82,11 +82,11 @@ class GetApiKeys(GetApiKeyList):
     secret_key: str = None
 
 
-class CreateAPIWhiteLists(BaseModel):
-    ip_addr: str = None
+class CreateApiWhiteLists(BaseModel):
+    ip_address: str = None
 
 
-class GetAPIWhiteLists(CreateAPIWhiteLists):
+class GetApiWhiteLists(CreateApiWhiteLists):
     id: int
 
     class Config:
