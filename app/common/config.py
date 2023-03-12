@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, field
 from os import environ
 from typing import Union, Optional
 from pathlib import Path
@@ -12,16 +12,6 @@ class SingletonMetaClass(type):
         if cls not in cls._instances:
             cls._instances[cls] = super().__call__(*args, **kwargs)
         return cls._instances[cls]
-
-
-@dataclass(frozen=True)
-class ErrorResponse:
-    status_code: int
-    detail: str
-
-    @property
-    def asdict(self) -> dict:
-        return asdict(self)
 
 
 DATABASE_URL_FORMAT: str = (
@@ -42,13 +32,14 @@ SAMPLE_JWT_TOKEN: str = environ.get("SAMPLE_JWT_TOKEN")
 SAMPLE_ACCESS_KEY: str = environ.get("SAMPLE_ACCESS_KEY")
 SAMPLE_SECRET_KEY: str = environ.get("SAMPLE_SECRET_KEY")
 KAKAO_RESTAPI_TOKEN: str = environ.get("KAKAO_RESTAPI_TOKEN")
-JWT_ALGORITHM = "HS256"
-EXCEPT_PATH_LIST = ["/", "/openapi.json"]
-EXCEPT_PATH_REGEX = "^(/docs|/redoc|/api/auth|/favicon.ico)"
-MAX_API_KEY = 3
-MAX_API_WHITELIST = 10
-KAKAO_IMAGE_URL = "http://k.kakaocdn.net/dn/wwWjr/btrYVhCnZDF/2bgXDJth2LyIajIjILhLK0/kakaolink40_original.png"
-BASE_DIR = Path(__file__).parents[2]
+JWT_ALGORITHM: str = "HS256"
+EXCEPT_PATH_LIST: list = ["/", "/openapi.json"]
+EXCEPT_PATH_REGEX: str = "^(/docs|/redoc|/api/auth|/favicon.ico)"
+TOKEN_EXPIRE_HOURS: int = 2
+MAX_API_KEY: int = 3
+MAX_API_WHITELIST: int = 10
+KAKAO_IMAGE_URL: str = "http://k.kakaocdn.net/dn/wwWjr/btrYVhCnZDF/2bgXDJth2LyIajIjILhLK0/kakaolink40_original.png"
+BASE_DIR: str = Path(__file__).parents[2]
 
 """
 400 Bad Request
@@ -62,17 +53,6 @@ BASE_DIR = Path(__file__).parents[2]
 200 OK
 201 Created
 """
-
-
-ERROR_RESPONSES = {
-    "no_email_or_password": ErrorResponse(400, "Email and PW must be provided.").asdict,
-    "email_already_taken": ErrorResponse(400, "Email already exists.").asdict,
-    "not_supported_feature": ErrorResponse(400, "Not supported.").asdict,
-    "no_matched_user": ErrorResponse(400, "No matched user.").asdict,
-    "enforce_domain_wildcard": ErrorResponse(
-        500, "Domain wildcard patterns must be like '*.example.com'."
-    ).asdict,
-}
 
 
 @dataclass(frozen=True)

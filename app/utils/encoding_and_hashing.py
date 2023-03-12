@@ -2,7 +2,9 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.hashes import HashAlgorithm, SHA256
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from datetime import datetime, timedelta
-import jwt
+from jwt import decode as jwt_decode
+from jwt import encode as jwt_encode
+from jwt.exceptions import ExpiredSignatureError, DecodeError
 from string import ascii_letters, digits
 from secrets import choice
 from uuid import uuid4
@@ -13,6 +15,7 @@ from re import findall
 from base64 import urlsafe_b64encode, b64encode
 from typing import Any
 import json
+from app.errors.exceptions import TokenDecodeEx, TokenExpiredEx
 from app.database.schema import ApiKeys
 from app.models import AddApiKey
 from app.common.config import JWT_ALGORITHM, JWT_SECRET
@@ -122,10 +125,21 @@ async def generate_api_key(user_id: int, additional_key_info: AddApiKey) -> ApiK
 
 
 def create_access_token(*, data: dict = None, expires_delta: int = None) -> str:
-    to_encode = data.copy()
+    to_encode: dict = data.copy()
     if expires_delta is not None:
         to_encode.update({"exp": datetime.utcnow() + timedelta(hours=expires_delta)})
-    return jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return jwt_encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+async def token_decode(access_key: str) -> dict:
+    try:
+        access_key = access_key.replace("Bearer ", "")
+        payload = jwt_decode(access_key, key=JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except ExpiredSignatureError:
+        raise TokenExpiredEx()
+    except DecodeError:
+        raise TokenDecodeEx()
+    return payload
 
 
 # from app.utils.encoding_and_hashing import SecretConfigSetup

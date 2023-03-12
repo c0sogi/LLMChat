@@ -40,7 +40,7 @@ async def get_api_key_and_owner(access_key: str) -> Tuple[ApiKeys, Users]:
         return matched_api_key, api_key_owner
 
 
-async def register_new_user(email: str, hashed_password: str, ip_address: str):
+async def register_new_user(email: str, hashed_password: str, ip_address: str) -> Users:
     return await Users.add_one(
         autocommit=True,
         refresh=True,

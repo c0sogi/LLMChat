@@ -1,9 +1,8 @@
 from typing import Sequence
-from starlette.exceptions import HTTPException
 from starlette.datastructures import URL, Headers
 from starlette.responses import PlainTextResponse, RedirectResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
-from app.common.config import ERROR_RESPONSES
+from app.errors.error_responses import ErrorResponses
 
 
 class TrustedHostMiddleware:
@@ -23,11 +22,11 @@ class TrustedHostMiddleware:
         self.except_path: list = [] if except_path is None else list(except_path)
         for allowed_host in allowed_hosts:
             if "*" in allowed_host[1:]:
-                raise HTTPException(**ERROR_RESPONSES["enforce_domain_wildcard"])
+                raise ErrorResponses.enforce_domain_wildcard
             if (
                 allowed_host.startswith("*") and allowed_host != "*"
             ) and not allowed_host.startswith("*."):
-                raise HTTPException(**ERROR_RESPONSES["enforce_domain_wildcard"])
+                raise ErrorResponses.enforce_domain_wildcard
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if self.allow_any or scope["type"] not in (

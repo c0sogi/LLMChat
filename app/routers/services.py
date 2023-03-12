@@ -31,16 +31,12 @@ async def get_all_services(request: Request):
 
 @router.post("/kakao/send")
 async def send_kakao(request: Request, body: KakaoMsgBody):
-    # img_url = "https://image.dcinside.com/viewimage.php?id=29bfd4&no=63f39f2fe8d577a\
-    # 26fabd7e443826b309fd497bfe24120ad0b3b1bda1d1ec75fde00e611c0c1f8c69bd527f702af05ea602a4d320bd8e9e86634ef8f2211"
-    link_1 = "https://namu.wiki"
-    link_2 = "https://chat.openai.com"
+    link_1 = "https://google.com"
+    link_2 = "https://duckduckgo.com"
     headers = {
         "Authorization": KAKAO_RESTAPI_TOKEN,
         "Content-Type": "application/x-www-form-urlencoded",
     }
-    # body_json = {"object_type": "text", "text": body.msg,
-    #              "link": {"web_url": "localhost", "mobile_url": "localhost", "button_title": "지금 확인"}}
 
     template_object = json.dumps(
         {

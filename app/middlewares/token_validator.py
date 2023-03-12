@@ -1,9 +1,7 @@
-from jwt import decode as jwt_decode
 from time import time
 from re import match
 from typing import Union, Tuple, Optional
 from sqlalchemy.exc import OperationalError
-from jwt.exceptions import ExpiredSignatureError, DecodeError
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -11,8 +9,6 @@ from app.common.config import (
     Config,
     EXCEPT_PATH_LIST,
     EXCEPT_PATH_REGEX,
-    JWT_SECRET,
-    JWT_ALGORITHM,
     SAMPLE_JWT_TOKEN,
 )
 from app.database.crud import get_api_key_and_owner
@@ -22,7 +18,7 @@ from app.models import UserToken
 from app.utils.date_utils import UTC
 from app.utils.logger import api_logger
 from app.utils.query_utils import row_to_dict
-from app.utils.encoding_and_hashing import hash_params
+from app.utils.encoding_and_hashing import hash_params, token_decode
 
 config = Config.get()
 
@@ -151,17 +147,6 @@ async def queries_params_to_key_and_timestamp(query_params: str) -> Tuple[str, s
 
 async def url_pattern_check(path: str, pattern: str) -> bool:
     return True if match(pattern, path) else False
-
-
-async def token_decode(access_key: str) -> dict:
-    try:
-        access_key = access_key.replace("Bearer ", "")
-        payload = jwt_decode(access_key, key=JWT_SECRET, algorithms=[JWT_ALGORITHM])
-    except ExpiredSignatureError:
-        raise ex.TokenExpiredEx()
-    except DecodeError:
-        raise ex.TokenDecodeEx()
-    return payload
 
 
 async def exception_handler(error: Exception) -> Union[SqlFailureEx, APIException]:

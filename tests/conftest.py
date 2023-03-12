@@ -24,15 +24,8 @@ from app.routers.auth import create_access_token
 
 @pytest.fixture(scope="session")
 def app():
-    # raise Exception(environ.get("API_ENV"))
     _app = create_app(Config.get())
     return _app
-
-
-# @pytest_asyncio.fixture(scope="function")
-# async def session(self) -> AsyncSession:
-#     async with self.session() as session:
-#         yield session
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -49,6 +42,7 @@ async def login_header(random_user):
     new_user = await Users.add_one(autocommit=True, refresh=True, **random_user)
     access_token = create_access_token(
         data=UserToken.from_orm(new_user).dict(exclude={"password", "marketing_agree"}),
+        expires_delta=24,
     )
     return {"Authorization": f"Bearer {access_token}"}
 
