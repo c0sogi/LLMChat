@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, Type
+from fastapi.exceptions import HTTPException
+from sqlalchemy.exc import OperationalError
 from app.common.config import MAX_API_KEY, MAX_API_WHITELIST
 
 
@@ -65,13 +67,12 @@ class InvalidIpError(APIException):
     msg: str = "{ip}는 올바른 IP 가 아닙니다."
     detail: str = "invalid IP : {ip}"
 
-    def __init__(self, ip: str, ex: Optional[Exception] = None):
+    def __init__(self, ip: str):
         super().__init__(
             status_code=400,
             internal_code=self.internal_code,
             msg=self.msg.format(ip=ip),
             detail=self.detail.format(ip=ip),
-            ex=ex,
         )
 
 
@@ -201,3 +202,25 @@ class Responses_500:
         internal_code=2,
         detail="Domain wildcard patterns must be like '*.example.com'.",
     )
+    websocket_error: APIException = APIException(
+        status_code=500,
+        internal_code=3,
+        msg="웹소켓 연결에 문제 발생",
+        detail="Websocket error",
+    )
+
+
+async def exception_handler(
+    error: Exception,
+) -> InternalServerError | HTTPException | APIException:
+    if isinstance(error, APIException):
+        if error.status_code == 500:
+            return InternalServerError(ex=error)
+        else:
+            return error
+    elif isinstance(error, OperationalError):
+        return InternalServerError(ex=error)
+    elif isinstance(error, HTTPException):
+        return error
+    else:
+        return InternalServerError()

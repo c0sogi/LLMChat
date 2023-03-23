@@ -4,9 +4,8 @@ from uuid import uuid4
 from app.models import AddApiKey, UserToken
 from app.database.schema import Users, ApiKeys, db
 from app.database.crud import create_api_key, get_api_key_and_owner
-from app.middlewares.token_validator import (
-    validate_api_key,
-)
+from app.middlewares.token_validator import Validator
+
 from app.utils.date_utils import UTC
 from app.utils.query_utils import parse_params
 from app.utils.encoding_and_hashing import hash_params
@@ -37,7 +36,7 @@ async def test_api_key_validation(random_user):
     parsed_qs: str = parse_params(
         params={"key": new_api_key.access_key, "timestamp": timestamp}
     )
-    user_token: UserToken = await validate_api_key(
+    user_token: UserToken = await Validator.api_key(
         api_access_key=new_api_key.access_key,
         hashed_secret=hash_params(
             query_params=parsed_qs, secret_key=new_api_key.secret_key

@@ -31,7 +31,7 @@ async def delete_me(request: Request):
     ...
 
 
-@router.get("/apikeys", response_model=List[GetApiKeyList])
+@router.get("/apikeys", response_model=list[GetApiKeyList])
 async def get_api_keys(request: Request):
     return await crud.get_api_keys(user_id=request.state.user.id)
 
@@ -71,7 +71,7 @@ async def delete_api_key(
     return MessageOk()
 
 
-@router.get("/apikeys/{key_id}/whitelists", response_model=List[GetApiWhiteLists])
+@router.get("/apikeys/{key_id}/whitelists", response_model=list[GetApiWhiteLists])
 async def get_api_keys_whitelists(api_key_id: int):
     return await crud.get_api_key_whitelist(api_key_id=api_key_id)
 

@@ -1,5 +1,4 @@
 import json
-from typing import Any
 import os
 from time import sleep
 import yagmail
@@ -35,7 +34,7 @@ async def get_all_services(request: Request):
 
 @router.get("/weather", status_code=200)
 async def weather(latitude: float, longitude: float):
-    weather_data: Any = await fetch_weather_data(
+    weather_data: any = await fetch_weather_data(
         lat=latitude,
         lon=longitude,
         api_key=WEATHERBIT_API_KEY,

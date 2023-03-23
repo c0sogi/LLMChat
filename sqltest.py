@@ -1,7 +1,6 @@
 from dotenv import load_dotenv
 
 load_dotenv()
-from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -12,7 +11,7 @@ if __name__ == "__main__":
     from asyncio import run
 
     async def main() -> None:
-        def log(result: Any, logged_as: str) -> None:
+        def log(result: any, logged_as: str) -> None:
             outputs.append({logged_as: result})
 
         def gen_uuid() -> str:
@@ -41,9 +40,7 @@ if __name__ == "__main__":
 
             # Query instances
             stmt = select(Users).filter(
-                Users.email.in_(
-                    [random_users[0]["email"], random_users[1]["email"]]
-                )
+                Users.email.in_([random_users[0]["email"], random_users[1]["email"]])
             )
             users = await db.scalars__fetchall(stmt)
             log(

@@ -17,6 +17,7 @@ h11
 httptools
 idna
 iniconfig
+jinja2
 jmespath
 lxml
 packaging
@@ -39,5 +40,6 @@ starlette
 toml
 urllib3
 uvicorn
+websockets
 yagmail
 cryptography

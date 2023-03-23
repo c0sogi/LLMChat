@@ -1,23 +1,24 @@
+from datetime import datetime
 from time import time
 from re import match
-from typing import Union, Tuple, Optional
+from types import FrameType
+from typing import Optional
 from fastapi import HTTPException
-from sqlalchemy.exc import OperationalError
+from starlette.datastructures import QueryParams, Headers
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from app.common.config import (
-    config,
     EXCEPT_PATH_LIST,
     EXCEPT_PATH_REGEX,
 )
 from app.database.crud import get_api_key_and_owner
-from app.errors import exceptions as ex
 from app.errors.exceptions import (
     APIException,
     Responses_400,
     Responses_401,
     InternalServerError,
+    exception_handler,
 )
 from app.models import UserToken
 from app.utils.date_utils import UTC
@@ -27,56 +28,36 @@ from app.utils.encoding_and_hashing import hash_params, token_decode
 
 
 async def access_control(request: Request, call_next: RequestResponseEndpoint):
-    headers, cookies = request.headers, request.cookies
-    url = request.url.path
-    query_params = str(request.query_params)
-    ip = request.client.host
-
+    await StateManager.init(request=request)
+    url: str = request.url.path
+    error: Optional[InternalServerError | HTTPException | APIException] = None
     response: Optional[Response] = None
-    error: Optional[Union[InternalServerError, APIException]] = None
-    request.state.req_time = UTC.now()
-    request.state.start = time()
-    request.state.inspect = None
-    request.state.user = None
-    request.state.service = None
-    request.state.ip = ip.split(",")[0] if "," in ip else ip
 
     try:
-        if await url_pattern_check(url, EXCEPT_PATH_REGEX) or url in EXCEPT_PATH_LIST:
+        if match(EXCEPT_PATH_REGEX, url) is not None or url in EXCEPT_PATH_LIST:
             response = await call_next(request)
             if url != "/":
                 await api_logger(request=request, response=response)
             return response
 
-        if url.startswith("/api/services") and not config.test_mode:
-            access_key, timestamp = await queries_params_to_key_and_timestamp(
-                query_params
-            )
-            if "secret" not in headers.keys():
-                raise Responses_401.invalid_api_header
-            request.state.user: UserToken = await validate_api_key(
-                api_access_key=access_key,
-                query_params=query_params,
-                hashed_secret=headers["secret"],
-                timestamp=timestamp,
+        elif url.startswith("/api/services"):
+            request.state.user: UserToken = await AccessControl.api_service(
+                query_params=request.query_params,
+                headers=request.headers,
             )
 
         else:
-            # Validate token by headers and cookies
-            if "authorization" in headers.keys():
-                token = headers.get("authorization")
-            elif "Authorization" in cookies.keys():
-                token = cookies.get("Authorization")
-            else:
-                raise Responses_401.not_authorized
-            request.state.user: UserToken = await validate_jwt(token)
+            request.state.user: UserToken = await AccessControl.non_api_service(
+                headers=request.headers,
+                cookies=request.cookies,
+            )
 
         response = await call_next(request)
 
     except Exception as exception:  # If any error occurs...
-        error: Union[
-            Exception, InternalServerError, APIException
-        ] = await exception_handler(error=exception)
+        error: HTTPException | InternalServerError | APIException = (
+            await exception_handler(error=exception)
+        )
         response = JSONResponse(
             status_code=error.status_code,
             content={
@@ -87,71 +68,90 @@ async def access_control(request: Request, call_next: RequestResponseEndpoint):
             },
         )
     finally:
-        await api_logger(
-            request=request,
-            response=response,
-            error=error,
-            cookies=cookies,
-            headers=dict(headers),
-            query_params=query_params,
-        ) if url.startswith("/api/services") or error is not None else ...
+        if url.startswith("/api/services") or error is not None:
+            await api_logger(
+                request=request,
+                response=response,
+                error=error,
+                cookies=request.cookies,
+                headers=dict(request.headers),
+                query_params=dict(request.query_params),
+            )
         return response
 
 
-async def validate_api_key(
-    api_access_key: str,
-    hashed_secret: str,
-    query_params: str,
-    timestamp: str,
-) -> UserToken:
-    matched_api_key, matched_user = await get_api_key_and_owner(
-        access_key=api_access_key
-    )
-    if not hashed_secret == hash_params(
-        query_params=query_params, secret_key=matched_api_key.secret_key
-    ):
-        raise Responses_401.invalid_api_header
-    now_timestamp: int = UTC.timestamp(hour_diff=9)
-    if not (now_timestamp - 60 < int(timestamp) < now_timestamp + 60):
-        raise Responses_401.invalid_timestamp
-    return UserToken(**row_to_dict(matched_user))
+class StateManager:
+    @staticmethod
+    async def init(request: Request):
+        request.state.req_time: datetime = UTC.now()
+        request.state.start: float = time()
+        request.state.ip: str = (
+            request.client.host.split(",")[0]
+            if "," in request.client.host
+            else request.client.host
+        )
+        request.state.inspect: Optional[FrameType] = None
+        request.state.user: Optional[UserToken] = None
 
 
-async def validate_jwt(
-    authorization: str,
-) -> UserToken:
-    token_info: dict = await token_decode(authorization=authorization)
-    return UserToken(**token_info)
+class AccessControl:
+    @staticmethod
+    async def api_service(
+        query_params: QueryParams,
+        headers: Headers,
+    ) -> UserToken:
+        query_params_dict: dict = dict(query_params)
+        for query_key in ("key", "timestamp"):
+            if query_key not in query_params_dict.keys():
+                raise Responses_400.invalid_api_query
+        for header_key in ("secret",):
+            if header_key not in headers.keys():
+                raise Responses_401.invalid_api_header
+        return await Validator.api_key(
+            query_params=query_params,
+            api_access_key=query_params_dict["key"],
+            timestamp=query_params_dict["timestamp"],
+            hashed_secret=headers["secret"],
+        )
 
-
-async def queries_params_to_key_and_timestamp(query_params: str) -> Tuple[str, str]:
-    try:
-        qs_dict = {
-            qs_split.split("=")[0]: qs_split.split("=")[1]
-            for qs_split in query_params.split("&")
-        }
-    except Exception:
-        raise Responses_400.invalid_api_query
-    if "key" not in qs_dict.keys() or "timestamp" not in qs_dict.keys():
-        raise Responses_400.invalid_api_query
-    return qs_dict["key"], qs_dict["timestamp"]
-
-
-async def url_pattern_check(path: str, pattern: str) -> bool:
-    return True if match(pattern, path) else False
-
-
-async def exception_handler(
-    error: Exception,
-) -> Union[InternalServerError, APIException]:
-    if isinstance(error, APIException):
-        if error.status_code == 500:
-            return InternalServerError(ex=error)
+    @staticmethod
+    async def non_api_service(
+        headers: Headers,
+        cookies: dict[str, str],
+    ) -> UserToken:
+        if "authorization" in headers.keys():
+            token = headers.get("authorization")
+        elif "Authorization" in cookies.keys():
+            token = cookies.get("Authorization")
         else:
-            return error
-    elif isinstance(error, OperationalError):
-        return InternalServerError(ex=error)
-    elif isinstance(error, HTTPException):
-        return error
-    else:
-        return InternalServerError()
+            raise Responses_401.not_authorized
+        return await Validator.jwt(token)
+
+
+class Validator:
+    @staticmethod
+    async def api_key(
+        api_access_key: str,
+        hashed_secret: str,
+        query_params: QueryParams,
+        timestamp: str,
+    ) -> UserToken:
+        matched_api_key, matched_user = await get_api_key_and_owner(
+            access_key=api_access_key
+        )
+        if not hashed_secret == hash_params(
+            query_params=str(query_params),
+            secret_key=matched_api_key.secret_key,
+        ):
+            raise Responses_401.invalid_api_header
+        now_timestamp: int = UTC.timestamp(hour_diff=9)
+        if not (now_timestamp - 60 < int(timestamp) < now_timestamp + 60):
+            raise Responses_401.invalid_timestamp
+        return UserToken(**row_to_dict(matched_user))
+
+    @staticmethod
+    async def jwt(
+        authorization: str,
+    ) -> UserToken:
+        token_info: dict = await token_decode(authorization=authorization)
+        return UserToken(**token_info)

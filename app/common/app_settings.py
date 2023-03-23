@@ -1,7 +1,6 @@
 from fastapi import FastAPI, Depends
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
-from typing import Union
 from app.common.config import (
     LocalConfig,
     ProdConfig,
@@ -18,7 +17,7 @@ from app.dependencies import (
 import logging
 
 
-def create_app(config: Union[LocalConfig, ProdConfig, TestConfig]) -> FastAPI:
+def create_app(config: LocalConfig | ProdConfig | TestConfig) -> FastAPI:
     # App & DB
     new_app = FastAPI()
     # Middlewares
@@ -48,9 +47,7 @@ def create_app(config: Union[LocalConfig, ProdConfig, TestConfig]) -> FastAPI:
         services.router,
         prefix="/api",
         tags=["Services"],
-        dependencies=[Depends(user_dependency)]
-        if config.test_mode
-        else [Depends(api_service_dependency)],
+        dependencies=[Depends(api_service_dependency)],
     )
     new_app.include_router(
         users.router,

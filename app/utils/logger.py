@@ -1,8 +1,9 @@
 import json
 import logging
-from typing import Union, Optional
+from typing import Optional
 from datetime import timedelta, datetime
 from time import time
+from fastapi import HTTPException
 from fastapi.logger import logger
 from starlette.requests import Request
 from starlette.responses import Response
@@ -23,8 +24,8 @@ async def hide_email(email: str) -> str:
 
 
 async def error_log_generator(
-    error: Union[InternalServerError, APIException], request: Request
-):
+    error: InternalServerError | HTTPException | APIException, request: Request
+) -> dict[str, any]:
     if request.state.inspect is not None:
         frame = request.state.inspect
         error_file = frame.f_code.co_filename
@@ -43,11 +44,13 @@ async def error_log_generator(
 
 async def api_logger(
     request: Request,
-    response: Response = None,
-    error: Optional[Union[InternalServerError, APIException]] = None,
+    response: Optional[Response] = None,
+    error: Optional[InternalServerError | HTTPException | APIException] = None,
     **kwargs,
-):
-    processed_time = time() - request.state.start
+) -> None:
+    processed_time = (
+        time() - request.state.start if hasattr(request.state, "start") else -1
+    )
     status_code = error.status_code if error else response.status_code
     user = request.state.user
     utc_now = datetime.utcnow()

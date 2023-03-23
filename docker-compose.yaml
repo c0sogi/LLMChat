@@ -59,12 +59,6 @@ services:
         ipv4_address: 172.16.0.11 # static IP
 
   api:
-    env_file:
-      - .env
-    build: .
-    depends_on:
-      - proxy
-      - db
     labels:
       - "traefik.http.routers.api.rule=HostRegexp(`${HOST_MAIN}`, `{subdomain:[a-z]+}.${HOST_MAIN}`, `${HOST_IP}`)"
       - "traefik.http.routers.api.entrypoints=websecure"
@@ -74,6 +68,12 @@ services:
       - "traefik.http.routers.api.tls.certresolver=myresolver"
       - "traefik.http.routers.api.tls.domains[0].main=${HOST_MAIN}"
       - "traefik.http.routers.api.tls.domains[0].sans=${HOST_SUB}"
+    env_file:
+      - .env
+    build: .
+    depends_on:
+      - proxy
+      - db
     volumes:
       - .:/app
     networks:

@@ -1,6 +1,6 @@
 import httpx
 import json
-from typing import Literal, Any
+from typing import Literal
 from fastapi import HTTPException
 
 
@@ -9,7 +9,7 @@ async def fetch_weather_data(
     lon: float,
     api_key: str,
     source: Literal["openweathermap", "weatherbit", "climacell"],
-) -> Any:
+) -> any:
     base_url = {
         "openweathermap": "https://api.openweathermap.org/data/2.5/weather",
         "weatherbit": "https://api.weatherbit.io/v2.0/current",

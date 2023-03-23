@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatGPT 채팅앱</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        #chat-container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100vh;
+            justify-content: space-between;
+        }
+
+        #chat-history {
+            width: 100%;
+            height: 80vh;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .message {
+            margin-bottom: 10px;
+        }
+
+        .user {
+            color: blue;
+            font-weight: bold;
+        }
+
+        .gpt {
+            color: green;
+            font-weight: bold;
+        }
+
+        #input-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 20vh;
+        }
+
+        #user-message {
+            width: 80%;
+            height: 40px;
+            padding: 5px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="chat-container">
+        <div id="chat-history"></div>
+        <div id="input-container">
+            <input id="user-message" type="text" placeholder="여기에다 채팅을 입력하세요!">
+        </div>
+    </div>
+
+    <script>
+        const chatHistory = document.getElementById('chat-history');
+        const userMessage = document.getElementById('user-message');
+        let gptMessage = '';
+        const ws = new WebSocket("{{ host_address }}");
+
+        ws.onopen = (event) => {
+            console.log('WebSocket is open now.');
+        };
+
+        ws.onmessage = (event) => {
+            const char = event.data;
+            switch (char) {
+                case "\n\n":
+                    gptResponseElement = document.createElement("div");
+                    gptResponseElement.classList.add("message");
+                    gptResponseElement.innerHTML = '<span class="gpt">ChatGPT:</span> ';
+                    chatHistory.appendChild(gptResponseElement);
+                    break;
+                case "\n\n\n":
+                    gptMessage = "";
+                    break;
+                default:
+                    gptMessage += char;
+                    if (gptResponseElement) {
+                        gptResponseElement.innerHTML = `<span class="gpt">ChatGPT:</span> ${gptMessage}`;
+                    }
+            }
+        };
+
+
+        ws.onclose = (event) => {
+            if (gptMessage) {
+                chatHistory.innerHTML += `<div class="message"><span class="gpt">ChatGPT:</span> ${gptMessage}</div>`;
+            }
+            console.log('WebSocket is closed now.');
+        };
+
+        ws.onerror = (event) => {
+            console.error('WebSocket error observed:', event);
+        };
+
+        userMessage.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                const message = userMessage.value.trim();
+
+                if (message) {
+                    ws.send(JSON.stringify({ user_message: message }));
+                    chatHistory.innerHTML += `<div class="message"><span class="user">{{ user_id }}:</span> ${message}</div>`;
+                    userMessage.value = '';
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>

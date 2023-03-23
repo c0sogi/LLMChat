@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
 from sqlalchemy import select, func, exists
 from app.models import AddApiKey
 from app.errors.exceptions import (
@@ -75,7 +75,7 @@ async def create_api_key(user_id: int, additional_key_info: AddApiKey) -> ApiKey
         return new_api_key
 
 
-async def get_api_keys(user_id: int) -> List[ApiKeys]:
+async def get_api_keys(user_id: int) -> list[ApiKeys]:
     return await ApiKeys.fetchall_filtered_by(user_id=user_id)
 
 
@@ -129,7 +129,7 @@ async def create_api_key_whitelist(ip_address: str, api_key_id: int) -> ApiWhite
         return new_whitelist
 
 
-async def get_api_key_whitelist(api_key_id: int) -> List[ApiKeys]:
+async def get_api_key_whitelist(api_key_id: int) -> list[ApiKeys]:
     return await ApiWhiteLists.fetchall_filtered_by(api_key_id=api_key_id)
 
 

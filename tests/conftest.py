@@ -35,7 +35,7 @@ async def client(app) -> AsyncGenerator:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def login_header(random_user):
+async def login_header(random_user: dict[str, str]) -> dict[str, str]:
     """
     테스트 전 사용자 미리 등록
     """

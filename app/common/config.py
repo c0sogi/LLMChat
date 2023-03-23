@@ -1,7 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from os import environ
-from typing import Union, Optional
 from pathlib import Path
 
 
@@ -25,6 +24,7 @@ MYSQL_TEST_DATABASE: str = environ.get("MYSQL_TEST_DATABASE")
 MYSQL_HOST: str = "db"
 DOMAIN: str = "walabi.store"
 JWT_SECRET: str = environ.get("JWT_SECRET")
+HOST_MAIN: str = environ.get("HOST_MAIN")
 AWS_ACCESS_KEY: str = environ.get("AWS_ACCESS_KEY")
 AWS_SECRET_KEY: str = environ.get("AWS_SECRET_KEY")
 AWS_AUTHORIZED_EMAIL: str = environ.get("AWS_AUTHORIZED_EMAIL")
@@ -34,8 +34,8 @@ SAMPLE_SECRET_KEY: str = environ.get("SAMPLE_SECRET_KEY")
 KAKAO_RESTAPI_TOKEN: str = environ.get("KAKAO_RESTAPI_TOKEN")
 WEATHERBIT_API_KEY: str = environ.get("WEATHERBIT_API_KEY")
 JWT_ALGORITHM: str = "HS256"
-EXCEPT_PATH_LIST: list = ["/", "/openapi.json"]
-EXCEPT_PATH_REGEX: str = "^(/docs|/redoc|/api/auth|/favicon.ico)"
+EXCEPT_PATH_LIST: list = ["/", "/openapi.json", "/test"]
+EXCEPT_PATH_REGEX: str = "^(/docs|/redoc|/api/auth|/favicon.ico|/chatgpt)"
 TOKEN_EXPIRE_HOURS: int = 2
 MAX_API_KEY: int = 3
 MAX_API_WHITELIST: int = 10
@@ -73,8 +73,8 @@ class Config(metaclass=SingletonMetaClass):
 
     @staticmethod
     def get(
-        option: Optional[str] = None,
-    ) -> Union[LocalConfig, ProdConfig, TestConfig]:
+        option: str | None = None,
+    ) -> LocalConfig | ProdConfig | TestConfig:
         config_key = option if option is not None else environ.get("API_ENV", "local")
         return {"prod": ProdConfig, "local": LocalConfig, "test": TestConfig}[
             config_key

@@ -13,7 +13,6 @@ from os.path import exists
 from hmac import HMAC, new
 from re import findall
 from base64 import urlsafe_b64encode, b64encode
-from typing import Any
 import json
 from app.errors.exceptions import Responses_401
 from app.database.schema import ApiKeys
@@ -60,7 +59,7 @@ class SecretConfigSetup:
             f.write(salt)
             f.write(encrypted_data)
 
-    def decrypt(self) -> Any:
+    def decrypt(self) -> any:
         # Load the encrypted data and salt from file
         with open(f"{self.json_file_name}.enc", "rb") as f:
             salt = f.read(16)
@@ -75,7 +74,7 @@ class SecretConfigSetup:
         decrypted_data = fernet.decrypt(encrypted_data)
         return json.loads(decrypted_data)
 
-    def initialize(self) -> Any:
+    def initialize(self) -> any:
         if not exists(f"{self.json_file_name}.enc"):
             self.encrypt()
 

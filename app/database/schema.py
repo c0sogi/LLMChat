@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional
 from sqlalchemy import (
     Column,
     func,
@@ -10,9 +10,9 @@ from sqlalchemy import (
     Select,
     select,
     update,
+    LargeBinary,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Any, Tuple
 from sqlalchemy.orm import (
     relationship,
     Mapped,
@@ -33,14 +33,14 @@ class Mixin:
         default=func.utc_timestamp(),
         onupdate=func.utc_timestamp(),
     )
-    ip_address: Mapped[Optional[str]] = mapped_column(String(length=40))
+    ip_address: Mapped[str | None] = mapped_column(String(length=40))
 
     def set_values_as(self, **kwargs):
         for key, value in kwargs.items():
             setattr(self, key, value)
 
     @property
-    def all_columns(self) -> List[Column]:
+    def all_columns(self) -> list[Column]:
         return [
             col
             for col in self.__table__.columns
@@ -53,8 +53,8 @@ class Mixin:
         *args: dict,
         autocommit: bool = False,
         refresh: bool = False,
-        session: Optional[AsyncSession] = None,
-    ) -> List[Base]:
+        session: AsyncSession | None = None,
+    ) -> list[Base]:
         return await db.add_all(
             cls, *args, autocommit=autocommit, refresh=refresh, session=session
         )
@@ -64,8 +64,8 @@ class Mixin:
         cls,
         autocommit: bool = False,
         refresh: bool = False,
-        session: Optional[AsyncSession] = None,
-        **kwargs: Any,
+        session: AsyncSession | None = None,
+        **kwargs: any,
     ) -> Base:
         return await db.add(
             cls, autocommit=autocommit, refresh=refresh, session=session, **kwargs
@@ -78,7 +78,7 @@ class Mixin:
         updated: dict,
         autocommit: bool = False,
         refresh: bool = False,
-        session: Optional[AsyncSession] = None,
+        session: AsyncSession | None = None,
     ) -> Base:
         stmt = update(cls).filter_by(**filter_by).values(**updated)
         return await db.run_in_session(db._execute)(
@@ -87,58 +87,58 @@ class Mixin:
 
     @classmethod
     async def fetchall_filtered_by(
-        cls, session: Optional[AsyncSession] = None, **kwargs: Any
-    ) -> List[Base]:
-        stmt: Select[Tuple] = select(cls).filter_by(**kwargs)
+        cls, session: AsyncSession | None = None, **kwargs: any
+    ) -> list[Base]:
+        stmt: Select[tuple] = select(cls).filter_by(**kwargs)
         return await db.scalars__fetchall(stmt=stmt, session=session)
 
     @classmethod
     async def one_filtered_by(
-        cls, session: Optional[AsyncSession] = None, **kwargs: Any
+        cls, session: AsyncSession | None = None, **kwargs: any
     ) -> Base:
-        stmt: Select[Tuple] = select(cls).filter_by(**kwargs)
+        stmt: Select[tuple] = select(cls).filter_by(**kwargs)
         return await db.scalars__one(stmt=stmt, session=session)
 
     @classmethod
     async def first_filtered_by(
-        cls, session: Optional[AsyncSession] = None, **kwargs: Any
+        cls, session: AsyncSession | None = None, **kwargs: any
     ) -> Base:
-        stmt: Select[Tuple] = select(cls).filter_by(**kwargs)
+        stmt: Select[tuple] = select(cls).filter_by(**kwargs)
         return await db.scalars__first(stmt=stmt, session=session)
 
     @classmethod
     async def one_or_none_filtered_by(
-        cls, session: Optional[AsyncSession] = None, **kwargs: Any
+        cls, session: AsyncSession | None = None, **kwargs: any
     ) -> Optional[Base]:
-        stmt: Select[Tuple] = select(cls).filter_by(**kwargs)
+        stmt: Select[tuple] = select(cls).filter_by(**kwargs)
         return await db.scalars__one_or_none(stmt=stmt, session=session)
 
     @classmethod
     async def fetchall_filtered(
-        cls, *criteria: bool, session: Optional[AsyncSession] = None
-    ) -> List[Base]:
-        stmt: Select[Tuple] = select(cls).filter(*criteria)
+        cls, *criteria: bool, session: AsyncSession | None = None
+    ) -> list[Base]:
+        stmt: Select[tuple] = select(cls).filter(*criteria)
         return await db.scalars__fetchall(stmt=stmt, session=session)
 
     @classmethod
     async def one_filtered(
-        cls, *criteria: bool, session: Optional[AsyncSession] = None
+        cls, *criteria: bool, session: AsyncSession | None = None
     ) -> Base:
-        stmt: Select[Tuple] = select(cls).filter(*criteria)
+        stmt: Select[tuple] = select(cls).filter(*criteria)
         return await db.scalars__one(stmt=stmt, session=session)
 
     @classmethod
     async def first_filtered(
-        cls, *criteria: bool, session: Optional[AsyncSession] = None
+        cls, *criteria: bool, session: AsyncSession | None = None
     ) -> Base:
-        stmt: Select[Tuple] = select(cls).filter(*criteria)
+        stmt: Select[tuple] = select(cls).filter(*criteria)
         return await db.scalars__first(stmt=stmt, session=session)
 
     @classmethod
     async def one_or_none_filtered(
-        cls, *criteria: bool, session: Optional[AsyncSession] = None
+        cls, *criteria: bool, session: AsyncSession | None = None
     ) -> Optional[Base]:
-        stmt: Select[Tuple] = select(cls).filter(*criteria)
+        stmt: Select[tuple] = select(cls).filter(*criteria)
         return await db.scalars__one_or_none(stmt=stmt, session=session)
 
 
@@ -148,10 +148,10 @@ class Users(Base, Mixin):
         Enum("active", "deleted", "blocked"), default="active"
     )
     email: Mapped[str] = mapped_column(String(length=20))
-    password: Mapped[Optional[str]] = mapped_column(String(length=72))
-    name: Mapped[Optional[str]] = mapped_column(String(length=20))
-    phone_number: Mapped[Optional[str]] = mapped_column(String(length=20))
-    profile_img: Mapped[Optional[str]] = mapped_column(String(length=100))
+    password: Mapped[str | None] = mapped_column(String(length=72))
+    name: Mapped[str | None] = mapped_column(String(length=20))
+    phone_number: Mapped[str | None] = mapped_column(String(length=20))
+    profile_img: Mapped[str | None] = mapped_column(String(length=100))
     marketing_agree: Mapped[bool] = mapped_column(Boolean, default=True)
     api_keys = relationship(
         "ApiKeys", back_populates="users", cascade="all, delete-orphan"
@@ -165,7 +165,7 @@ class ApiKeys(Base, Mixin):
     )
     access_key: Mapped[str] = mapped_column(String(length=64), index=True, unique=True)
     secret_key: Mapped[str] = mapped_column(String(length=64))
-    user_memo: Mapped[Optional[str]] = mapped_column(String(length=40))
+    user_memo: Mapped[str | None] = mapped_column(String(length=40))
     is_whitelisted: Mapped[bool] = mapped_column(default=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     users: Mapped["Users"] = relationship(back_populates="api_keys")
@@ -183,7 +183,35 @@ class ApiWhiteLists(Base, Mixin):
 class Debugging(Base):
     __tablename__ = "debugging"
     id: Mapped[int] = mapped_column(primary_key=True)
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class ClientLog(Base):
+    __tablename__ = "client_log"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    date: Mapped[datetime] = mapped_column(default=func.utc_timestamp())
+    visited_url: Mapped[str] = mapped_column(String(length=100))
 
 
 # ========================== Schema section ends ==========================
 db.init(config=config)
+
+
+# json_data = {
+#     "url": request.url.hostname + request.url.path,
+#     "method": str(request.method),
+#     "statusCode": status_code,
+#     "errorDetail": await error_log_generator(error=error, request=request)
+#     if error is not None
+#     else None,
+#     "client": {
+#         "client": request.state.ip,
+#         "user": user.id if user and user.id else None,
+#         "email": (await hide_email(email=user.email))
+#         if user and user.email
+#         else None,
+#     },
+#     "processedTime": str(round(processed_time * 1000, 5)) + "ms",
+#     "datetimeUTC": utc_now.strftime("%Y/%m/%d %H:%M:%S"),
+#     "datetimeKST": (utc_now + timedelta(hours=9)).strftime("%Y/%m/%d %H:%M:%S"),
+# } | kwargs

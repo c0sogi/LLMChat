@@ -1,12 +1,13 @@
 from collections.abc import Iterable
 from asyncio import current_task
-from typing import Optional, Any, List, Union, Callable, Type
+from typing import Callable, Optional, Type
 from urllib import parse
 from sqlalchemy import (
     Result,
     ScalarResult,
     Select,
     Delete,
+    TextClause,
     Update,
     create_engine,
     text,
@@ -45,8 +46,8 @@ class MySQL:
 
     @staticmethod
     def execute(
-        query: str, engine_or_conn: Union[Engine, Connection], scalar: bool = False
-    ) -> Optional[Any]:
+        query: str, engine_or_conn: Engine | Connection, scalar: bool = False
+    ) -> Optional[any]:
         if isinstance(engine_or_conn, Engine) and not isinstance(
             engine_or_conn, Connection
         ):
@@ -62,7 +63,7 @@ class MySQL:
             return cursor.scalar() if scalar else None
 
     @staticmethod
-    def clear_all_table_data(engine: Engine, except_tables: Optional[List[str]] = None):
+    def clear_all_table_data(engine: Engine, except_tables: list[str] | None = None):
         with engine.connect() as conn:
             conn.execute(text("SET FOREIGN_KEY_CHECKS = 0;"))
             for table in Base.metadata.sorted_tables:
@@ -71,9 +72,7 @@ class MySQL:
             conn.commit()
 
     @classmethod
-    def is_db_exists(
-        cls, database: str, engine_or_conn: Union[Engine, Connection]
-    ) -> bool:
+    def is_db_exists(cls, database: str, engine_or_conn: Engine | Connection) -> bool:
         return bool(
             cls.execute(
                 cls.query_set["is_db_exists"].format(database=database),
@@ -83,9 +82,7 @@ class MySQL:
         )
 
     @classmethod
-    def is_user_exists(
-        cls, user: str, engine_or_conn: Union[Engine, Connection]
-    ) -> bool:
+    def is_user_exists(cls, user: str, engine_or_conn: Engine | Connection) -> bool:
         return bool(
             cls.execute(
                 cls.query_set["is_user_exists"].format(user=user),
@@ -96,7 +93,7 @@ class MySQL:
 
     @classmethod
     def is_user_granted(
-        cls, user: str, database: str, engine_or_conn: Union[Engine, Connection]
+        cls, user: str, database: str, engine_or_conn: Engine | Connection
     ) -> bool:
         return bool(
             cls.execute(
@@ -107,16 +104,14 @@ class MySQL:
         )
 
     @classmethod
-    def drop_db(cls, database: str, engine_or_conn: Union[Engine, Connection]) -> None:
+    def drop_db(cls, database: str, engine_or_conn: Engine | Connection) -> None:
         return cls.execute(
             cls.query_set["drop_db"].format(database=database),
             engine_or_conn,
         )
 
     @classmethod
-    def create_db(
-        cls, database: str, engine_or_conn: Union[Engine, Connection]
-    ) -> None:
+    def create_db(cls, database: str, engine_or_conn: Engine | Connection) -> None:
         return cls.execute(
             cls.query_set["create_db"].format(database=database),
             engine_or_conn,
@@ -128,7 +123,7 @@ class MySQL:
         user: str,
         password: str,
         host: str,
-        engine_or_conn: Union[Engine, Connection],
+        engine_or_conn: Engine | Connection,
     ) -> None:
         return cls.execute(
             cls.query_set["create_user"].format(
@@ -144,7 +139,7 @@ class MySQL:
         on: str,
         to_user: str,
         user_host: str,
-        engine_or_conn: Union[Engine, Connection],
+        engine_or_conn: Engine | Connection,
     ) -> None:
         return cls.execute(
             cls.query_set["grant_user"].format(
@@ -162,7 +157,7 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         self.session: AsyncSession = None
         self.is_initiated = False
 
-    def init(self, config: Union[TestConfig, ProdConfig, LocalConfig]) -> None:
+    def init(self, config: TestConfig | ProdConfig | LocalConfig) -> None:
         if self.is_initiated:
             return
         self.is_test_mode = True if config.test_mode else False
@@ -224,13 +219,13 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         async with self.session() as transaction:
             yield transaction
 
-    def run_in_session(self, func: Callable[..., Any]) -> Callable[..., Any]:
+    def run_in_session(self, func: Callable[..., any]) -> Callable[..., any]:
         async def wrapper(
-            session: Optional[AsyncSession] = None,
+            session: AsyncSession | None = None,
             autocommit: bool = False,
             refresh: bool = False,
-            *args: Any,
-            **kwargs: Any,
+            *args: any,
+            **kwargs: any,
         ):
             if session is None:
                 async with self.session() as transaction:
@@ -258,7 +253,7 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         logging.critical(f"[{datetime.now()}] {msg}")
 
     async def _execute(  # To be decorated
-        self, session: AsyncSession, stmt: Union[text, Update, Delete, Select]
+        self, session: AsyncSession, stmt: TextClause | Update | Delete | Select
     ) -> Result:
         return await session.execute(stmt)
 
@@ -266,7 +261,7 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         self,
         session: AsyncSession,
         stmt: Select,
-    ) -> Any:
+    ) -> any:
         return await session.scalar(stmt)
 
     async def _scalars(  # To be decorated
@@ -302,20 +297,20 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
 
     async def execute(
         self,
-        stmt: Union[text, Update, Delete, Select],
+        stmt: TextClause | Update | Delete | Select,
         autocommit: bool = False,
         refresh: bool = False,
-        session: Optional[AsyncSession] = None,
+        session: AsyncSession | None = None,
     ) -> Result:
         return await self.run_in_session(self._execute)(
             session, autocommit=autocommit, refresh=refresh, stmt=stmt
         )
 
-    async def scalar(self, stmt: Select, session: Optional[AsyncSession] = None) -> Any:
+    async def scalar(self, stmt: Select, session: AsyncSession | None = None) -> any:
         return await self.run_in_session(self._scalar)(session, stmt=stmt)
 
     async def scalars(
-        self, stmt: Select, session: Optional[AsyncSession] = None
+        self, stmt: Select, session: AsyncSession | None = None
     ) -> ScalarResult:
         return await self.run_in_session(self._scalars)(session, stmt=stmt)
 
@@ -324,8 +319,8 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         schema: Type[Base],
         autocommit: bool = False,
         refresh: bool = False,
-        session: Optional[AsyncSession] = None,
-        **kwargs: Any,
+        session: AsyncSession | None = None,
+        **kwargs: any,
     ) -> Base:
         instance = schema(**kwargs)
         return await self.run_in_session(self._add)(
@@ -338,8 +333,8 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         *args: dict,
         autocommit: bool = False,
         refresh: bool = False,
-        session: Optional[AsyncSession] = None,
-    ) -> List[Base]:
+        session: AsyncSession | None = None,
+    ) -> list[Base]:
         instances = [schema(**arg) for arg in args]
         return await self.run_in_session(self._add_all)(
             session, autocommit=autocommit, refresh=refresh, instances=instances
@@ -349,29 +344,29 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         self,
         instance: Base,
         autocommit: bool = False,
-        session: Optional[AsyncSession] = None,
+        session: AsyncSession | None = None,
     ) -> Base:
         return await self.run_in_session(self._delete)(
             session, autocommit=autocommit, instance=instance
         )
 
     async def scalars__fetchall(
-        self, stmt: Select, session: Optional[AsyncSession] = None
-    ) -> List[Base]:
+        self, stmt: Select, session: AsyncSession | None = None
+    ) -> list[Base]:
         return (await self.run_in_session(self._scalars)(session, stmt=stmt)).fetchall()
 
     async def scalars__one(
-        self, stmt: Select, session: Optional[AsyncSession] = None
+        self, stmt: Select, session: AsyncSession | None = None
     ) -> Base:
         return (await self.run_in_session(self._scalars)(session, stmt=stmt)).one()
 
     async def scalars__first(
-        self, stmt: Select, session: Optional[AsyncSession] = None
+        self, stmt: Select, session: AsyncSession | None = None
     ) -> Base:
         return (await self.run_in_session(self._scalars)(session, stmt=stmt)).first()
 
     async def scalars__one_or_none(
-        self, stmt: Select, session: Optional[AsyncSession] = None
+        self, stmt: Select, session: AsyncSession | None = None
     ) -> Optional[Base]:
         return (
             await self.run_in_session(self._scalars)(session, stmt=stmt)

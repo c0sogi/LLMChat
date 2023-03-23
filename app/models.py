@@ -1,11 +1,10 @@
 from datetime import datetime
 from enum import Enum
-from typing import List
 
 from pydantic import Field
 from pydantic.main import BaseModel
 
-# from pydantic.networks import EmailStr, IPvAnyAddress
+# from pydantic.networks import EmailStr, IPvanyAddress
 
 
 class UserRegister(BaseModel):
@@ -30,7 +29,7 @@ class EmailRecipients(BaseModel):
 
 
 class SendEmail(BaseModel):
-    email_to: List[EmailRecipients] = None
+    email_to: list[EmailRecipients] = None
 
 
 class KakaoMsgBody(BaseModel):
@@ -91,3 +90,7 @@ class GetApiWhiteLists(CreateApiWhiteLists):
 
     class Config:
         orm_mode = True
+
+
+class UserChatGptMessage(BaseModel):
+    user_message: str
