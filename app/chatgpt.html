@@ -4,121 +4,606 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>ChatGPT 채팅앱</title>
     <style>
+        html,
         body {
+            overflow: hidden;
+            display: flex;
+            width: 100vw;
+            height: 100%;
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
+            overflow: hidden;
         }
 
         #chat-container {
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-            height: 100vh;
+            width: 100vw;
             justify-content: space-between;
+            align-items: center;
+        }
+
+        #chat-history-container {
+            display: flex;
+            flex: 7;
+            height: 65%;
+            width: 100vw;
+            justify-content: flex-start;
         }
 
         #chat-history {
-            width: 100%;
-            height: 80vh;
-            overflow-y: auto;
+            display: flex;
+            height: 100%;
+            width: 100vw;
+            flex-direction: column;
+            overflow-y: scroll;
             padding: 10px;
-        }
-
-        .message {
-            margin-bottom: 10px;
-        }
-
-        .user {
-            color: blue;
-            font-weight: bold;
-        }
-
-        .gpt {
-            color: green;
-            font-weight: bold;
         }
 
         #input-container {
             display: flex;
-            justify-content: center;
+            flex-direction: column;
+            flex: 3;
+            height: 30vh;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            align-items: self-end;
+            z-index: 10;
             align-items: center;
+        }
+
+        #button-container {
+            display: flex;
+            flex: 1;
             width: 100%;
-            height: 20vh;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
         }
 
         #user-message {
-            width: 80%;
-            height: 40px;
-            padding: 5px;
+            display: flexbox;
+            position: relative;
+            width: 90%;
+            flex: 8;
+            bottom: 0;
+            padding: 10px;
             font-size: 14px;
+            margin-top: 14px;
+        }
+
+        #clear-button {
+            display: flexbox;
+            flex: 2;
+            position: relative;
+            background-color: red;
+            color: white;
+            font-weight: bold;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            height: 50px;
+            line-height: 30px;
+            margin: 1%;
+        }
+
+        #clear-button:hover {
+            background-color: #ff4d4d;
+        }
+
+        #retry-button {
+            display: flexbox;
+            flex: 2;
+            position: relative;
+            background-color: blue;
+            color: white;
+            font-weight: bold;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            height: 50px;
+            line-height: 30px;
+            margin: 1%;
+        }
+
+        #retry-button:hover {
+            background-color: #4d94ff;
+        }
+
+        #send-button {
+            display: flexbox;
+            flex: 2;
+            position: relative;
+            background-color: green;
+            color: white;
+            font-weight: bold;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            height: 50px;
+            line-height: 30px;
+            margin: 1%;
+        }
+
+        #send-button:hover {
+            background-color: #4dff88;
+        }
+
+        .user-message-container {
+            display: flex;
+            justify-content: flex-end;
+            width: 100%;
+        }
+
+        .gpt-message-container {
+            display: flex;
+            justify-content: flex-start;
+            width: 100%;
+        }
+
+        .message {
+            max-width: 90%;
+            display: inline-block;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            word-wrap: break-word;
+        }
+
+        .message.user {
+            display: inline-block;
+            align-items: flex-end;
+            align-self: flex-end;
+            justify-content: flex-start;
+        }
+
+        .user::before {
+            content: "";
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-top: 10px solid #DCF8C6;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            top: 0;
+            right: -10px;
+        }
+
+        .user {
+            background-color: #DCF8C6;
+            color: #000;
+            position: relative;
+            margin-right: 10px;
+            border-bottom-right-radius: 0;
+            display: inline-block;
+        }
+
+        .gpt::before {
+            content: "";
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-bottom: 10px solid #E6ECEF;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            bottom: 0;
+            left: -10px;
+        }
+
+        .gpt {
+            align-self: flex-start;
+            background-color: #E6ECEF;
+            color: #000;
+            position: relative;
+            margin-left: 0px;
+            border-bottom-left-radius: 0;
+        }
+
+        .error::before {
+            content: "";
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-bottom: 10px solid #FF0000;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            bottom: 0;
+            left: -10px;
+        }
+
+        .error {
+            align-self: flex-start;
+            background-color: rgba(255, 0, 0, 0.5);
+            color: #FFF;
+            position: relative;
+            margin-left: 0px;
+            border-bottom-left-radius: 0;
+            opacity: 1;
+        }
+
+        .container {
+            display: flexbox;
+            width: 95%;
+            max-width: 800px;
+            margin: 20px 10px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .response {
+            display: inline;
+            white-space: pre-wrap;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background-color: #f5f5f5;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        #copyButton {
+            background-color: #4CAF50;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .body {
+            background-color: black;
+            color: white;
+            padding: 20px;
         }
     </style>
 </head>
 
 <body>
     <div id="chat-container">
-        <div id="chat-history"></div>
+        <div id="chat-history-container">
+            <div id="chat-history"></div>
+        </div>
         <div id="input-container">
-            <input id="user-message" type="text" placeholder="여기에다 채팅을 입력하세요!">
+            <textarea id="user-message" placeholder="여기에 채팅을 입력하세요!"></textarea>
+            <div id="button-container">
+                <button id="clear-button">채팅창 정리</button>
+                <button id="retry-button">재시도</button>
+                <button id="send-button">전송</button>
+            </div>
         </div>
     </div>
 
     <script>
+        class PromptCallbackHandler {
+            constructor() {
+                this.isPending = false;
+                this.isInPrompt = false;
+                this.checkFlag = null;
+            }
+            promise() {
+                return new Promise((resolve, reject) => {
+                    console.log("isPending:" + this.isPending);
+                    if (this.isPending) {
+                        reject(new Error('이미 콜백 대기중입니다.'));
+                        return;
+                    }
+                    this.isPending = true;
+                    this.checkFlag = setInterval(() => {
+                        if (!this.isInPrompt) {
+                            console.log('프롬프트 대기 완료');
+                            clearInterval(this.checkFlag);
+                            resolve();
+                            this.isPending = false;
+                        } else { console.log('프롬프트 대기중...'); }
+                    }, 100);
+                });
+            }
+            setInPrompt(flag) {
+                this.isInPrompt = flag;
+            }
+            isPending() {
+                return this.isPending;
+            }
+        }
+
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         const chatHistory = document.getElementById('chat-history');
         const userMessage = document.getElementById('user-message');
-        let gptMessage = '';
-        const ws = new WebSocket("{{ host_address }}");
+        const clearButton = document.getElementById('clear-button');
+        const retryButton = document.getElementById('retry-button');
+        const sendButton = document.getElementById('send-button');
+        const startMessageWith = "\n\n";
+        const endMessageWith = "\n\n\n";
+        const reconnectInterval = 3000;
+        const autoScrollThreshold = 30;
+        let autoScroll = true;
+        let ignoreScrollEvent = false;
+        let isConnected = false;
+        let isInCodeBlock = false;
+        let isCodeBlockTitled = false;
+        let currentSpeechBubble = null;
+        let currentMessage = null;
+        let plainTextElement, blockElement, blockHeaderElement, blockBodyElement, blockTextElement;
+        let ws;
+        let promptCallbackHandler = new PromptCallbackHandler();
 
-        ws.onopen = (event) => {
-            console.log('WebSocket is open now.');
-        };
+        function resizePage() {
+            document.body.style.height = window.innerHeight + 'px';
+            document.documentElement.style.overflow = 'hidden'; // 스크롤 방지
+        }
+        function capitalizeFirstLetter(string) {
+            return string.charAt(0).toUpperCase() + string.slice(1);
+        }
+        function createStyledDivAndP() {
+            const container = document.createElement("div");
+            container.classList.add("container");
 
-        ws.onmessage = (event) => {
-            const char = event.data;
-            switch (char) {
-                case "\n\n":
-                    gptResponseElement = document.createElement("div");
-                    gptResponseElement.classList.add("message");
-                    gptResponseElement.innerHTML = '<span class="gpt">ChatGPT:</span> ';
-                    chatHistory.appendChild(gptResponseElement);
-                    break;
-                case "\n\n\n":
-                    gptMessage = "";
-                    break;
-                default:
-                    gptMessage += char;
-                    if (gptResponseElement) {
-                        gptResponseElement.innerHTML = `<span class="gpt">ChatGPT:</span> ${gptMessage}`;
-                    }
-            }
-        };
+            const header = document.createElement("div");
+            header.classList.add("header");
 
+            const title = document.createElement("h1");
+            header.appendChild(title);
 
-        ws.onclose = (event) => {
-            if (gptMessage) {
-                chatHistory.innerHTML += `<div class="message"><span class="gpt">ChatGPT:</span> ${gptMessage}</div>`;
-            }
-            console.log('WebSocket is closed now.');
-        };
+            const copyButton = document.createElement("button");
+            copyButton.id = "copyButton";
+            copyButton.textContent = "복사하기";
+            header.appendChild(copyButton);
 
-        ws.onerror = (event) => {
-            console.error('WebSocket error observed:', event);
-        };
+            const body = document.createElement("div");
+            body.classList.add("body");
 
-        userMessage.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                const message = userMessage.value.trim();
+            const bodyContent = document.createElement("p");
+            bodyContent.classList.add("response");
+            body.appendChild(bodyContent);
 
-                if (message) {
-                    ws.send(JSON.stringify({ user_message: message }));
-                    chatHistory.innerHTML += `<div class="message"><span class="user">{{ user_id }}:</span> ${message}</div>`;
-                    userMessage.value = '';
+            container.appendChild(header);
+            container.appendChild(body);
+
+            copyButton.addEventListener("click", function () {
+                const range = document.createRange();
+                range.selectNode(body);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+
+                try {
+                    document.execCommand("copy");
+                    this.textContent = "복사 완료!";
+                    setTimeout(() => {
+                        this.textContent = "복사하기";
+                    }, 2000);
+                } catch (err) {
+                    console.error("Unable to copy the text");
                 }
+
+                window.getSelection().removeAllRanges();
+            });
+            blockElement = container;
+            blockHeaderElement = header;
+            blockBodyElement = body;
+            blockTextElement = bodyContent;
+            isCodeBlockTitled = false;
+        }
+        function scrollToBottom() {
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+        function addSpeechBubble(role) {
+            let messageContainer = document.createElement("div");
+            messageContainer.classList.add(`${role}-message-container`);
+            currentSpeechBubble = document.createElement("div");
+            currentSpeechBubble.classList.add("message", role);
+            messageContainer.appendChild(currentSpeechBubble);
+            chatHistory.appendChild(messageContainer);
+        }
+        function addErrorBubbleAndResponse(message) {
+            const errorBubble = document.createElement("div");
+            errorBubble.classList.add("message", "error");
+            errorBubble.innerHTML = `<span class="response">${message}</span>`;
+            chatHistory.appendChild(errorBubble);
+        }
+        function addPlainMessage() {
+            plainTextElement = document.createElement("p");
+            plainTextElement.classList.add("response");
+            currentSpeechBubble.appendChild(plainTextElement);
+            currentMessage = plainTextElement;
+        }
+        function addBlockMessage() {
+            createStyledDivAndP();
+            currentSpeechBubble.appendChild(blockElement);
+            currentMessage = blockTextElement;
+        }
+        function addSpanOrBlock() {
+            isInCodeBlock ? addPlainMessage() : addBlockMessage();
+            isInCodeBlock = !isInCodeBlock;
+        }
+        function updateSpeechBubble(message, role) {
+            if (currentSpeechBubble === null) {
+                addSpeechBubble(role);
+            }
+            if (currentMessage === null) {
+                addPlainMessage();
+            }
+            for (let i = 0; i < message.length; i++) {
+                if (message[i] === "\n") {
+                    currentMessage = document.createElement("p");
+                    currentMessage.classList.add("response");
+                    if (isInCodeBlock) {
+                        blockBodyElement.appendChild(document.createElement("br"));
+                        blockBodyElement.appendChild(currentMessage);
+                    }
+                    else {
+                        currentSpeechBubble.appendChild(document.createElement("br"));
+                        currentSpeechBubble.appendChild(currentMessage);
+                    }
+                    continue;
+                }
+                if (isInCodeBlock && !isCodeBlockTitled) {
+                    let allBlockParagraphs = blockBodyElement.querySelectorAll('p');
+                    if (allBlockParagraphs.length >= 2) {
+                        blockHeaderElement.querySelector("h1").textContent = capitalizeFirstLetter(allBlockParagraphs[0].textContent);
+                        allBlockParagraphs[0].remove();
+                        blockBodyElement.querySelector("br")?.remove();
+                        isCodeBlockTitled = true;
+                    }
+                }
+                currentMessage.textContent += message[i];
+                if (currentMessage.textContent.includes("```")) {
+                    const splittedText = currentMessage.textContent.split("```");
+                    currentMessage.textContent = splittedText[0];
+                    addSpanOrBlock();
+                    currentMessage.textContent = splittedText[1];
+                }
+            }
+        }
+
+        function startSpeech(role) {
+            isInCodeBlock = false;
+            promptCallbackHandler.setInPrompt(true);
+            addSpeechBubble(role);
+        }
+        function endSpeech() {
+            isInCodeBlock = false;
+            promptCallbackHandler.setInPrompt(false);
+            currentSpeechBubble = null;
+            currentMessage = null;
+        }
+
+        async function onClickSendButton() {
+            console.log("onClickSendButton");
+            promptCallbackHandler.promise().then(() => {
+                const msg = userMessage.value.trim();
+                if (msg === "") {
+                    return;
+                }
+                userMessage.value = "";
+                ws.send(JSON.stringify({ user_message: msg }));
+                try {
+                    console.log("user message2: " + msg);
+                    startSpeech("user");
+                    updateSpeechBubble(msg, "user");
+                } catch (error) {
+                    addErrorBubbleAndResponse("유저 메시지를 보내는데 오류가 발생했습니다.")
+                } finally {
+                    endSpeech();
+                    scrollToBottom();
+                }
+            }).catch((error) => {
+                addErrorBubbleAndResponse(error.message);
+            });
+        }
+        async function onClickClearButton() {
+            console.log("onClickClearButton");
+            promptCallbackHandler.promise().then((message) => {
+                chatHistory.innerHTML = "";
+                ws.send(JSON.stringify({ user_message: "/clear" }));
+            }).catch((error) => {
+                addErrorBubbleAndResponse(error.message);
+            });
+        }
+        async function onClickRetryButton() {
+            console.log("onClickRetryButton");
+            promptCallbackHandler.promise().then(async () => {
+                // remove all messages until user message is found
+                while (!(chatHistory.lastChild?.classList.contains("user-message-container") ?? true)) {
+                    chatHistory.removeChild(chatHistory.lastChild);
+                }
+                // remove user message if found
+                if (chatHistory.lastChild?.classList.contains("user-message-container")) {
+                    let lastUserMessageSent = chatHistory.lastChild.textContent
+                    if (!lastUserMessageSent.startsWith("/")) {
+                        ws.send(JSON.stringify({ user_message: "/retry" }));
+                    }
+                    ws.send(JSON.stringify({ user_message: lastUserMessageSent }));
+
+                }
+            }).catch((error) => {
+                addErrorBubbleAndResponse(error.message);
+            });
+        }
+
+        function connectWebSocket() {
+            ws = new WebSocket("{{ host_address }}");
+            ws.onopen = () => {
+                console.log('WebSocket is open now.');
+                startSpeech("gpt");
+                addPlainMessage();
+                currentMessage.textContent += "안녕하세요! 무엇을 도와드릴까요?";
+                endSpeech();
+                scrollToBottom();
+                isConnected = true;
+            };
+
+            ws.onmessage = (event) => {
+                const eventData = event.data;
+                ignoreScrollEvent = true;
+                switch (eventData) {
+                    case startMessageWith:
+                        startSpeech("gpt");
+                        break;
+                    case endMessageWith:
+                        endSpeech();
+                        break;
+                    default:
+                        updateSpeechBubble(eventData, "gpt");
+                }
+                ignoreScrollEvent = false;
+                if (autoScroll) {
+                    scrollToBottom();
+                }
+            };
+
+            ws.onclose = () => {
+                console.log("WebSocket 연결 종료");
+                isConnected = false;
+                addErrorBubbleAndResponse("서버로부터 연결이 끊겨 재접속을 시도합니다.");
+                scrollToBottom();
+                setTimeout(() => {
+                    console.log("WebSocket 재연결 시도...");
+                    connectWebSocket();
+                }, reconnectInterval);
+            };
+
+            ws.onerror = (error) => {
+                console.log("WebSocket 연결 오류");
+                addErrorBubbleAndResponse("오류가 발생했습니다.");
+                scrollToBottom();
+            };
+        }
+        connectWebSocket();
+        window.addEventListener('load', resizePage);
+        window.addEventListener('resize', resizePage);
+        window.addEventListener('blur', function () {
+            document.documentElement.style.overflow = 'auto';
+        });
+        chatHistory.addEventListener("scroll", () => {
+            if (!ignoreScrollEvent) {
+                autoScroll = chatHistory.scrollHeight - chatHistory.scrollTop - chatHistory.clientHeight <= autoScrollThreshold;
+            }
+        });
+        clearButton.addEventListener('click', onClickClearButton);
+        retryButton.addEventListener('click', onClickRetryButton);
+        sendButton.addEventListener('click', onClickSendButton);
+        userMessage.addEventListener('keydown', async () => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                if (isMobile) {
+                    userMessage.blur();
+                }
+                await onClickSendButton();
             }
         });
     </script>

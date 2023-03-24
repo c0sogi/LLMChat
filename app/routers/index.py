@@ -1,15 +1,21 @@
-import logging
+from uuid import uuid4
 from inspect import currentframe as frame
 from fastapi import APIRouter, WebSocket
 from fastapi.responses import (
     FileResponse,
     RedirectResponse,
-    StreamingResponse,
 )
 from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
+from app.common.config import OPENAI_API_KEY
 from app.errors.exceptions import APIException, Responses_500
-from app.utils.stream_manager import AsyncStream, establish_websocket_connection
+from app.utils.logger import logger
+from app.utils.stream_manager import (
+    ChatGptStreamManager,
+    UserGptContext,
+    UserGptProfile,
+    GPT_MODELS,
+)
 
 router = APIRouter(tags=["index"])
 templates = Jinja2Templates(directory="app")
@@ -27,11 +33,12 @@ async def favicon():
 
 @router.get("/chatgpt/{user_id}/{api_key}")
 async def chatgpt(request: Request, user_id: str, api_key: str):
+    random_uuid: str = str(uuid4())
     if request.url.scheme == "http":
-        host_address: str = f"ws://{request.url.hostname}:{request.url.port}/ws/chatgpt/{user_id}/{api_key}"
+        host_address: str = f"ws://{request.url.hostname}:{request.url.port}/ws/chatgpt/{random_uuid}/{api_key}"
     elif request.url.scheme == "https":
         host_address: str = (
-            f"wss://{request.url.hostname}/ws/chatgpt/{user_id}/{api_key}"
+            f"wss://{request.url.hostname}/ws/chatgpt/{random_uuid}/{api_key}"
         )
     else:
         raise Responses_500.websocket_error
@@ -45,38 +52,55 @@ async def chatgpt(request: Request, user_id: str, api_key: str):
     )
 
 
-@router.websocket("/ws/chatgpt/{user_id}/{api_key}")
-async def ws_chatgpt(websocket: WebSocket, user_id: str, api_key: str):
-    await websocket.accept()
-    user_context: dict[
-        str, list[dict[str, str]] | dict[str, str]
-    ] | None = AsyncStream.user_contexts.get(user_id)
-    if user_context is None:
-        user_context: dict[str, list[dict[str, str]] | dict[str, str]] = {
-            "profile": {
-                "user_id": user_id,
-                "user_role": "user",
-                "gpt_role": "assistant",
-            },
-            "message_histories": [],
-        }
-        AsyncStream.user_contexts[user_id] = user_context
-    await establish_websocket_connection(
-        websocket=websocket,
-        user_id=user_id,
-        api_key=api_key,
+@router.websocket("/ws/chatgpt/{random_uuid}/{api_key}")
+async def ws_chatgpt(websocket: WebSocket, random_uuid: str, api_key: str):
+    user_gpt_context: UserGptContext | None = (
+        ChatGptStreamManager.user_gpt_contexts.get(random_uuid)
     )
+    try:
+        await websocket.accept()  # accept websocket
+        if user_gpt_context is None:
+            user_gpt_context: UserGptContext = UserGptContext(
+                gpt_model=GPT_MODELS.gpt_3_5_turbo,
+                user_gpt_profile=UserGptProfile(user_id=random_uuid),
+            )
+            ChatGptStreamManager.user_gpt_contexts[random_uuid] = user_gpt_context
+        if user_gpt_context.is_user_in_chat:
+            ChatGptStreamManager.send_whole_message(
+                websocket=websocket, message="이미 같은 아이디로 채팅방에 입장되어 있습니다."
+            )
+            return
+        await ChatGptStreamManager.send_websocket(
+            websocket=websocket,
+            user_gpt_context=user_gpt_context,
+            api_key=api_key,
+        )
+    except Exception as exception:
+        logger.error(exception)
 
 
 @router.get("/test", status_code=200)
 async def test(request: Request):
     try:
-        result: StreamingResponse = StreamingResponse(
-            content=AsyncStream.hello_world(),
-            headers={"Content-Type": "text/event-stream; charset=UTF-8"},
+        user_id: str = "test_user"
+        if request.url.scheme == "http":
+            host_address: str = f"ws://{request.url.hostname}:{request.url.port}/ws/chatgpt/{user_id}/{OPENAI_API_KEY}"
+        elif request.url.scheme == "https":
+            host_address: str = (
+                f"wss://{request.url.hostname}/ws/chatgpt/{user_id}/{OPENAI_API_KEY}"
+            )
+        else:
+            raise Responses_500.websocket_error
+        result = templates.TemplateResponse(
+            name="chatgpt.html",
+            context={
+                "request": request,
+                "host_address": host_address,
+                "user_id": user_id,
+            },
         )
     except Exception as exception:
-        logging.error(exception)
+        logger.error(exception)
         request.state.inspect = frame()
         raise APIException(ex=exception)
     else:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
+from re import compile, Pattern
 from os import environ
 from pathlib import Path
 
@@ -30,11 +31,12 @@ AWS_AUTHORIZED_EMAIL: str = environ.get("AWS_AUTHORIZED_EMAIL")
 SAMPLE_JWT_TOKEN: str = environ.get("SAMPLE_JWT_TOKEN")
 SAMPLE_ACCESS_KEY: str = environ.get("SAMPLE_ACCESS_KEY")
 SAMPLE_SECRET_KEY: str = environ.get("SAMPLE_SECRET_KEY")
+OPENAI_API_KEY: str = environ.get("OPENAI_API_KEY")
 KAKAO_RESTAPI_TOKEN: str = environ.get("KAKAO_RESTAPI_TOKEN")
 WEATHERBIT_API_KEY: str = environ.get("WEATHERBIT_API_KEY")
 JWT_ALGORITHM: str = "HS256"
-EXCEPT_PATH_LIST: list = ["/", "/openapi.json", "/test"]
-EXCEPT_PATH_REGEX: str = "^(/docs|/redoc|/api/auth|/favicon.ico|/chatgpt)"
+EXCEPT_PATH_LIST: tuple = ("/", "/openapi.json", "/test")
+EXCEPT_PATH_REGEX: Pattern = compile("^(/docs|/redoc|/api/auth|/favicon.ico|/chatgpt)")
 TOKEN_EXPIRE_HOURS: int = 2
 MAX_API_KEY: int = 3
 MAX_API_WHITELIST: int = 10
@@ -57,6 +59,9 @@ BASE_DIR: str = Path(__file__).parents[2]
 
 @dataclass(frozen=True)
 class Config(metaclass=SingletonMetaClass):
+    app_title: str = f"{HOST_MAIN} API service"
+    app_description: str = ""
+    app_version: str = "0.9.0"
     db_pool_recycle: int = 900
     db_echo: bool = True
     debug: bool = False

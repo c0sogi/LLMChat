@@ -37,10 +37,10 @@ class APIException(Exception):
         lazy_format: Optional[dict[str, str]] = None,
         ex: Optional[Exception] = None,
     ) -> "APIException":
-        if lazy_format is not None:
+        if lazy_format is not None:  # lazy format for msg and detail
             self.msg = self.msg.format(**lazy_format)
             self.detail = self.detail.format(**lazy_format)
-        if ex is not None:
+        if ex is not None:  # set exception if exists
             self.ex = ex
         return self
 
@@ -124,6 +124,12 @@ class Responses_400:
         internal_code=15,
         msg="카카오톡 전송에 실패했습니다.",
         detail="Failed to send KAKAO MSG.",
+    )
+    websocket_in_use: APIException = APIException(
+        status_code=400,
+        internal_code=16,
+        msg="이미 사용중인 웹소켓입니다.",
+        detail="Websocket is already in use.",
     )
 
 

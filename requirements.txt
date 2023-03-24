@@ -38,6 +38,7 @@ SQLAlchemy
 sqlalchemy-utils
 starlette
 toml
+transformers
 urllib3
 uvicorn
 websockets

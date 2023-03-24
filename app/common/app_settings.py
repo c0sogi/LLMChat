@@ -19,7 +19,11 @@ import logging
 
 def create_app(config: LocalConfig | ProdConfig | TestConfig) -> FastAPI:
     # App & DB
-    new_app = FastAPI()
+    new_app = FastAPI(
+        title=config.app_title,
+        description=config.app_description,
+        version=config.app_version,
+    )
     # Middlewares
     """
     Access control middleware: Authorized request only
