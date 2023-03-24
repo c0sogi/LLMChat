@@ -48,10 +48,19 @@ async def chatgpt(request: Request, user_id: str, api_key: str):
 @router.websocket("/ws/chatgpt/{user_id}/{api_key}")
 async def ws_chatgpt(websocket: WebSocket, user_id: str, api_key: str):
     await websocket.accept()
-    context: list[dict[str, str]] | None = AsyncStream.context.get(user_id)
-    if context is None:
-        context: list[dict[str, str]] = []
-        AsyncStream.context[user_id] = context
+    user_context: dict[
+        str, list[dict[str, str]] | dict[str, str]
+    ] | None = AsyncStream.user_contexts.get(user_id)
+    if user_context is None:
+        user_context: dict[str, list[dict[str, str]] | dict[str, str]] = {
+            "profile": {
+                "user_id": user_id,
+                "user_role": "user",
+                "gpt_role": "assistant",
+            },
+            "message_histories": [],
+        }
+        AsyncStream.user_contexts[user_id] = user_context
     await establish_websocket_connection(
         websocket=websocket,
         user_id=user_id,

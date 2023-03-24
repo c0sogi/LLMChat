@@ -22,9 +22,8 @@ MYSQL_PASSWORD: str = environ.get("MYSQL_PASSWORD")
 MYSQL_DATABASE: str = environ.get("MYSQL_DATABASE")
 MYSQL_TEST_DATABASE: str = environ.get("MYSQL_TEST_DATABASE")
 MYSQL_HOST: str = "db"
-DOMAIN: str = "walabi.store"
-JWT_SECRET: str = environ.get("JWT_SECRET")
 HOST_MAIN: str = environ.get("HOST_MAIN")
+JWT_SECRET: str = environ.get("JWT_SECRET")
 AWS_ACCESS_KEY: str = environ.get("AWS_ACCESS_KEY")
 AWS_SECRET_KEY: str = environ.get("AWS_SECRET_KEY")
 AWS_AUTHORIZED_EMAIL: str = environ.get("AWS_AUTHORIZED_EMAIL")
@@ -91,15 +90,15 @@ class LocalConfig(Config, metaclass=SingletonMetaClass):
 class ProdConfig(Config, metaclass=SingletonMetaClass):
     trusted_hosts: list = field(
         default_factory=lambda: [
-            f"*.{DOMAIN}",
-            DOMAIN,
+            f"*.{HOST_MAIN}",
+            HOST_MAIN,
             "localhost",
         ]
     )
     allowed_sites: list = field(
         default_factory=lambda: [
-            f"*.{DOMAIN}",
-            DOMAIN,
+            f"*.{HOST_MAIN}",
+            HOST_MAIN,
             "localhost",
         ]
     )

@@ -178,7 +178,7 @@ async def email_by_ses():
 
 Amazon SES는 이러한 부담이 없으므로 몇 분 만에 이메일 발송을 시작할 수 있습니다. Amazon.com이 대규모의 자사 고객 기반을 지원하기 위해 구축한 정교한 이메일 인프라와 오랜 경험을 활용할 수 있습니다.</p>
       <p>링크를 통해 확인하세요!
-        <a href='https://walabi.store'>Dingrr</a></p>
+        <a href='https://google.com'>Google</a></p>
     </body>
     </html>
                 """
