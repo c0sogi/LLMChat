@@ -10,7 +10,7 @@ from os import environ
 from app.database.schema import Users
 from app.common.app_settings import create_app
 from app.common.config import config
-from app.models import UserToken
+from app.models.base_models import UserToken
 from app.routers.auth import create_access_token
 
 

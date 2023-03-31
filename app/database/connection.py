@@ -181,7 +181,7 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         if not database_exists(root_url):
             create_database(root_url)
 
-        self.root_engine = create_engine(root_url, echo=True if config.debug else False)
+        self.root_engine = create_engine(root_url, echo=config.db_echo)
         with self.root_engine.connect() as conn:
             if not MySQL.is_user_exists(config.mysql_user, engine_or_conn=conn):
                 MySQL.create_user(

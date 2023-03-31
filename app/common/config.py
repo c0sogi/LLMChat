@@ -14,9 +14,7 @@ class SingletonMetaClass(type):
         return cls._instances[cls]
 
 
-DATABASE_URL_FORMAT: str = (
-    "{dialect}+{driver}://{user}:{password}@{host}:3306/{database}?charset=utf8mb4"
-)
+DATABASE_URL_FORMAT: str = "{dialect}+{driver}://{user}:{password}@{host}:3306/{database}?charset=utf8mb4"
 MYSQL_ROOT_PASSWORD: str = environ.get("MYSQL_ROOT_PASSWORD")
 MYSQL_USER: str = environ.get("MYSQL_USER")
 MYSQL_PASSWORD: str = environ.get("MYSQL_PASSWORD")
@@ -34,10 +32,15 @@ SAMPLE_SECRET_KEY: str = environ.get("SAMPLE_SECRET_KEY")
 OPENAI_API_KEY: str = environ.get("OPENAI_API_KEY")
 KAKAO_RESTAPI_TOKEN: str = environ.get("KAKAO_RESTAPI_TOKEN")
 WEATHERBIT_API_KEY: str = environ.get("WEATHERBIT_API_KEY")
+GOOGLE_TRANSLATE_API_KEY: str = environ.get("GOOGLE_TRANSLATE_API_KEY")
 JWT_ALGORITHM: str = "HS256"
-EXCEPT_PATH_LIST: tuple = ("/", "/openapi.json", "/test")
-EXCEPT_PATH_REGEX: Pattern = compile("^(/docs|/redoc|/api/auth|/favicon.ico|/chatgpt)")
-TOKEN_EXPIRE_HOURS: int = 2
+EXCEPT_PATH_LIST: tuple = (
+    "/",
+    "/openapi.json",
+    "/test",
+)
+EXCEPT_PATH_REGEX: Pattern = compile("^(/docs|/redoc|/api/auth|/favicon.ico|/chatgpt|/flutter_service_worker.js)")
+TOKEN_EXPIRE_HOURS: int = 168
 MAX_API_KEY: int = 3
 MAX_API_WHITELIST: int = 10
 KAKAO_IMAGE_URL: str = "http://k.kakaocdn.net/dn/wwWjr/btrYVhCnZDF/2bgXDJth2LyIajIjILhLK0/kakaolink40_original.png"
@@ -80,9 +83,7 @@ class Config(metaclass=SingletonMetaClass):
         option: str | None = None,
     ) -> LocalConfig | ProdConfig | TestConfig:
         config_key = option if option is not None else environ.get("API_ENV", "local")
-        return {"prod": ProdConfig, "local": LocalConfig, "test": TestConfig}[
-            config_key
-        ]()
+        return {"prod": ProdConfig, "local": LocalConfig, "test": TestConfig}[config_key]()
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,7 @@ class LocalConfig(Config, metaclass=SingletonMetaClass):
 
 @dataclass(frozen=True)
 class ProdConfig(Config, metaclass=SingletonMetaClass):
+    db_echo: bool = False
     trusted_hosts: list = field(
         default_factory=lambda: [
             f"*.{HOST_MAIN}",
@@ -118,3 +120,7 @@ class TestConfig(Config, metaclass=SingletonMetaClass):
 
 
 config = Config.get()
+
+
+if __name__ == "__main__":
+    print(BASE_DIR / "app")

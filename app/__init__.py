@@ -1,2 +1,2 @@
 from . import dependencies
-from . import models
+from .models import base_models

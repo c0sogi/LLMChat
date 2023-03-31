@@ -8,7 +8,7 @@ from fastapi.logger import logger
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app.errors.exceptions import APIException, InternalServerError
+from app.errors.api_exceptions import APIException, InternalServerError
 
 
 logger.setLevel(logging.INFO)

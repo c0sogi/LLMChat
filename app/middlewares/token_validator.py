@@ -12,14 +12,14 @@ from app.common.config import (
     EXCEPT_PATH_REGEX,
 )
 from app.database.crud import get_api_key_and_owner
-from app.errors.exceptions import (
+from app.errors.api_exceptions import (
     APIException,
     Responses_400,
     Responses_401,
     InternalServerError,
     exception_handler,
 )
-from app.models import UserToken
+from app.models.base_models import UserToken
 from app.utils.date_utils import UTC
 from app.utils.logger import api_logger
 from app.utils.query_utils import row_to_dict
@@ -110,6 +110,7 @@ async def access_control(request: Request, call_next: RequestResponseEndpoint):
     response: Optional[Response] = None
 
     try:
+
         if EXCEPT_PATH_REGEX.match(url) is not None:
             ...  # Regex-whitelist endpoint
         elif url in EXCEPT_PATH_LIST:
@@ -126,7 +127,6 @@ async def access_control(request: Request, call_next: RequestResponseEndpoint):
                 headers=request.headers,
                 cookies=request.cookies,
             )
-
         response = await call_next(request)  # actual endpoint response
 
     except Exception as exception:  # If any error occurs...

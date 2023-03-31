@@ -44,10 +44,6 @@ services:
       TZ: "Asia/Seoul"
     volumes:
       - mysql:/var/lib/mysql
-    # command:
-    #   - mysql -u root -p mysql
-    #   - Rnoeot1591
-    #   - create user trafficer identified by 'hello';
     depends_on:
       - proxy
     networks:
@@ -63,7 +59,7 @@ services:
       - proxy
       - db
     labels:
-      - "traefik.http.routers.api.rule=HOST(`localhost`, `192.168.0.3`)"
+      - "traefik.http.routers.api.rule=HOST(`localhost`, `${HOST_MAIN}`)"
       - "traefik.http.routers.api.entrypoints=web"
       - "traefik.http.services.api.loadbalancer.server.scheme=http"
       - "traefik.http.services.api.loadbalancer.server.port=8000"

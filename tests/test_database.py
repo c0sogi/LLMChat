@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy import select
 from uuid import uuid4
-from app.models import AddApiKey, UserToken
+from app.models.base_models import AddApiKey, UserToken
 from app.database.schema import Users, ApiKeys, db
 from app.database.crud import create_api_key, get_api_key_and_owner
 from app.middlewares.token_validator import Validator

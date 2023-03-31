@@ -47,7 +47,6 @@
             flex-direction: column;
             flex: 3;
             height: 30vh;
-            position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
@@ -56,80 +55,85 @@
             align-items: center;
         }
 
-        #button-container {
-            display: flex;
-            flex: 1;
-            width: 100%;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px;
-        }
-
         #user-message {
-            display: flexbox;
             position: relative;
-            width: 90%;
+            width: 100%;
             flex: 8;
             bottom: 0;
             padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-block-start: 10px;
             font-size: 14px;
-            margin-top: 14px;
+        }
+
+        #button-container {
+            display: flex;
+            flex: 2;
+            width: 100%;
+            justify-content: center;
+            align-items: center;
+            margin-block-start: 10px;
+            margin-block-end: 10px;
+            margin-left: 50px;
+            margin-right: 50px;
+            padding: 10px;
         }
 
         #clear-button {
-            display: flexbox;
-            flex: 2;
             position: relative;
-            background-color: red;
+            background-color: pink;
             color: white;
+            text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.2);
             font-weight: bold;
             border: none;
             border-radius: 5px;
             padding: 5px 10px;
             cursor: pointer;
             height: 50px;
+            width: 100px;
             line-height: 30px;
-            margin: 1%;
+            margin: 10px;
         }
 
         #clear-button:hover {
-            background-color: #ff4d4d;
+            background-color: #ff4d94;
         }
 
         #retry-button {
-            display: flexbox;
-            flex: 2;
             position: relative;
-            background-color: blue;
+            background-color: paleturquoise;
             color: white;
+            text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.2);
             font-weight: bold;
             border: none;
             border-radius: 5px;
             padding: 5px 10px;
             cursor: pointer;
             height: 50px;
+            width: 100px;
             line-height: 30px;
-            margin: 1%;
+            margin: 10px;
         }
 
         #retry-button:hover {
-            background-color: #4d94ff;
+            background-color: #4dff88;
         }
 
         #send-button {
-            display: flexbox;
-            flex: 2;
             position: relative;
-            background-color: green;
+            background-color: paleturquoise;
             color: white;
+            text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.2);
             font-weight: bold;
             border: none;
             border-radius: 5px;
             padding: 5px 10px;
             cursor: pointer;
             height: 50px;
+            width: 100px;
             line-height: 30px;
-            margin: 1%;
+            margin: 10px;
         }
 
         #send-button:hover {
@@ -270,6 +274,56 @@
             color: white;
             padding: 20px;
         }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            align-content: center;
+            width: 60px;
+            height: 34px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            -webkit-transition: .4s;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            -webkit-transition: .4s;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked+.slider {
+            background-color: #4dff88;
+        }
+
+        input:checked+.slider:before {
+            -webkit-transform: translateX(26px);
+            -ms-transform: translateX(26px);
+            transform: translateX(26px);
+        }
     </style>
 </head>
 
@@ -281,9 +335,13 @@
         <div id="input-container">
             <textarea id="user-message" placeholder="여기에 채팅을 입력하세요!"></textarea>
             <div id="button-container">
-                <button id="clear-button">채팅창 정리</button>
+                <button id="clear-button">초기화</button>
                 <button id="retry-button">재시도</button>
                 <button id="send-button">전송</button>
+                <label>자동번역</label>
+                <label class="switch">
+                    <input type="checkbox" id="autoTranslate">
+                    <span class="slider round"></span>
             </div>
         </div>
     </div>

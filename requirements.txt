@@ -37,8 +37,8 @@ six
 SQLAlchemy
 sqlalchemy-utils
 starlette
+tiktoken
 toml
-transformers
 urllib3
 uvicorn
 websockets

@@ -4,8 +4,8 @@ from fastapi.requests import Request
 from app.common.config import TOKEN_EXPIRE_HOURS
 from app.database.crud import is_email_exist, register_new_user
 from app.database.schema import Users
-from app.errors.exceptions import Responses_400, Responses_404
-from app.models import SnsType, Token, UserRegister, UserToken
+from app.errors.api_exceptions import Responses_400, Responses_404
+from app.models.base_models import SnsType, Token, UserRegister, UserToken
 from app.utils.encoding_and_hashing import create_access_token
 
 router = APIRouter(prefix="/auth")
@@ -73,7 +73,11 @@ async def login(
     if sns_type == SnsType.email:
         if not (user_info.email and user_info.password):
             raise Responses_400.no_email_or_password
-        matched_user: Users = await Users.first_filtered_by(email=user_info.email)
+        try:
+            matched_user: Users = await Users.first_filtered_by(email=user_info.email)
+        except Exception as e:
+            print("SQLERROR: ", e)
+            return
         if matched_user is None:
             raise Responses_404.not_found_user
         if not bcrypt.checkpw(

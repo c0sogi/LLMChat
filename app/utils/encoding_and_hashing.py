@@ -14,9 +14,9 @@ from hmac import HMAC, new
 from re import findall
 from base64 import urlsafe_b64encode, b64encode
 import json
-from app.errors.exceptions import Responses_401
+from app.errors.api_exceptions import Responses_401
 from app.database.schema import ApiKeys
-from app.models import AddApiKey
+from app.models.base_models import AddApiKey
 from app.common.config import JWT_ALGORITHM, JWT_SECRET
 
 
@@ -125,7 +125,7 @@ async def generate_api_key(user_id: int, additional_key_info: AddApiKey) -> ApiK
 
 def create_access_token(*, data: dict = None, expires_delta: int = None) -> str:
     to_encode: dict = data.copy()
-    if expires_delta is not None:
+    if expires_delta is not None and expires_delta != 0:
         to_encode.update({"exp": datetime.utcnow() + timedelta(hours=expires_delta)})
     return jwt_encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
 

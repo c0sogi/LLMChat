@@ -1,4 +1,6 @@
+import logging
 from fastapi import FastAPI, Depends
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from app.common.config import (
@@ -9,15 +11,16 @@ from app.common.config import (
 from app.database.schema import db
 from app.middlewares.token_validator import access_control
 from app.middlewares.trusted_hosts import TrustedHostMiddleware
-from app.routers import index, auth, services, users
+from app.routers import index, auth, services, users, ws
 from app.dependencies import (
     api_service_dependency,
     user_dependency,
 )
-import logging
+from app.utils.js_initializer import js_url_initializer
 
 
 def create_app(config: LocalConfig | ProdConfig | TestConfig) -> FastAPI:
+    js_url_initializer(js_location="app/web/main.dart.js")
     # App & DB
     new_app = FastAPI(
         title=config.app_title,
@@ -45,8 +48,14 @@ def create_app(config: LocalConfig | ProdConfig | TestConfig) -> FastAPI:
     )
 
     # Routers
-    new_app.include_router(index.router)
-    new_app.include_router(auth.router, prefix="/api", tags=["auth"])
+    new_app.mount("/chatgpt", StaticFiles(directory="./app/web", html=True))
+    new_app.include_router(index.router, tags=["index"])
+    new_app.include_router(ws.router, prefix="/ws", tags=["websocket"])
+    new_app.include_router(
+        auth.router,
+        prefix="/api",
+        tags=["auth"],
+    )
     new_app.include_router(
         services.router,
         prefix="/api",

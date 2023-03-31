@@ -2,7 +2,7 @@ from typing import Sequence
 from starlette.datastructures import URL, Headers
 from starlette.responses import PlainTextResponse, RedirectResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
-from app.errors.exceptions import Responses_500
+from app.errors.api_exceptions import Responses_500
 
 
 class TrustedHostMiddleware:

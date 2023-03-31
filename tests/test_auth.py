@@ -1,7 +1,7 @@
 import pytest
 from fastapi import status
 
-from app.errors.exceptions import Responses_400
+from app.errors.api_exceptions import Responses_400
 
 
 # @pytest.mark.asyncio

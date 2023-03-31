@@ -1,9 +1,8 @@
-from typing import List
 from fastapi import APIRouter
 from starlette.requests import Request
 from app.database import crud
-from app.errors.exceptions import Responses_400
-from app.models import (
+from app.errors.api_exceptions import Responses_400
+from app.models.base_models import (
     GetApiKeyList,
     GetApiKeys,
     GetApiWhiteLists,
@@ -11,7 +10,7 @@ from app.models import (
     CreateApiWhiteLists,
 )
 import ipaddress
-from app.models import MessageOk, UserMe
+from app.models.base_models import MessageOk, UserMe
 
 router = APIRouter(prefix="/user")
 

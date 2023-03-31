@@ -1,4 +1,5 @@
 import requests
+import openai
 from typing import Type, Callable
 import os  # 윈도우 절전모드 활성화
 from pynput.keyboard import Listener
@@ -49,9 +50,7 @@ class EventListener:
                 )
                 for callback_idx in range(self.num_threads)
             ]
-            future_results = [
-                future.result() for future in futures.as_completed(ensured_futures)
-            ]
+            future_results = [future.result() for future in futures.as_completed(ensured_futures)]
         print(future_results)
         return True
 
@@ -62,9 +61,7 @@ def on_press(key):
 
 
 def sleep_if_idle(sleep_timer: int) -> None:
-    listener = EventListener(
-        listener_type=Listener, callbacks=[{"on_press": on_press}], timeout=sleep_timer
-    )
+    listener = EventListener(listener_type=Listener, callbacks=[{"on_press": on_press}], timeout=sleep_timer)
     is_key_pressed: bool | Exception = listener.run()
 
     if is_key_pressed is False:
@@ -97,6 +94,45 @@ def start_chat():
 
         response = call_scale_api(user_input)
         print("챗봇: ", response["output"])
+
+
+def count_tokens(text):
+    return len(openai.api.Encoding().encode(text))
+
+
+def truncate_chat_context(chat_context: list[dict], buffer_tokens: int = 100, token_limit: int = 4096) -> list[dict]:
+    total_tokens = 0
+    truncated_context = []
+
+    for message in reversed(chat_context):
+        message_tokens = count_tokens(message["text"]) + count_tokens(message["role"])
+        if total_tokens + message_tokens + buffer_tokens <= token_limit:
+            total_tokens += message_tokens
+            truncated_context.insert(0, message)
+        else:
+            break
+
+    return truncated_context
+
+
+def continue_conversation(chat_context: list[dict], prompt: str, buffer_tokens: int = 100):
+    truncated_context = truncate_chat_context(chat_context, buffer_tokens)
+
+    openai_chat_messages = [{"role": msg["role"], "content": msg["text"]} for msg in truncated_context]
+
+    openai_chat_messages.append({"role": "system", "content": "You are a helpful assistant."})
+    openai_chat_messages.append({"role": "user", "content": prompt})
+
+    response = openai.Completion.create(
+        engine="text-davinci-002",
+        prompt=openai_chat_messages,
+        max_tokens=4096 - (sum([count_tokens(msg["content"]) for msg in openai_chat_messages]) + buffer_tokens),
+        n=1,
+        stop=None,
+        temperature=0.7,
+    )
+
+    return response.choices[0].text.strip()
 
 
 if __name__ == "__main__":
