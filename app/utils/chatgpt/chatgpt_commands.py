@@ -1,5 +1,5 @@
-from app.models.gpt_models import MessageHistory, UserGptContext
-from app.utils.chatgpt.chatgpt_config import GPT_CONFIG
+from app.viewmodels.gpt_models import MessageHistory, UserGptContext
+from app.utils.chatgpt.chatgpt_config import GPT_CONTEXTS
 
 
 class ChatGptCommands:  # commands for chat gpt
@@ -29,13 +29,13 @@ class ChatGptCommands:  # commands for chat gpt
     @staticmethod
     def reset(*args, user_gpt_context: UserGptContext) -> str:  # reset user_gpt_context
         user_id: str = user_gpt_context.user_gpt_profile.user_id
-        if user_id in GPT_CONFIG.user_gpt_contexts.keys():  # if user_id exists in user_gpt_contexts
+        if user_id in GPT_CONTEXTS.keys():  # if user_id exists in user_gpt_contexts
             default_context: UserGptContext = UserGptContext.make_user_gpt_context_default(
                 user_id=user_id
             )  # make default context
             for key in default_context.__annotations__.keys():  # reset user_gpt_context to default
                 setattr(
-                    GPT_CONFIG.user_gpt_contexts[user_id],
+                    GPT_CONTEXTS[user_id],
                     key,
                     getattr(default_context, key),
                 )
@@ -136,3 +136,7 @@ class ChatGptCommands:  # commands for chat gpt
         user_gpt_context.user_message_tokens -= user_gpt_context.user_message_histories.pop().tokens
         user_gpt_context.gpt_message_tokens -= user_gpt_context.gpt_message_histories.pop().tokens
         return "다시 말해 볼게요!"  # return success message
+
+    @staticmethod
+    def ping(*args, user_gpt_context: UserGptContext) -> str:
+        return "pong"

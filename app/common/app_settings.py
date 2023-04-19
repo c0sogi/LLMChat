@@ -8,10 +8,10 @@ from app.common.config import (
     ProdConfig,
     TestConfig,
 )
-from app.database.schema import db
+from app.database.connection import db
 from app.middlewares.token_validator import access_control
 from app.middlewares.trusted_hosts import TrustedHostMiddleware
-from app.routers import index, auth, services, users, ws
+from app.routers import index, auth, services, users, websocket
 from app.dependencies import (
     api_service_dependency,
     user_dependency,
@@ -20,13 +20,15 @@ from app.utils.js_initializer import js_url_initializer
 
 
 def create_app(config: LocalConfig | ProdConfig | TestConfig) -> FastAPI:
-    js_url_initializer(js_location="app/web/main.dart.js")
-    # App & DB
+    # Initialize app & db & js
     new_app = FastAPI(
         title=config.app_title,
         description=config.app_description,
         version=config.app_version,
     )
+    db.init(config=config)
+    js_url_initializer(js_location="app/web/main.dart.js")
+
     # Middlewares
     """
     Access control middleware: Authorized request only
@@ -50,7 +52,7 @@ def create_app(config: LocalConfig | ProdConfig | TestConfig) -> FastAPI:
     # Routers
     new_app.mount("/chatgpt", StaticFiles(directory="./app/web", html=True))
     new_app.include_router(index.router, tags=["index"])
-    new_app.include_router(ws.router, prefix="/ws", tags=["websocket"])
+    new_app.include_router(websocket.router, prefix="/ws", tags=["websocket"])
     new_app.include_router(
         auth.router,
         prefix="/api",

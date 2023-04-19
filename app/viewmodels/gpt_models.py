@@ -69,7 +69,7 @@ class UserGptContext:  # user gpt context for user and gpt
     user_message_tokens: int = 0
     gpt_message_tokens: int = 0
     system_message_tokens: int = 0
-    is_user_in_chat: bool = False
+    is_chat_loaded: bool = False
     is_discontinued: bool = False
 
     @property
@@ -88,7 +88,6 @@ class UserGptContext:  # user gpt context for user and gpt
         m: GptModel = self.gpt_model
         return f"""[User Info]
 user_id={self.user_gpt_profile.user_id}
-is_user_in_chat={self.is_user_in_chat}
 
 [GPT Info]
 gpt_model={m.name}

@@ -71,21 +71,21 @@ class AddApiKey(BaseModel):
         orm_mode = True
 
 
-class GetApiKeyList(AddApiKey):
+class GetApiKey(AddApiKey):
     id: int = None
     access_key: str = None
     created_at: datetime = None
 
 
-class GetApiKeys(GetApiKeyList):
+class GetApiKeyFirstTime(GetApiKey):
     secret_key: str = None
 
 
-class CreateApiWhiteLists(BaseModel):
+class CreateApiWhiteList(BaseModel):
     ip_address: str = None
 
 
-class GetApiWhiteLists(CreateApiWhiteLists):
+class GetApiWhiteList(CreateApiWhiteList):
     id: int
 
     class Config:

@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from starlette.background import BackgroundTasks
 from starlette.requests import Request
 from app.errors.api_exceptions import Responses_400
-from app.models.base_models import MessageOk, KakaoMsgBody, SendEmail
+from app.viewmodels.base_models import MessageOk, KakaoMsgBody, SendEmail
 from app.common.config import (
     HOST_MAIN,
     KAKAO_RESTAPI_TOKEN,
@@ -19,8 +19,8 @@ from app.common.config import (
     AWS_AUTHORIZED_EMAIL,
     WEATHERBIT_API_KEY,
 )
-from app.utils.encoding_and_hashing import encode_from_utf8
-from app.utils.weather import fetch_weather_data
+from app.utils.encoding_utils import encode_from_utf8
+from app.utils.api.weather import fetch_weather_data
 import boto3
 from botocore.exceptions import ClientError
 
@@ -128,9 +128,7 @@ async def email_by_gmail(request: Request, mailing_list: SendEmail):
 
 
 @router.post("/email/send_by_gmail2")
-async def email_by_gmail2(
-    request: Request, mailing_list: SendEmail, background_tasks: BackgroundTasks
-):
+async def email_by_gmail2(request: Request, mailing_list: SendEmail, background_tasks: BackgroundTasks):
     # t = time()
     background_tasks.add_task(send_email, mailing_list=mailing_list.email_to)
     return MessageOk()

@@ -4,11 +4,11 @@ from app.common.config import GOOGLE_TRANSLATE_API_KEY
 from app.errors.gpt_exceptions import (
     GptTooMuchTokenException,
 )
-from app.models.base_models import SendChatMessage, ReceiveChatMessage
-from app.models.gpt_models import UserGptContext
+from app.viewmodels.base_models import SendChatMessage, ReceiveChatMessage
+from app.viewmodels.gpt_models import UserGptContext
 from app.utils.chatgpt.chatgpt_commands import ChatGptCommands
 from app.utils.chatgpt.chatgpt_generation import generate_from_openai
-from app.utils.translate import google_translate_api
+from app.utils.api.translate import google_translate_api
 
 
 async def begin_chat(
@@ -19,14 +19,15 @@ async def begin_chat(
     while True:  # loop until connection is closed
         try:
             # initialize variables
-            user_gpt_context.is_user_in_chat = True
+            user_gpt_context.is_chat_loaded = True
             received: ReceiveChatMessage = ReceiveChatMessage.parse_raw(await websocket.receive_text())
             msg: str = received.msg
             translate: bool = received.translate
             chat_room_id: int = received.chat_room_id
 
             # TODO: validate if chat room belongs to user
-            print("received_chat_message: ", msg)
+            # print("received_chat_message: ", msg)
+
             if msg.startswith("/"):  # if user message is command
                 await SendToWebsocket.message(
                     websocket=websocket,
@@ -69,7 +70,7 @@ async def begin_chat(
             )
             break
         finally:
-            user_gpt_context.is_user_in_chat = False  # set user not in chat
+            user_gpt_context.is_chat_loaded = False  # set user not in chat
 
 
 class SendToWebsocket:

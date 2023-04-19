@@ -11,7 +11,7 @@ from app.errors.gpt_exceptions import (
     GptException,
     GptLengthException,
 )
-from app.models.gpt_models import UserGptContext
+from app.viewmodels.gpt_models import UserGptContext
 from app.utils.chatgpt.chatgpt_config import ChatGPTConfig
 from app.utils.logger import logger
 
@@ -96,7 +96,7 @@ async def generate_from_openai(
                                 continue
                             finish_reason: str | None = json_data.get("finish_reason")  # reason for finishing stream
                             delta: str | None = json_data.get("delta").get("content")  # generated text from api
-                            logger.info(f"finish_reason: {finish_reason}, delta: {delta}")
+                            # logger.info(f"finish_reason: {finish_reason}, delta: {delta}")
                             if finish_reason == "length":
                                 raise GptLengthException(
                                     msg="Incomplete model output due to max_tokens parameter or token limit"

@@ -2,11 +2,11 @@ import bcrypt
 from fastapi import APIRouter, Response
 from fastapi.requests import Request
 from app.common.config import TOKEN_EXPIRE_HOURS
-from app.database.crud import is_email_exist, register_new_user
-from app.database.schema import Users
+from app.database.crud.users import is_email_exist, register_new_user
+from app.database.schemas.auth import Users
 from app.errors.api_exceptions import Responses_400, Responses_404
-from app.models.base_models import SnsType, Token, UserRegister, UserToken
-from app.utils.encoding_and_hashing import create_access_token
+from app.viewmodels.base_models import SnsType, Token, UserRegister, UserToken
+from app.utils.auth.token import create_access_token
 
 router = APIRouter(prefix="/auth")
 
@@ -47,12 +47,8 @@ async def register(
             hashed_password=hashed_password,
             ip_address=request.client.host,
         )
-        data_to_be_tokenized: dict = UserToken.from_orm(new_user).dict(
-            exclude={"password", "marketing_agree"}
-        )
-        token: str = create_access_token(
-            data=data_to_be_tokenized, expires_delta=TOKEN_EXPIRE_HOURS
-        )
+        data_to_be_tokenized: dict = UserToken.from_orm(new_user).dict(exclude={"password", "marketing_agree"})
+        token: str = create_access_token(data=data_to_be_tokenized, expires_delta=TOKEN_EXPIRE_HOURS)
         response.set_cookie(
             key="Authorization",
             value=f"Bearer {token}",
@@ -85,12 +81,8 @@ async def login(
             hashed_password=matched_user.password.encode("utf-8"),
         ):
             raise Responses_404.not_found_user
-        data_to_be_tokenized: dict = UserToken.from_orm(matched_user).dict(
-            exclude={"password", "marketing_agree"}
-        )
-        token: str = create_access_token(
-            data=data_to_be_tokenized, expires_delta=TOKEN_EXPIRE_HOURS
-        )
+        data_to_be_tokenized: dict = UserToken.from_orm(matched_user).dict(exclude={"password", "marketing_agree"})
+        token: str = create_access_token(data=data_to_be_tokenized, expires_delta=TOKEN_EXPIRE_HOURS)
         response.set_cookie(
             key="Authorization",
             value=f"Bearer {token}",

@@ -3,10 +3,9 @@ import asyncio
 from os import environ
 import json
 
+
 # Request papago api using httpx
-async def papago_translate_api(
-    text: str, src_lang: str, trg_lang: str, client_id: str, client_secret: str
-):
+async def papago_translate_api(text: str, src_lang: str, trg_lang: str, client_id: str, client_secret: str):
     # curl example :
     # curl "https://openapi.naver.com/v1/papago/n2mt" \
     # -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" \
@@ -45,11 +44,7 @@ async def test_papago(sample_text: str):
     trg_lang = "en"
     client_id = PAPAGO_CLIENT_ID
     client_secret = PAPAGO_CLIENT_SECRET
-    print(
-        await papago_translate_api(
-            sample_text, src_lang, trg_lang, client_id, client_secret
-        )
-    )
+    print(await papago_translate_api(sample_text, src_lang, trg_lang, client_id, client_secret))
 
 
 async def test_google(sample_text: str):

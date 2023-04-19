@@ -1,10 +1,11 @@
 from dotenv import load_dotenv
+from app.database.connection import db
+from app.database.schemas.auth import Users
 
 load_dotenv()
 from uuid import uuid4
 
 from sqlalchemy import select
-from app.database.schema import db, Users
 
 
 if __name__ == "__main__":
@@ -28,9 +29,7 @@ if __name__ == "__main__":
         print("\n" * 10)
         try:
             # Create instances
-            users = await Users.add_all(
-                random_users[0], random_users[1], autocommit=True, refresh=True
-            )
+            users = await Users.add_all(random_users[0], random_users[1], autocommit=True, refresh=True)
             log(
                 [get_user(user) for user in users],
                 "[add_all]",
@@ -39,9 +38,7 @@ if __name__ == "__main__":
             log(get_user(user), "[add]")
 
             # Query instances
-            stmt = select(Users).filter(
-                Users.email.in_([random_users[0]["email"], random_users[1]["email"]])
-            )
+            stmt = select(Users).filter(Users.email.in_([random_users[0]["email"], random_users[1]["email"]]))
             users = await db.scalars__fetchall(stmt)
             log(
                 [get_user(user) for user in users],
