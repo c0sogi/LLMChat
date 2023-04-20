@@ -8,7 +8,7 @@ from app.common.config import (
     ProdConfig,
     TestConfig,
 )
-from app.database.connection import db
+from app.database.connection import db, cache
 from app.middlewares.token_validator import access_control
 from app.middlewares.trusted_hosts import TrustedHostMiddleware
 from app.routers import index, auth, services, users, websocket
@@ -26,7 +26,8 @@ def create_app(config: LocalConfig | ProdConfig | TestConfig) -> FastAPI:
         description=config.app_description,
         version=config.app_version,
     )
-    db.init(config=config)
+    db.start(config=config)
+    cache.start(config=config)
     js_url_initializer(js_location="app/web/main.dart.js")
 
     # Middlewares

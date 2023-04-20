@@ -2,6 +2,7 @@ version: '3.9'
 
 volumes:
   mysql:
+  redis:
 
 
 networks:
@@ -58,6 +59,42 @@ services:
       reverse-proxy-public:
         ipv4_address: 172.16.0.11 # static IP
 
+  cache:
+    image: redis
+    restart: always
+    command:
+      [
+        "redis-server",
+        # Memory management
+        "--maxmemory",
+        "100mb",
+        # LRU eviction policy
+        "--maxmemory-policy",
+        "allkeys-lru",
+        # AOF persistence
+        "--appendonly",
+        "yes"
+          # # RDB persistence
+          # "--save",
+          # "900 1",
+          # "--save",
+          # "300 10",
+          # "--save",
+          # "60 10000",
+          # # Disable stop on bgsave error
+          # "--stop-writes-on-bgsave-error",
+          # "no",
+      ]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis:/data
+    depends_on:
+      - proxy
+    networks:
+      reverse-proxy-public:
+        ipv4_address: 172.16.0.12 # static IP
+
   api:
     labels:
       - "traefik.http.routers.api.rule=HostRegexp(`${HOST_MAIN}`, `{subdomain:[a-z]+}.${HOST_MAIN}`, `${HOST_IP}`)"
@@ -74,8 +111,9 @@ services:
     depends_on:
       - proxy
       - db
+      - cache
     volumes:
       - .:/app
     networks:
       reverse-proxy-public:
-        ipv4_address: 172.16.0.12 # static IP
+        ipv4_address: 172.16.0.13 # static IP

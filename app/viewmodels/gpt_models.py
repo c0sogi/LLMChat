@@ -1,4 +1,5 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
+import json
 import tiktoken
 
 
@@ -69,8 +70,41 @@ class UserGptContext:  # user gpt context for user and gpt
     user_message_tokens: int = 0
     gpt_message_tokens: int = 0
     system_message_tokens: int = 0
-    is_chat_loaded: bool = False
     is_discontinued: bool = False
+
+    @classmethod
+    def parse_raw(cls, raw: str) -> "UserGptContext":
+        stored: dict = json.loads(raw)
+        return cls(
+            user_gpt_profile=UserGptProfile(**stored["user_gpt_profile"]),
+            gpt_model=getattr(GPT_MODELS, stored["gpt_model"].replace(".", "_").replace("-", "_")),
+            user_message_histories=[MessageHistory(**m) for m in stored["user_message_histories"]],
+            gpt_message_histories=[MessageHistory(**m) for m in stored["gpt_message_histories"]],
+            system_message_histories=[MessageHistory(**m) for m in stored["system_message_histories"]],
+            user_message_tokens=stored["user_message_tokens"],
+            gpt_message_tokens=stored["gpt_message_tokens"],
+            system_message_tokens=stored["system_message_tokens"],
+            is_discontinued=stored["is_discontinued"],
+        )
+
+    def json(self) -> dict:
+        return {
+            "user_gpt_profile": asdict(self.user_gpt_profile),
+            "gpt_model": self.gpt_model.name,
+            "user_message_histories": [m.__dict__ for m in self.user_message_histories],
+            "gpt_message_histories": [m.__dict__ for m in self.gpt_message_histories],
+            "system_message_histories": [m.__dict__ for m in self.system_message_histories],
+            "user_message_tokens": self.user_message_tokens,
+            "gpt_message_tokens": self.gpt_message_tokens,
+            "system_message_tokens": self.system_message_tokens,
+            "is_discontinued": self.is_discontinued,
+        }
+
+    def json_stringify(self) -> str:
+        return json.dumps(self.json())
+
+    def tokenize(self, message: str) -> list[int]:
+        return self.gpt_model.tokenizer.encode(message)
 
     @property
     def left_tokens(self) -> int:
@@ -112,60 +146,58 @@ Total token consumed: {self.total_tokens}
 Remaining token: {self.left_tokens}"""
 
     @classmethod
-    def make_user_gpt_context_default(cls, user_id: str, gpt_model_name: str | None = None):
-        return (
-            cls(
-                user_gpt_profile=UserGptProfile(user_id=user_id),
-                gpt_model=getattr(GPT_MODELS, gpt_model_name),
-            )
-            if gpt_model_name is not None
-            else cls(
-                user_gpt_profile=UserGptProfile(user_id=user_id),
-            )
+    def construct_default(cls, user_id: str, gpt_model_name: str = "gpt_3_5_turbo"):
+        return cls(
+            user_gpt_profile=UserGptProfile(user_id=user_id),
+            gpt_model=getattr(GPT_MODELS, gpt_model_name),
         )
 
     async def add_user_message_history_safely(self, content: str) -> None:
-        tokens: int = len(self.gpt_model.tokenizer.encode(content)) + 8
-        self.user_message_histories.append(
-            MessageHistory(
-                role=self.user_gpt_profile.user_role,
-                content=content,
-                tokens=tokens,
-                is_user=True,
-            )
+        tokens: int = len(self.tokenize(content)) + 8
+        message_history: MessageHistory = MessageHistory(
+            role=self.user_gpt_profile.gpt_role,
+            content=content,
+            tokens=tokens,
+            is_user=True,
         )
+        self.user_message_histories.append(message_history)
         self.user_message_tokens += tokens
         await self.ensure_token_not_exceed()
 
     async def add_gpt_message_history_safely(self, content: str) -> None:
-        tokens: int = len(self.gpt_model.tokenizer.encode(content)) + 8
-        self.gpt_message_histories.append(
-            MessageHistory(
-                role=self.user_gpt_profile.gpt_role,
-                content=content,
-                tokens=tokens,
-                is_user=False,
-            )
+        tokens: int = len(self.tokenize(content)) + 8
+        message_history: MessageHistory = MessageHistory(
+            role=self.user_gpt_profile.gpt_role,
+            content=content,
+            tokens=tokens,
+            is_user=False,
         )
+        self.gpt_message_histories.append(message_history)
         self.gpt_message_tokens += tokens
         await self.ensure_token_not_exceed()
+        return message_history
+
+    async def add_system_message_history_safely(self, content: str) -> None:
+        tokens: int = len(self.tokenize(content)) + 8
+        message_history: MessageHistory = MessageHistory(
+            role="system",
+            content=content,
+            tokens=tokens,
+            is_user=False,
+        )
+        self.system_message_histories.append(message_history)
+        self.system_message_tokens += tokens
+        await self.ensure_token_not_exceed()
+        return message_history
 
     async def ensure_token_not_exceed(
         self,
     ) -> None:
-        exceeded_tokens: int = (
-            self.gpt_message_tokens
-            + self.user_message_tokens
-            + self.system_message_tokens
-            + self.gpt_model.token_margin
-            - self.gpt_model.max_total_tokens
-        )
-        while exceeded_tokens > 0:
+        while self.left_tokens <= 0:
             emptied_user_tokens: int = self.user_message_histories.pop(0).tokens
             emptied_gpt_tokens: int = self.gpt_message_histories.pop(0).tokens
             self.user_message_tokens -= emptied_user_tokens
             self.gpt_message_tokens -= emptied_gpt_tokens
-            exceeded_tokens -= emptied_user_tokens + emptied_gpt_tokens
 
 
 GPT_MODELS = GptModels()

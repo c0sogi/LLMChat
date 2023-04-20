@@ -2,6 +2,7 @@ from collections.abc import Iterable
 from asyncio import current_task
 from typing import Callable, Optional, Type
 from urllib import parse
+from redis import Redis
 from sqlalchemy import (
     Result,
     ScalarResult,
@@ -140,7 +141,7 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         self.session: AsyncSession = None
         self.is_initiated = False
 
-    def init(self, config: TestConfig | ProdConfig | LocalConfig) -> None:
+    def start(self, config: TestConfig | ProdConfig | LocalConfig) -> None:
         if self.is_initiated:
             return
         self.is_test_mode = True if config.test_mode else False
@@ -332,4 +333,25 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         return (await self.run_in_session(self._scalars)(session, stmt=stmt)).one_or_none()
 
 
-db = SQLAlchemy()
+class RedisFactory(metaclass=SingletonMetaClass):
+    def __init__(self):
+        self.redis: Redis | None = None
+        self.is_test_mode: bool = False
+        self.is_initiated: bool = False
+
+    def start(self, config: TestConfig | ProdConfig | LocalConfig) -> None:
+        if self.is_initiated:
+            return
+        self.is_test_mode = True if config.test_mode else False
+        self.redis = Redis(
+            host=config.redis_host,
+            port=config.redis_port,
+            db=config.redis_db,
+        )
+        if self.is_test_mode:
+            ...
+        self.is_initiated = True
+
+
+db: SQLAlchemy = SQLAlchemy()
+cache: RedisFactory = RedisFactory()

@@ -75,6 +75,9 @@ class Config(metaclass=SingletonMetaClass):
     mysql_password: str = MYSQL_PASSWORD
     mysql_database: str = MYSQL_DATABASE
     mysql_host: str = MYSQL_HOST
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
     trusted_hosts: list = field(default_factory=lambda: ["*"])
     allowed_sites: list = field(default_factory=lambda: ["*"])
 
@@ -109,6 +112,7 @@ class ProdConfig(Config, metaclass=SingletonMetaClass):
             "localhost",
         ]
     )
+    redis_host: str = "cache"
 
 
 @dataclass(frozen=True)

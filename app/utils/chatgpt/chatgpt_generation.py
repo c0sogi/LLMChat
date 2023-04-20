@@ -13,6 +13,7 @@ from app.errors.gpt_exceptions import (
 )
 from app.viewmodels.gpt_models import UserGptContext
 from app.utils.chatgpt.chatgpt_config import ChatGPTConfig
+from app.utils.chatgpt.chatgpt_context_manager import context_manager
 from app.utils.logger import logger
 
 
@@ -111,6 +112,11 @@ async def generate_from_openai(
             except GptLengthException:
                 logger.error("token limit exceeded")
                 await user_gpt_context.add_gpt_message_history_safely(gpt_content)
+                context_manager.update_message_histories(
+                    user_id=user_gpt_context.user_gpt_profile.user_id,
+                    role="gpt",
+                    message_histories=user_gpt_context.gpt_message_histories,
+                )
                 user_gpt_context.is_discontinued = True
                 continue
             except GptException as gpt_exception:
@@ -122,8 +128,15 @@ async def generate_from_openai(
                 await sleep(ChatGPTConfig.wait_for_reconnect)
             except Exception as exception:
                 user_gpt_context.user_message_tokens -= user_gpt_context.user_message_histories.pop().tokens
-                raise Responses_500.websocket_error(msg=f"unexpected api exception: {exception}")
+                raise Responses_500.websocket_error(
+                    msg=f"unexpected exception generating text from openai: {exception}"
+                )
             else:
                 await user_gpt_context.add_gpt_message_history_safely(gpt_content)
+                context_manager.update_message_histories(
+                    user_id=user_gpt_context.user_gpt_profile.user_id,
+                    role="gpt",
+                    message_histories=user_gpt_context.gpt_message_histories,
+                )
                 user_gpt_context.is_discontinued = False
                 break

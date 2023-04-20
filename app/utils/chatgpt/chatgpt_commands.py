@@ -1,5 +1,5 @@
 from app.viewmodels.gpt_models import MessageHistory, UserGptContext
-from app.utils.chatgpt.chatgpt_config import GPT_CONTEXTS
+from app.utils.chatgpt.chatgpt_context_manager import context_manager
 
 
 class ChatGptCommands:  # commands for chat gpt
@@ -19,6 +19,7 @@ class ChatGptCommands:  # commands for chat gpt
         user_gpt_context.user_message_tokens = 0  # reset user message tokens
         user_gpt_context.gpt_message_tokens = 0  # reset gpt message tokens
         user_gpt_context.system_message_tokens = 0  # reset system message tokens
+        context_manager.update_context(user_gpt_context)  # update user_gpt_context
         response: str = f"총 {n_user_tokens}개의 사용자 토큰, {n_gpt_tokens}개의 GPT 토큰, {n_system_tokens}개의 시스템 토큰이 삭제되었습니다."
         return response  # return success message
 
@@ -29,37 +30,18 @@ class ChatGptCommands:  # commands for chat gpt
     @staticmethod
     def reset(*args, user_gpt_context: UserGptContext) -> str:  # reset user_gpt_context
         user_id: str = user_gpt_context.user_gpt_profile.user_id
-        if user_id in GPT_CONTEXTS.keys():  # if user_id exists in user_gpt_contexts
-            default_context: UserGptContext = UserGptContext.make_user_gpt_context_default(
-                user_id=user_id
-            )  # make default context
-            for key in default_context.__annotations__.keys():  # reset user_gpt_context to default
-                setattr(
-                    GPT_CONTEXTS[user_id],
-                    key,
-                    getattr(default_context, key),
-                )
-            return "정상적으로 컨텍스트가 리셋되었습니다."  # return success message
+        if context_manager.reset_context(user_id):  # if reset success
+            return "컨텍스트를 리셋했습니다."
         else:
             return "컨텍스트를 리셋하지 못했습니다."  # return fail message
 
     @staticmethod
-    def system(*args, user_gpt_context: UserGptContext) -> str:  # add system message
+    async def system(*args, user_gpt_context: UserGptContext) -> str:  # add system message
         if len(args) < 1:  # if no args
             return "/system SYSTEM_MESSAGE와 같은 형식으로 입력해야 합니다."  # return fail message
         system_message: str = " ".join(args)
-        system_message_tokens: int = len(
-            user_gpt_context.gpt_model.tokenizer.encode(system_message)
-        )  # get system message tokens
-        if (
-            system_message_tokens + user_gpt_context.system_message_tokens + user_gpt_context.gpt_model.token_margin
-            > user_gpt_context.gpt_model.max_total_tokens
-        ):  # if system message tokens are too much to add
-            return "시스템 메시지가 너무 많아서 추가할 수 없습니다."  # return fail message
-        user_gpt_context.system_message_tokens += system_message_tokens  # add system message tokens
-        user_gpt_context.system_message_histories.append(
-            MessageHistory(role="system", content=system_message, tokens=None, is_user=False)
-        )  # add system message history
+        await user_gpt_context.add_system_message_history_safely(system_message)  # add system message safely
+        context_manager.update_context(user_gpt_context)  # update user_gpt_context
         return f"시스템 메시지를 `{system_message}`로 추가하였습니다!"  # return success message
 
     @staticmethod
@@ -76,6 +58,7 @@ class ChatGptCommands:  # commands for chat gpt
         else:
             previous_temperature: str = user_gpt_context.user_gpt_profile.temperature
             user_gpt_context.user_gpt_profile.temperature = now_temperature
+            context_manager.update_context(user_gpt_context)  # update user_gpt_context
             return f"temperature 값을 {previous_temperature}에서 {now_temperature}로 바꿨어요."  # return success message
 
     @classmethod
@@ -96,6 +79,7 @@ class ChatGptCommands:  # commands for chat gpt
         else:
             previous_top_p: str = user_gpt_context.user_gpt_profile.top_p
             user_gpt_context.user_gpt_profile.top_p = now_top_p  # set top_p
+            context_manager.update_context(user_gpt_context)  # update user_gpt_context
             return f"top_p 값을 {previous_top_p}에서 {now_top_p}로 바꿨어요."  # return success message
 
     @staticmethod
@@ -123,6 +107,7 @@ class ChatGptCommands:  # commands for chat gpt
             f"{args[0]}_message_tokens",
             message_tokens - last_message_history.tokens,
         )  # pop last message tokens
+        context_manager.update_context(user_gpt_context)  # update user_gpt_context
         return (
             f"{args[0]} 메시지를 `{last_message_history.content}`로 삭제하였습니다!" if not is_silent else ""
         )  # return success message
@@ -135,6 +120,7 @@ class ChatGptCommands:  # commands for chat gpt
         # pop the lastest user and gpt message histories and deduct tokens
         user_gpt_context.user_message_tokens -= user_gpt_context.user_message_histories.pop().tokens
         user_gpt_context.gpt_message_tokens -= user_gpt_context.gpt_message_histories.pop().tokens
+        context_manager.update_context(user_gpt_context)  # update user_gpt_context
         return "다시 말해 볼게요!"  # return success message
 
     @staticmethod

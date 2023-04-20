@@ -31,6 +31,7 @@ PyMySQL
 pyparsing
 pytest
 python-dateutil
+redis
 requests
 s3transfer
 six

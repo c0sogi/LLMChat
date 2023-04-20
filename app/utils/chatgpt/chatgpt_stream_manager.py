@@ -1,5 +1,6 @@
-from typing import AsyncGenerator
-from fastapi import WebSocket
+from typing import AsyncGenerator, Callable
+from inspect import iscoroutinefunction
+from fastapi import WebSocket, WebSocketDisconnect
 from app.common.config import GOOGLE_TRANSLATE_API_KEY
 from app.errors.gpt_exceptions import (
     GptTooMuchTokenException,
@@ -7,19 +8,20 @@ from app.errors.gpt_exceptions import (
 from app.viewmodels.base_models import SendChatMessage, ReceiveChatMessage
 from app.viewmodels.gpt_models import UserGptContext
 from app.utils.chatgpt.chatgpt_commands import ChatGptCommands
+from app.utils.chatgpt.chatgpt_context_manager import context_manager
 from app.utils.chatgpt.chatgpt_generation import generate_from_openai
 from app.utils.api.translate import google_translate_api
 
 
 async def begin_chat(
     websocket: WebSocket,
-    user_gpt_context: UserGptContext,
+    user_id: str,
     openai_api_key: str,
 ) -> None:  # websocket for chat gpt
+    user_gpt_context: UserGptContext = context_manager.read_context(user_id)
     while True:  # loop until connection is closed
         try:
             # initialize variables
-            user_gpt_context.is_chat_loaded = True
             received: ReceiveChatMessage = ReceiveChatMessage.parse_raw(await websocket.receive_text())
             msg: str = received.msg
             translate: bool = received.translate
@@ -50,8 +52,9 @@ async def begin_chat(
                 openai_api_key=openai_api_key,
             )
 
+        except WebSocketDisconnect:
+            raise WebSocketDisconnect(code=1000, reason="client disconnected")
         except GptTooMuchTokenException as too_much_token_exception:  # if user message is too long
-            print("too much token exception")
             await SendToWebsocket.message(
                 websocket=websocket,
                 msg=too_much_token_exception.msg,
@@ -69,8 +72,6 @@ async def begin_chat(
                 ).dict()
             )
             break
-        finally:
-            user_gpt_context.is_chat_loaded = False  # set user not in chat
 
 
 class SendToWebsocket:
@@ -143,12 +144,18 @@ class HandleMessage:
                 msg=f"[번역된 질문]\n{translated_msg}",
                 chat_room_id=chat_room_id,
             )
-        user_token: int = len(user_gpt_context.gpt_model.tokenizer.encode(translated_msg if translate else msg))
+
+        user_token: int = len(user_gpt_context.tokenize(translated_msg if translate else msg))
         if user_token > user_gpt_context.token_per_request:  # if user message is too long
             raise GptTooMuchTokenException(
                 msg=f"메시지가 너무 길어요. 현재 토큰 개수는 {user_token}로, {user_gpt_context.token_per_request} 이하여야 합니다."
             )
         await user_gpt_context.add_user_message_history_safely(translated_msg if translate else msg)
+        context_manager.update_message_histories(
+            user_id=user_gpt_context.user_gpt_profile.user_id,
+            role="user",
+            message_histories=user_gpt_context.user_message_histories,
+        )
 
     @staticmethod
     async def gpt(
@@ -181,11 +188,14 @@ class HandleMessage:
 
 async def get_command_response(msg: str, user_gpt_context: UserGptContext) -> str:
     user_command: list = msg.split()
-    callback_name: str = user_command[0][1:]  # command name
+    callback: Callable[[list, UserGptContext], str] = (
+        getattr(ChatGptCommands, user_command[0][1:])
+        if hasattr(ChatGptCommands, user_command[0][1:])
+        else ChatGptCommands.not_existing_callback
+    )  # get callback function
     callback_args: list = user_command[1:]  # command args
-    callback_response: str = (
-        getattr(ChatGptCommands, callback_name)(*callback_args, user_gpt_context=user_gpt_context)
-        if hasattr(ChatGptCommands, callback_name)
-        else ChatGptCommands.not_existing_callback(user_gpt_context=user_gpt_context)
-    )  # get callback response
+    if iscoroutinefunction(callback):  # if callback is coroutine function
+        callback_response: str = await callback(*callback_args, user_gpt_context=user_gpt_context)
+    else:
+        callback_response: str = callback(*callback_args, user_gpt_context=user_gpt_context)
     return callback_response

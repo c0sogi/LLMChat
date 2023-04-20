@@ -10,7 +10,7 @@ from app.utils.auth.token import create_access_token
 from app.utils.tests.tests_utils import random_user_generator
 
 environ["API_ENV"] = "test"
-from app.database.connection import db
+from app.database.connection import db, cache
 from app.database.schemas.auth import Users
 from app.common.app_settings import create_app
 from app.common.config import Config, config
@@ -23,7 +23,8 @@ from app.viewmodels.base_models import UserToken
 4. 테이블 레코드 삭제
 """
 
-db.init(config=Config.get(option="test"))
+db.start(config=Config.get(option="test"))
+cache.start(config=Config.get(option="test"))
 
 
 @pytest.fixture(scope="session")

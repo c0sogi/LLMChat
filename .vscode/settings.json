@@ -1,7 +1,7 @@
 {
     "python.testing.pytestArgs": [
         "tests",
-        // "-s",
+        "-s",
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
