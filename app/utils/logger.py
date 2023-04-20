@@ -14,7 +14,7 @@ from app.errors.api_exceptions import APIException, InternalServerError
 logger.setLevel(logging.INFO)
 
 
-async def hide_email(email: str) -> str:
+def hide_email(email: str) -> str:
     separated_email = email.split("@")
     if len(separated_email) == 2:
         local_parts, domain = separated_email
@@ -23,7 +23,7 @@ async def hide_email(email: str) -> str:
         return "".join(separated_email)
 
 
-async def error_log_generator(
+def error_log_generator(
     error: InternalServerError | HTTPException | APIException, request: Request
 ) -> dict[str, any]:
     if request.state.inspect is not None:
@@ -42,7 +42,7 @@ async def error_log_generator(
     }
 
 
-async def api_logger(
+def api_logger(
     request: Request,
     response: Optional[Response] = None,
     error: Optional[InternalServerError | HTTPException | APIException] = None,
@@ -58,13 +58,13 @@ async def api_logger(
         "url": request.url.hostname + request.url.path,
         "method": str(request.method),
         "statusCode": status_code,
-        "errorDetail": await error_log_generator(error=error, request=request)
+        "errorDetail": error_log_generator(error=error, request=request)
         if error is not None
         else None,
         "client": {
             "client": request.state.ip,
             "user": user.id if user and user.id else None,
-            "email": (await hide_email(email=user.email))
+            "email": hide_email(email=user.email)
             if user and user.email
             else None,
         },

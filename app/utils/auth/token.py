@@ -13,7 +13,7 @@ def create_access_token(*, data: dict = None, expires_delta: int = None) -> str:
     return jwt_encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
-async def token_decode(authorization: str) -> dict:
+def token_decode(authorization: str) -> dict:
     try:
         authorization = authorization.replace("Bearer ", "")
         payload = jwt_decode(authorization, key=JWT_SECRET, algorithms=[JWT_ALGORITHM])

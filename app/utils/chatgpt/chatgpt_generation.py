@@ -11,35 +11,33 @@ from app.errors.gpt_exceptions import (
     GptException,
     GptLengthException,
 )
+from app.utils.chatgpt.chatgpt_message_manager import MessageManager
+from app.viewmodels.base_models import SendInitToWebsocket, SendToOpenAI
 from app.viewmodels.gpt_models import UserGptContext
 from app.utils.chatgpt.chatgpt_config import ChatGPTConfig
-from app.utils.chatgpt.chatgpt_context_manager import context_manager
 from app.utils.logger import logger
 
 
-async def message_history_organizer(
-    user_gpt_context: UserGptContext,
-) -> list[dict[str, str]]:  # organize message history for openai api
-    message_histories: list[dict[str, str]] = []
-    for system_history in user_gpt_context.system_message_histories:
-        message_histories.append(
-            {"role": system_history.role, "content": system_history.content}
-        )  # append system message history
+def message_history_organizer(
+    user_gpt_context: UserGptContext, send_to_openai: bool = True
+) -> list[dict]:  # organize message history for openai api
+    message_histories: list[dict] = []
+    if send_to_openai:
+        for system_history in user_gpt_context.system_message_histories:
+            message_histories.append(SendToOpenAI.from_orm(system_history).dict())  # append system message history
     for user_message_history, gpt_message_history in zip_longest(
         user_gpt_context.user_message_histories,
         user_gpt_context.gpt_message_histories,
     ):
         message_histories.append(
-            {
-                "role": user_message_history.role,
-                "content": user_message_history.content,
-            }
+            SendToOpenAI.from_orm(user_message_history).dict()
+            if send_to_openai
+            else SendInitToWebsocket.from_orm(user_message_history).dict()
         ) if user_message_history is not None else ...  # append user message history
         message_histories.append(
-            {
-                "role": gpt_message_history.role,
-                "content": gpt_message_history.content,
-            }
+            SendToOpenAI.from_orm(gpt_message_history).dict()
+            if send_to_openai
+            else SendInitToWebsocket.from_orm(gpt_message_history).dict()
         ) if gpt_message_history is not None else ...  # append gpt message history
     if user_gpt_context.is_discontinued:
         for message_history in reversed(message_histories):
@@ -54,9 +52,11 @@ async def generate_from_openai(
     user_gpt_context: UserGptContext,  # gpt context for user
 ) -> AsyncGenerator:  # async generator for streaming
     async with httpx.AsyncClient(timeout=ChatGPTConfig.wait_for_timeout) as client:  # initialize client
+        is_appending_discontinued_message: bool = False
         while True:  # stream until connection is closed
             logger.info("Generating from OpenAI...")
-            gpt_content: str = ""  # initialize gpt_content
+            if not user_gpt_context.is_discontinued:
+                gpt_content: str = ""
             try:
                 async with client.stream(
                     method="POST",
@@ -67,7 +67,7 @@ async def generate_from_openai(
                     },  # set headers for openai api request
                     json={
                         "model": user_gpt_context.gpt_model.name,
-                        "messages": await message_history_organizer(user_gpt_context=user_gpt_context),
+                        "messages": message_history_organizer(user_gpt_context=user_gpt_context),
                         "temperature": user_gpt_context.user_gpt_profile.temperature,
                         "top_p": user_gpt_context.user_gpt_profile.top_p,
                         "n": 1,
@@ -111,32 +111,38 @@ async def generate_from_openai(
                                 yield delta
             except GptLengthException:
                 logger.error("token limit exceeded")
-                await user_gpt_context.add_gpt_message_history_safely(gpt_content)
-                context_manager.update_message_histories(
-                    user_id=user_gpt_context.user_gpt_profile.user_id,
-                    role="gpt",
-                    message_histories=user_gpt_context.gpt_message_histories,
-                )
+                if is_appending_discontinued_message:
+                    MessageManager.set_message_history_safely(
+                        user_gpt_context=user_gpt_context,
+                        new_content=gpt_content,
+                        role="gpt",
+                        index=-1,
+                    )
+                else:
+                    MessageManager.add_message_history_safely(
+                        user_gpt_context=user_gpt_context,
+                        content=gpt_content,
+                        role="gpt",
+                    )
+                    is_appending_discontinued_message = True
                 user_gpt_context.is_discontinued = True
                 continue
             except GptException as gpt_exception:
                 logger.error(f"gpt exception: {gpt_exception.msg}")
-                user_gpt_context.user_message_tokens -= user_gpt_context.user_message_histories.pop().tokens
+                MessageManager.rpop_message_history_safely(user_gpt_context=user_gpt_context, role="user")
                 yield gpt_exception.msg
                 break
             except httpx.TimeoutException:
                 await sleep(ChatGPTConfig.wait_for_reconnect)
+                continue
             except Exception as exception:
-                user_gpt_context.user_message_tokens -= user_gpt_context.user_message_histories.pop().tokens
+                MessageManager.rpop_message_history_safely(user_gpt_context=user_gpt_context, role="user")
                 raise Responses_500.websocket_error(
                     msg=f"unexpected exception generating text from openai: {exception}"
                 )
             else:
-                await user_gpt_context.add_gpt_message_history_safely(gpt_content)
-                context_manager.update_message_histories(
-                    user_id=user_gpt_context.user_gpt_profile.user_id,
-                    role="gpt",
-                    message_histories=user_gpt_context.gpt_message_histories,
+                MessageManager.add_message_history_safely(
+                    user_gpt_context=user_gpt_context, content=gpt_content, role="gpt"
                 )
                 user_gpt_context.is_discontinued = False
                 break

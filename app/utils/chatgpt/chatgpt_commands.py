@@ -1,5 +1,6 @@
+from app.utils.chatgpt.chatgpt_message_manager import MessageManager
 from app.viewmodels.gpt_models import MessageHistory, UserGptContext
-from app.utils.chatgpt.chatgpt_context_manager import context_manager
+from app.utils.chatgpt.chatgpt_context_manager import chatgpt_cache_manager
 
 
 class ChatGptCommands:  # commands for chat gpt
@@ -13,13 +14,10 @@ class ChatGptCommands:  # commands for chat gpt
         n_user_tokens: int = user_gpt_context.user_message_tokens
         n_gpt_tokens: int = user_gpt_context.gpt_message_tokens
         n_system_tokens: int = user_gpt_context.system_message_tokens
-        user_gpt_context.user_message_histories.clear()  # clear user message histories
-        user_gpt_context.gpt_message_histories.clear()  # clear gpt message histories
-        user_gpt_context.system_message_histories.clear()  # clear system message histories
-        user_gpt_context.user_message_tokens = 0  # reset user message tokens
-        user_gpt_context.gpt_message_tokens = 0  # reset gpt message tokens
-        user_gpt_context.system_message_tokens = 0  # reset system message tokens
-        context_manager.update_context(user_gpt_context)  # update user_gpt_context
+        for role in ("user", "gpt", "system"):
+            getattr(user_gpt_context, f"{role}_message_histories").clear()
+            setattr(user_gpt_context, f"{role}_message_tokens", 0)
+            chatgpt_cache_manager.delete_message_history(user_id=user_gpt_context.user_gpt_profile.user_id, role=role)
         response: str = f"총 {n_user_tokens}개의 사용자 토큰, {n_gpt_tokens}개의 GPT 토큰, {n_system_tokens}개의 시스템 토큰이 삭제되었습니다."
         return response  # return success message
 
@@ -29,19 +27,22 @@ class ChatGptCommands:  # commands for chat gpt
 
     @staticmethod
     def reset(*args, user_gpt_context: UserGptContext) -> str:  # reset user_gpt_context
-        user_id: str = user_gpt_context.user_gpt_profile.user_id
-        if context_manager.reset_context(user_id):  # if reset success
+        user_gpt_context.reset()
+        if chatgpt_cache_manager.reset_context(user_id=user_gpt_context.user_gpt_profile.user_id):  # if reset success
             return "컨텍스트를 리셋했습니다."
         else:
             return "컨텍스트를 리셋하지 못했습니다."  # return fail message
 
     @staticmethod
-    async def system(*args, user_gpt_context: UserGptContext) -> str:  # add system message
+    def system(*args, user_gpt_context: UserGptContext) -> str:  # add system message
         if len(args) < 1:  # if no args
             return "/system SYSTEM_MESSAGE와 같은 형식으로 입력해야 합니다."  # return fail message
         system_message: str = " ".join(args)
-        await user_gpt_context.add_system_message_history_safely(system_message)  # add system message safely
-        context_manager.update_context(user_gpt_context)  # update user_gpt_context
+        MessageManager.add_message_history_safely(
+            user_gpt_context=user_gpt_context,
+            content=system_message,
+            role=user_gpt_context.user_gpt_profile.system_role,
+        )
         return f"시스템 메시지를 `{system_message}`로 추가하였습니다!"  # return success message
 
     @staticmethod
@@ -58,7 +59,7 @@ class ChatGptCommands:  # commands for chat gpt
         else:
             previous_temperature: str = user_gpt_context.user_gpt_profile.temperature
             user_gpt_context.user_gpt_profile.temperature = now_temperature
-            context_manager.update_context(user_gpt_context)  # update user_gpt_context
+            chatgpt_cache_manager.update_profile_and_model(user_gpt_context)  # update user_gpt_context
             return f"temperature 값을 {previous_temperature}에서 {now_temperature}로 바꿨어요."  # return success message
 
     @classmethod
@@ -79,7 +80,7 @@ class ChatGptCommands:  # commands for chat gpt
         else:
             previous_top_p: str = user_gpt_context.user_gpt_profile.top_p
             user_gpt_context.user_gpt_profile.top_p = now_top_p  # set top_p
-            context_manager.update_context(user_gpt_context)  # update user_gpt_context
+            chatgpt_cache_manager.update_profile_and_model(user_gpt_context)  # update user_gpt_context
             return f"top_p 값을 {previous_top_p}에서 {now_top_p}로 바꿨어요."  # return success message
 
     @staticmethod
@@ -96,32 +97,22 @@ class ChatGptCommands:  # commands for chat gpt
             "gpt",
         ):  # if args[0] is not user or system or gpt
             return "user, system, gpt 중 하나를 입력해야 합니다." if not is_silent else ""  # return fail message
-        # find attributes of histories and tokens of user, system, gpt, using getattr and setattr
-        message_histories: list[MessageHistory] = getattr(user_gpt_context, f"{args[0]}_message_histories")
-        message_tokens: int = getattr(user_gpt_context, f"{args[0]}_message_tokens")
-        if len(message_histories) < 1:  # if no message histories
+        last_message_history: MessageHistory | None = MessageManager.rpop_message_history_safely(
+            user_gpt_context=user_gpt_context, role=args[0]
+        )  # pop last message history
+        if last_message_history is None:  # if last_message_history is None
             return f"{args[0]} 메시지가 없어서 삭제할 수 없습니다." if not is_silent else ""  # return fail message
-        last_message_history: MessageHistory = message_histories.pop()  # pop last message history
-        setattr(
-            user_gpt_context,
-            f"{args[0]}_message_tokens",
-            message_tokens - last_message_history.tokens,
-        )  # pop last message tokens
-        context_manager.update_context(user_gpt_context)  # update user_gpt_context
         return (
-            f"{args[0]} 메시지를 `{last_message_history.content}`로 삭제하였습니다!" if not is_silent else ""
+            f"{args[0]}의 메시지인 `{last_message_history.content}`을 삭제하였습니다!" if not is_silent else ""
         )  # return success message
 
     @staticmethod
-    def retry(*args, user_gpt_context: UserGptContext) -> str:
+    def retry(*args, user_gpt_context: UserGptContext) -> None | str:
         # retry last gpt message, format: /retry
         if len(user_gpt_context.user_message_histories) < 1 or len(user_gpt_context.gpt_message_histories) < 1:
             return "메시지가 없어서 다시 할 수 없습니다."
-        # pop the lastest user and gpt message histories and deduct tokens
-        user_gpt_context.user_message_tokens -= user_gpt_context.user_message_histories.pop().tokens
-        user_gpt_context.gpt_message_tokens -= user_gpt_context.gpt_message_histories.pop().tokens
-        context_manager.update_context(user_gpt_context)  # update user_gpt_context
-        return "다시 말해 볼게요!"  # return success message
+        MessageManager.rpop_message_history_safely(user_gpt_context=user_gpt_context, role="gpt")
+        return None
 
     @staticmethod
     def ping(*args, user_gpt_context: UserGptContext) -> str:

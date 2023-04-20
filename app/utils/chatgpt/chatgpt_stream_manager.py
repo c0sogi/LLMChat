@@ -1,3 +1,4 @@
+import json
 from typing import AsyncGenerator, Callable
 from inspect import iscoroutinefunction
 from fastapi import WebSocket, WebSocketDisconnect
@@ -5,11 +6,12 @@ from app.common.config import GOOGLE_TRANSLATE_API_KEY
 from app.errors.gpt_exceptions import (
     GptTooMuchTokenException,
 )
-from app.viewmodels.base_models import SendChatMessage, ReceiveChatMessage
+from app.utils.chatgpt.chatgpt_message_manager import MessageManager
+from app.viewmodels.base_models import MessageToWebsocket, MessageFromWebsocket
 from app.viewmodels.gpt_models import UserGptContext
 from app.utils.chatgpt.chatgpt_commands import ChatGptCommands
-from app.utils.chatgpt.chatgpt_context_manager import context_manager
-from app.utils.chatgpt.chatgpt_generation import generate_from_openai
+from app.utils.chatgpt.chatgpt_context_manager import chatgpt_cache_manager
+from app.utils.chatgpt.chatgpt_generation import generate_from_openai, message_history_organizer
 from app.utils.api.translate import google_translate_api
 
 
@@ -18,32 +20,40 @@ async def begin_chat(
     user_id: str,
     openai_api_key: str,
 ) -> None:  # websocket for chat gpt
-    user_gpt_context: UserGptContext = context_manager.read_context(user_id)
+    user_gpt_context: UserGptContext = chatgpt_cache_manager.read_context(user_id)
+    await SendToWebsocket.message(
+        websocket=websocket,
+        msg=json.dumps(message_history_organizer(user_gpt_context=user_gpt_context, send_to_openai=False)),
+        chat_room_id=0,
+        init=True,
+    )
     while True:  # loop until connection is closed
         try:
             # initialize variables
-            received: ReceiveChatMessage = ReceiveChatMessage.parse_raw(await websocket.receive_text())
+            received: MessageFromWebsocket = MessageFromWebsocket.parse_raw(await websocket.receive_text())
             msg: str = received.msg
             translate: bool = received.translate
             chat_room_id: int = received.chat_room_id
 
             # TODO: validate if chat room belongs to user
-            # print("received_chat_message: ", msg)
 
             if msg.startswith("/"):  # if user message is command
-                await SendToWebsocket.message(
+                command_response: str | None = await get_command_response(msg=msg, user_gpt_context=user_gpt_context)
+                if command_response is not None:
+                    await SendToWebsocket.message(
+                        websocket=websocket,
+                        msg=command_response,
+                        chat_room_id=chat_room_id,
+                    )  # send callback response to websocket
+                    continue
+            else:
+                await HandleMessage.user(
                     websocket=websocket,
-                    msg=await get_command_response(msg=msg, user_gpt_context=user_gpt_context),
+                    user_gpt_context=user_gpt_context,
+                    msg=msg,
+                    translate=translate,
                     chat_room_id=chat_room_id,
-                )  # send callback response to websocket
-                continue
-            await HandleMessage.user(
-                websocket=websocket,
-                user_gpt_context=user_gpt_context,
-                msg=msg,
-                translate=translate,
-                chat_room_id=chat_room_id,
-            )
+                )
             await HandleMessage.gpt(
                 websocket=websocket,
                 user_gpt_context=user_gpt_context,
@@ -64,7 +74,7 @@ async def begin_chat(
         except Exception as exception:  # if other exception is raised
             print(f"chat exception: {exception}")
             await websocket.send_json(  # finish stream message
-                SendChatMessage(
+                MessageToWebsocket(
                     msg="",
                     finish=True,
                     chat_room_id=chat_room_id,
@@ -82,13 +92,15 @@ class SendToWebsocket:
         chat_room_id: int = 0,
         finish: bool = True,
         is_user: bool = False,
+        init: bool = False,
     ) -> None:  # send whole message to websocket
         await websocket.send_json(  # send stream message
-            SendChatMessage(
+            MessageToWebsocket(
                 msg=msg,
                 finish=finish,
                 chat_room_id=chat_room_id,
                 is_user=is_user,
+                init=init,
             ).dict()
         )
 
@@ -104,7 +116,7 @@ class SendToWebsocket:
         async for delta in stream:  # stream from api
             response += delta
             await websocket.send_json(
-                SendChatMessage(
+                MessageToWebsocket(
                     msg=delta,
                     finish=False,
                     chat_room_id=chat_room_id,
@@ -113,7 +125,7 @@ class SendToWebsocket:
             )
         if finish:
             await websocket.send_json(  # finish stream message
-                SendChatMessage(
+                MessageToWebsocket(
                     msg="",
                     finish=True,
                     chat_room_id=chat_room_id,
@@ -150,11 +162,8 @@ class HandleMessage:
             raise GptTooMuchTokenException(
                 msg=f"메시지가 너무 길어요. 현재 토큰 개수는 {user_token}로, {user_gpt_context.token_per_request} 이하여야 합니다."
             )
-        await user_gpt_context.add_user_message_history_safely(translated_msg if translate else msg)
-        context_manager.update_message_histories(
-            user_id=user_gpt_context.user_gpt_profile.user_id,
-            role="user",
-            message_histories=user_gpt_context.user_message_histories,
+        MessageManager.add_message_history_safely(
+            user_gpt_context=user_gpt_context, content=translated_msg if translate else msg, role="user"
         )
 
     @staticmethod
@@ -186,7 +195,7 @@ class HandleMessage:
             )
 
 
-async def get_command_response(msg: str, user_gpt_context: UserGptContext) -> str:
+async def get_command_response(msg: str, user_gpt_context: UserGptContext) -> str | None:
     user_command: list = msg.split()
     callback: Callable[[list, UserGptContext], str] = (
         getattr(ChatGptCommands, user_command[0][1:])

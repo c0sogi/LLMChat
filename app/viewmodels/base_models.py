@@ -102,17 +102,18 @@ class CreateChatMessage(BaseModel):
         orm_mode = True
 
 
-class SendChatMessage(BaseModel):
+class MessageToWebsocket(BaseModel):
     msg: str
     finish: bool
     chat_room_id: int
     is_user: bool
+    init: bool = False
 
     class Config:
         orm_mode = True
 
 
-class ReceiveChatMessage(BaseModel):
+class MessageFromWebsocket(BaseModel):
     msg: str
     translate: bool
     chat_room_id: int
@@ -126,6 +127,24 @@ class CreateChatRoom(BaseModel):
     name: str
     description: str = None
     user_id: int
+
+    class Config:
+        orm_mode = True
+
+
+class SendToOpenAI(BaseModel):
+    role: str
+    content: str
+
+    class Config:
+        orm_mode = True
+
+
+class SendInitToWebsocket(BaseModel):
+    content: str
+    tokens: int
+    is_user: bool
+    timestamp: int
 
     class Config:
         orm_mode = True

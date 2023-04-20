@@ -28,7 +28,7 @@ from app.utils.params_utils import hash_params
 
 class StateManager:
     @staticmethod
-    async def init(request: Request):
+    def init(request: Request):
         request.state.req_time: datetime = UTC.now()
         request.state.start: float = time()
         request.state.ip: str = request.client.host.split(",")[0] if "," in request.client.host else request.client.host
@@ -57,7 +57,7 @@ class AccessControl:
         )
 
     @staticmethod
-    async def non_api_service(
+    def non_api_service(
         headers: Headers,
         cookies: dict[str, str],
     ) -> UserToken:
@@ -67,7 +67,7 @@ class AccessControl:
             token = cookies.get("Authorization")
         else:
             raise Responses_401.not_authorized
-        return await Validator.jwt(token)
+        return Validator.jwt(token)
 
 
 class Validator:
@@ -90,15 +90,15 @@ class Validator:
         return UserToken(**matched_user.to_dict())
 
     @staticmethod
-    async def jwt(
+    def jwt(
         authorization: str,
     ) -> UserToken:
-        token_info: dict = await token_decode(authorization=authorization)
+        token_info: dict = token_decode(authorization=authorization)
         return UserToken(**token_info)
 
 
 async def access_control(request: Request, call_next: RequestResponseEndpoint):
-    await StateManager.init(request=request)
+    StateManager.init(request=request)
     url: str = request.url.path
     error: Optional[InternalServerError | HTTPException | APIException] = None
     response: Optional[Response] = None
@@ -116,14 +116,14 @@ async def access_control(request: Request, call_next: RequestResponseEndpoint):
             )
         else:
             # Non Api-service endpoint (required: jwttoken)
-            request.state.user: UserToken = await AccessControl.non_api_service(
+            request.state.user: UserToken = AccessControl.non_api_service(
                 headers=request.headers,
                 cookies=request.cookies,
             )
         response = await call_next(request)  # actual endpoint response
 
     except Exception as exception:  # If any error occurs...
-        error: HTTPException | InternalServerError | APIException = await exception_handler(error=exception)
+        error: HTTPException | InternalServerError | APIException = exception_handler(error=exception)
         response = JSONResponse(
             status_code=error.status_code,
             content={
@@ -136,7 +136,7 @@ async def access_control(request: Request, call_next: RequestResponseEndpoint):
     finally:
         # Log error or service info
         if url.startswith("/api/services") or error is not None:
-            await api_logger(
+            api_logger(
                 request=request,
                 response=response,
                 error=error,

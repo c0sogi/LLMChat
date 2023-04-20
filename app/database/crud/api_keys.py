@@ -21,7 +21,7 @@ async def create_api_key(
         if api_key_count >= MAX_API_KEY:
             raise Responses_400.max_key_count_exceed
         while True:
-            new_api_key: ApiKeys = await generate_new_api_key(user_id=user_id, additional_key_info=additional_key_info)
+            new_api_key: ApiKeys = generate_new_api_key(user_id=user_id, additional_key_info=additional_key_info)
             is_api_key_duplicate_stmt = select(exists().where(ApiKeys.access_key == new_api_key.access_key))
             is_api_key_duplicate: bool = await transaction.scalar(is_api_key_duplicate_stmt)
             if not is_api_key_duplicate:

@@ -216,7 +216,7 @@ class Responses_500:
     )
 
 
-async def exception_handler(
+def exception_handler(
     error: Exception,
 ) -> InternalServerError | HTTPException | APIException:
     if isinstance(error, APIException):
