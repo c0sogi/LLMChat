@@ -1,5 +1,4 @@
 import json
-
 from typing import Literal
 from app.database.connection import RedisFactory, cache
 from app.viewmodels.gpt_models import GPT_MODELS, MessageHistory, UserGptContext, UserGptProfile
@@ -28,12 +27,12 @@ class ChatGptCacheManager:
     def _get_list_fields(self, user_id: str) -> dict[str, str]:
         return {field: self._generate_key(user_id, field) for field in self._list_fields}
 
-    def read_context(self, user_id: str) -> UserGptContext:
+    async def read_context(self, user_id: str) -> UserGptContext:
         stored_string: dict[str, str | None] = {
-            field: self.cache.redis.get(key) for field, key in self._get_string_fields(user_id).items()
+            field: await self.cache.redis.get(key) for field, key in self._get_string_fields(user_id).items()
         }
         stored_list: dict[str, list[str] | None] = {
-            field: self.cache.redis.lrange(key, 0, -1) for field, key in self._get_list_fields(user_id).items()
+            field: await self.cache.redis.lrange(key, 0, -1) for field, key in self._get_list_fields(user_id).items()
         }
 
         # if any of stored strings are None, create new context
@@ -64,7 +63,7 @@ class ChatGptCacheManager:
             is_discontinued=False,
         )
 
-    def create_context(
+    async def create_context(
         self,
         user_id: str,
         user_gpt_context: UserGptContext,
@@ -75,7 +74,7 @@ class ChatGptCacheManager:
         success: bool = True
 
         for field, key in self._get_string_fields(user_id=user_id).items():
-            result = self.cache.redis.set(
+            result = await self.cache.redis.set(
                 key,
                 json.dumps(json_data[field]),
                 xx=only_if_exists,
@@ -83,14 +82,14 @@ class ChatGptCacheManager:
             )
             success &= bool(result)
         for field, key in self._get_list_fields(user_id=user_id).items():
-            result = self.cache.redis.delete(key)
+            result = await self.cache.redis.delete(key)
             for item in json_data[field]:
-                result = self.cache.redis.rpush(key, json.dumps(item))
+                result = await self.cache.redis.rpush(key, json.dumps(item))
                 success &= bool(result)
 
         return success
 
-    def reset_context(
+    async def reset_context(
         self,
         user_id: str,
         only_if_exists: bool = True,
@@ -103,7 +102,7 @@ class ChatGptCacheManager:
             only_if_not_exists=only_if_not_exists,
         )
 
-    def update_context(
+    async def update_context(
         self,
         user_gpt_context: UserGptContext,
         only_if_exists: bool = True,
@@ -112,21 +111,21 @@ class ChatGptCacheManager:
         success = True
 
         for field, key in self._get_string_fields(user_id=user_gpt_context.user_gpt_profile.user_id).items():
-            result = self.cache.redis.set(
+            result = await self.cache.redis.set(
                 key,
                 json.dumps(json_data[field]),
                 xx=only_if_exists,
             )
             success &= bool(result)
         for field, key in self._get_list_fields(user_id=user_gpt_context.user_gpt_profile.user_id).items():
-            result = self.cache.redis.delete(key)
+            result = await self.cache.redis.delete(key)
             success &= bool(result)
             for item in json_data[field]:
-                result = self.cache.redis.rpush(key, json.dumps(item))
+                result = await self.cache.redis.rpush(key, json.dumps(item))
                 success &= bool(result)
         return success
 
-    def update_profile_and_model(
+    async def update_profile_and_model(
         self,
         user_gpt_context: UserGptContext,
         only_if_exists: bool = True,
@@ -135,7 +134,7 @@ class ChatGptCacheManager:
         success = True
 
         for field, key in self._get_string_fields(user_id=user_gpt_context.user_gpt_profile.user_id).items():
-            result = self.cache.redis.set(
+            result = await self.cache.redis.set(
                 key,
                 json.dumps(json_data[field]),
                 xx=only_if_exists,
@@ -143,7 +142,7 @@ class ChatGptCacheManager:
             success &= bool(result)
         return success
 
-    def update_message_histories(
+    async def update_message_histories(
         self,
         user_id: str,
         role: Literal["user", "gpt", "system"],
@@ -152,11 +151,11 @@ class ChatGptCacheManager:
         assert role in ("user", "gpt", "system")
         key = self._generate_key(user_id, f"{role}_message_histories")
         message_histories_json = [json.dumps(message_history.__dict__) for message_history in message_histories]
-        result = self.cache.redis.delete(key)
-        result &= self.cache.redis.rpush(key, *message_histories_json)
+        result = await self.cache.redis.delete(key)
+        result &= await self.cache.redis.rpush(key, *message_histories_json)
         return bool(result)
 
-    def lpop_message_history(
+    async def lpop_message_history(
         self,
         user_id: str,
         role: Literal["user", "gpt", "system"],
@@ -164,7 +163,7 @@ class ChatGptCacheManager:
     ) -> MessageHistory | None:
         assert role in ("user", "gpt", "system")
         assert count is None or count > 0
-        message_history_json = self.cache.redis.lpop(
+        message_history_json = await self.cache.redis.lpop(
             self._generate_key(user_id, f"{role}_message_histories"), count=count
         )
         if message_history_json is None:
@@ -175,7 +174,7 @@ class ChatGptCacheManager:
         # otherwise, it is a single message history
         return MessageHistory(**json.loads(message_history_json))
 
-    def rpop_message_history(
+    async def rpop_message_history(
         self,
         user_id: str,
         role: Literal["user", "gpt", "system"],
@@ -183,7 +182,7 @@ class ChatGptCacheManager:
     ) -> MessageHistory | None:
         assert role in ("user", "gpt", "system")
         assert count is None or count > 0
-        message_history_json = self.cache.redis.rpop(
+        message_history_json = await self.cache.redis.rpop(
             self._generate_key(user_id, f"{role}_message_histories"), count=count
         )
         if message_history_json is None:
@@ -194,7 +193,7 @@ class ChatGptCacheManager:
         # otherwise, it is a single message history
         return MessageHistory(**json.loads(message_history_json))
 
-    def append_message_history(
+    async def append_message_history(
         self,
         user_id: str,
         role: Literal["user", "gpt", "system"],
@@ -205,35 +204,35 @@ class ChatGptCacheManager:
         message_history_key = self._generate_key(user_id, f"{role}_message_histories")
         message_history_json = json.dumps(message_history.__dict__)
         result = (
-            self.cache.redis.rpush(message_history_key, message_history_json)
+            await self.cache.redis.rpush(message_history_key, message_history_json)
             if not if_exists
-            else self.cache.redis.rpushx(message_history_key, message_history_json)
+            else await self.cache.redis.rpushx(message_history_key, message_history_json)
         )
         return bool(result)
 
-    def get_message_history(
+    async def get_message_history(
         self,
         user_id: str,
         role: Literal["user", "gpt", "system"],
     ) -> list[MessageHistory]:
         assert role in ("user", "gpt", "system")
         key = self._generate_key(user_id, f"{role}_message_histories")
-        raw_message_histories = self.cache.redis.lrange(key, 0, -1)
+        raw_message_histories = await self.cache.redis.lrange(key, 0, -1)
         if raw_message_histories is None:
             return []
         return [MessageHistory(**json.loads(raw_message_history)) for raw_message_history in raw_message_histories]
 
-    def delete_message_history(
+    async def delete_message_history(
         self,
         user_id: str,
         role: Literal["user", "gpt", "system"],
     ) -> bool:
         assert role in ("user", "gpt", "system")
         key = self._generate_key(user_id, f"{role}_message_histories")
-        result = self.cache.redis.delete(key)
+        result = await self.cache.redis.delete(key)
         return bool(result)
 
-    def set_message_history(
+    async def set_message_history(
         self,
         user_id: str,
         message_history: MessageHistory,
@@ -244,7 +243,7 @@ class ChatGptCacheManager:
         key = self._generate_key(user_id, f"{role}_message_histories")
         # value in redis is a list of message histories
         # set the last element of the list to the new message history
-        result = self.cache.redis.lset(key, index, json.dumps(message_history.__dict__))
+        result = await self.cache.redis.lset(key, index, json.dumps(message_history.__dict__))
         return bool(result)
 
 

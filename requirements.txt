@@ -30,6 +30,7 @@ PyJWT
 PyMySQL
 pyparsing
 pytest
+pytest-asyncio
 python-dateutil
 redis
 requests

@@ -1,14 +1,16 @@
 import pytest
 from sqlalchemy import select
 from uuid import uuid4
+from app.common.config import Config
 from app.viewmodels.base_models import AddApiKey, UserToken
 from app.database.connection import db
 from app.database.schemas.auth import Users, ApiKeys
 from app.database.crud.api_keys import create_api_key, get_api_key_and_owner
 from app.middlewares.token_validator import Validator
-
 from app.utils.date_utils import UTC
 from app.utils.params_utils import hash_params, parse_params
+
+db.start(config=Config.get(option="test"))
 
 
 @pytest.mark.asyncio

@@ -1,16 +1,53 @@
 import time
 from fastapi.testclient import TestClient
-import pytest
 import logging
+import pytest
 from starlette.testclient import WebSocketTestSession
-from app.common.config import HOST_MAIN, OPENAI_API_KEY
-from app.utils.chatgpt.chatgpt_context_manager import chatgpt_cache_manager
+from app.common.config import OPENAI_API_KEY, Config
 from app.viewmodels.base_models import MessageFromWebsocket, MessageToWebsocket
+from app.utils.chatgpt.chatgpt_cache_manager import chatgpt_cache_manager
+from app.viewmodels.gpt_models import MessageHistory, UserGptContext
+
+chatgpt_cache_manager.cache.start(config=Config.get(option="test"))
 
 
+@pytest.mark.skip
 @pytest.mark.asyncio
-async def test_chatgpt_connection(fake_client: TestClient, base_websocket_url: str):
-    with fake_client.websocket_connect(f"{base_websocket_url}/ws/chatgpt/{OPENAI_API_KEY}") as ws_client:
+async def test_chatgpt_redis():
+    # set random context
+    user_id: str = ""
+    role: str = "user"
+    message: str = "test message"
+    default_context: UserGptContext = UserGptContext.construct_default(user_id=user_id)
+
+    # reset context
+    await chatgpt_cache_manager.reset_context(user_id=user_id)
+
+    # create context
+    await chatgpt_cache_manager.create_context(
+        user_id="",
+        user_gpt_context=default_context,
+    )
+    # read context
+    context: UserGptContext = await chatgpt_cache_manager.read_context(user_id="")
+    assert context == default_context
+
+    # add new message to redis
+    new_message: MessageHistory = MessageHistory(
+        role=role, content=message, is_user=True, tokens=len(context.tokenize(message))
+    )
+    await chatgpt_cache_manager.append_message_history(user_id=user_id, role=role, message_history=new_message)
+
+    # read message from redis
+    message_histories: list[MessageHistory] = await chatgpt_cache_manager.get_message_history(
+        user_id=user_id, role=role
+    )
+    assert message_histories == [new_message]
+
+
+@pytest.mark.skipif(OPENAI_API_KEY is None, reason="OpenAI API Key is not set")
+def test_chatgpt_connection(websocket_app: TestClient, base_websocket_url: str):
+    with websocket_app.websocket_connect(f"{base_websocket_url}/ws/chatgpt/{OPENAI_API_KEY}") as ws_client:
         assert isinstance(ws_client, WebSocketTestSession)
         client_received: MessageToWebsocket = MessageToWebsocket.parse_raw(ws_client.receive_text())
         assert client_received.init
@@ -23,13 +60,11 @@ async def test_chatgpt_connection(fake_client: TestClient, base_websocket_url: s
         ws_client.close()
 
 
-@pytest.mark.asyncio
-async def test_chatgpt_conversation(fake_client: TestClient, base_websocket_url: str):
+@pytest.mark.skipif(OPENAI_API_KEY is None, reason="OpenAI API Key is not set")
+def test_chatgpt_conversation(websocket_app: TestClient, base_websocket_url: str):
     # parameters
     timeout: int = 10
-    # clear redis cache
-    chatgpt_cache_manager.reset_context(user_id=f"testaccount@{HOST_MAIN}")
-    with fake_client.websocket_connect(f"{base_websocket_url}/ws/chatgpt/{OPENAI_API_KEY}") as ws_client:
+    with websocket_app.websocket_connect(f"{base_websocket_url}/ws/chatgpt/{OPENAI_API_KEY}") as ws_client:
         assert isinstance(ws_client, WebSocketTestSession)
         client_received: MessageToWebsocket = MessageToWebsocket.parse_raw(ws_client.receive_text())
         assert client_received.init

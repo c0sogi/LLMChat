@@ -1,11 +1,11 @@
 from typing import Literal
-from app.utils.chatgpt.chatgpt_context_manager import chatgpt_cache_manager
+from app.utils.chatgpt.chatgpt_cache_manager import chatgpt_cache_manager
 from app.viewmodels.gpt_models import MessageHistory, UserGptContext
 
 
 class MessageManager:
     @staticmethod
-    def add_message_history_safely(
+    async def add_message_history_safely(
         user_gpt_context: UserGptContext,
         content: str,
         role: Literal["user", "gpt", "system"],
@@ -25,25 +25,25 @@ class MessageManager:
             getattr(user_gpt_context, f"{role}_message_tokens") + tokens,
         )
         num_of_deleted_histories: int = user_gpt_context.ensure_token_not_exceed()
-        chatgpt_cache_manager.append_message_history(
+        await chatgpt_cache_manager.append_message_history(
             user_id=user_gpt_context.user_gpt_profile.user_id,
             role=role,
             message_history=message_history,
         )
         if num_of_deleted_histories > 0:
             for role in ("user", "gpt"):
-                chatgpt_cache_manager.lpop_message_history(
+                await chatgpt_cache_manager.lpop_message_history(
                     user_id=user_gpt_context.user_gpt_profile.user_id,
                     role=role,
                     count=num_of_deleted_histories,
                 )
 
     @staticmethod
-    def rpop_message_history_safely(
+    async def rpop_message_history_safely(
         user_gpt_context: UserGptContext,
-        role: Literal["user", "gpt"],
+        role: Literal["user", "gpt", "system"],
     ) -> MessageHistory | None:
-        assert role in ("user", "gpt")
+        assert role in ("user", "gpt", "system")
         try:
             message_history: MessageHistory = getattr(user_gpt_context, f"{role}_message_histories").pop()
         except IndexError:
@@ -53,14 +53,14 @@ class MessageManager:
             f"{role}_message_tokens",
             getattr(user_gpt_context, f"{role}_message_tokens") - message_history.tokens,
         )
-        chatgpt_cache_manager.rpop_message_history(
+        await chatgpt_cache_manager.rpop_message_history(
             user_id=user_gpt_context.user_gpt_profile.user_id,
             role=role,
         )
         return message_history
 
     @staticmethod
-    def set_message_history_safely(
+    async def set_message_history_safely(
         user_gpt_context: UserGptContext,
         new_content: str,
         role: Literal["user", "gpt", "system"],
@@ -78,7 +78,7 @@ class MessageManager:
             getattr(user_gpt_context, f"{role}_message_tokens") + new_tokens - old_tokens,
         )
         num_of_deleted_histories: int = user_gpt_context.ensure_token_not_exceed()
-        chatgpt_cache_manager.set_message_history(
+        await chatgpt_cache_manager.set_message_history(
             user_id=user_gpt_context.user_gpt_profile.user_id,
             role=role,
             message_history=message_history_to_change,
@@ -86,7 +86,7 @@ class MessageManager:
         )
         if num_of_deleted_histories > 0:
             for role in ("user", "gpt"):
-                chatgpt_cache_manager.lpop_message_history(
+                await chatgpt_cache_manager.lpop_message_history(
                     user_id=user_gpt_context.user_gpt_profile.user_id,
                     role=role,
                     count=num_of_deleted_histories,

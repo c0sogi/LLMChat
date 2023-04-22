@@ -124,7 +124,7 @@ class UserGptContext:  # user gpt context for user and gpt
 
     @property
     def token_per_request(self) -> int:
-        return min(self.left_tokens, self.gpt_model.max_tokens_per_request)
+        return self.gpt_model.max_tokens_per_request
 
     def __repr__(self) -> str:
         m: GptModel = self.gpt_model

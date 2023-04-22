@@ -2,7 +2,7 @@ from collections.abc import Iterable
 from asyncio import current_task
 from typing import Callable, Optional, Type
 from urllib import parse
-from redis import Redis
+from redis.asyncio import Redis
 from sqlalchemy import (
     Result,
     ScalarResult,

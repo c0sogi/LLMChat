@@ -86,6 +86,7 @@ class Config(metaclass=SingletonMetaClass):
         option: str | None = None,
     ) -> LocalConfig | ProdConfig | TestConfig:
         config_key = option if option is not None else environ.get("API_ENV", "local")
+        config_key = "test" if environ.get("PYTEST_RUNNING") is not None else config_key
         return {"prod": ProdConfig, "local": LocalConfig, "test": TestConfig}[config_key]()
 
 

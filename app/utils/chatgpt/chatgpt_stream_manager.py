@@ -10,7 +10,7 @@ from app.utils.chatgpt.chatgpt_message_manager import MessageManager
 from app.viewmodels.base_models import MessageToWebsocket, MessageFromWebsocket
 from app.viewmodels.gpt_models import UserGptContext
 from app.utils.chatgpt.chatgpt_commands import ChatGptCommands
-from app.utils.chatgpt.chatgpt_context_manager import chatgpt_cache_manager
+from app.utils.chatgpt.chatgpt_cache_manager import chatgpt_cache_manager
 from app.utils.chatgpt.chatgpt_generation import generate_from_openai, message_history_organizer
 from app.utils.api.translate import google_translate_api
 
@@ -20,7 +20,7 @@ async def begin_chat(
     user_id: str,
     openai_api_key: str,
 ) -> None:  # websocket for chat gpt
-    user_gpt_context: UserGptContext = chatgpt_cache_manager.read_context(user_id)
+    user_gpt_context: UserGptContext = await chatgpt_cache_manager.read_context(user_id)
     await SendToWebsocket.message(
         websocket=websocket,
         msg=json.dumps(message_history_organizer(user_gpt_context=user_gpt_context, send_to_openai=False)),
@@ -162,7 +162,7 @@ class HandleMessage:
             raise GptTooMuchTokenException(
                 msg=f"메시지가 너무 길어요. 현재 토큰 개수는 {user_token}로, {user_gpt_context.token_per_request} 이하여야 합니다."
             )
-        MessageManager.add_message_history_safely(
+        await MessageManager.add_message_history_safely(
             user_gpt_context=user_gpt_context, content=translated_msg if translate else msg, role="user"
         )
 

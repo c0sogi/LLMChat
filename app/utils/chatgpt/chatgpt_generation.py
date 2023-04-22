@@ -112,14 +112,14 @@ async def generate_from_openai(
             except GptLengthException:
                 logger.error("token limit exceeded")
                 if is_appending_discontinued_message:
-                    MessageManager.set_message_history_safely(
+                    await MessageManager.set_message_history_safely(
                         user_gpt_context=user_gpt_context,
                         new_content=gpt_content,
                         role="gpt",
                         index=-1,
                     )
                 else:
-                    MessageManager.add_message_history_safely(
+                    await MessageManager.add_message_history_safely(
                         user_gpt_context=user_gpt_context,
                         content=gpt_content,
                         role="gpt",
@@ -129,19 +129,19 @@ async def generate_from_openai(
                 continue
             except GptException as gpt_exception:
                 logger.error(f"gpt exception: {gpt_exception.msg}")
-                MessageManager.rpop_message_history_safely(user_gpt_context=user_gpt_context, role="user")
+                await MessageManager.rpop_message_history_safely(user_gpt_context=user_gpt_context, role="user")
                 yield gpt_exception.msg
                 break
             except httpx.TimeoutException:
                 await sleep(ChatGPTConfig.wait_for_reconnect)
                 continue
             except Exception as exception:
-                MessageManager.rpop_message_history_safely(user_gpt_context=user_gpt_context, role="user")
+                await MessageManager.rpop_message_history_safely(user_gpt_context=user_gpt_context, role="user")
                 raise Responses_500.websocket_error(
                     msg=f"unexpected exception generating text from openai: {exception}"
                 )
             else:
-                MessageManager.add_message_history_safely(
+                await MessageManager.add_message_history_safely(
                     user_gpt_context=user_gpt_context, content=gpt_content, role="gpt"
                 )
                 user_gpt_context.is_discontinued = False

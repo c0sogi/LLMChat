@@ -1,19 +1,17 @@
 import asyncio
 from datetime import datetime
-from os import environ
+from typing import Iterable
 from fastapi import FastAPI, Response
-from starlette.testclient import TestClient
+from fastapi.testclient import TestClient
 import pytest
+from pytest import Function
 from httpx import AsyncClient
 import pytest_asyncio
 from app.utils.auth.token import create_access_token
 from app.utils.tests.tests_utils import random_user_generator
-
-environ["API_ENV"] = "test"
-from app.database.connection import db, cache
 from app.database.schemas.auth import Users
 from app.common.app_settings import create_app
-from app.common.config import Config, config
+from app.common.config import Config
 from app.viewmodels.base_models import UserToken
 
 """
@@ -22,9 +20,6 @@ from app.viewmodels.base_models import UserToken
 3. 테스트 코드 작동
 4. 테이블 레코드 삭제
 """
-
-db.start(config=Config.get(option="test"))
-cache.start(config=Config.get(option="test"))
 
 
 @pytest.fixture(scope="session")
@@ -36,8 +31,7 @@ def event_loop():
 
 @pytest.fixture(scope="session")
 def app() -> FastAPI:
-    _app = create_app(config)
-    return _app
+    return create_app(Config.get(option="test"))
 
 
 @pytest.fixture(scope="session")
@@ -56,9 +50,9 @@ async def real_client(app: FastAPI, base_http_url: str) -> AsyncClient:
         yield ac
 
 
-@pytest.fixture
-def fake_client(app: FastAPI) -> TestClient:
-    with TestClient(app) as tc:
+@pytest.fixture(scope="session")
+def websocket_app(app: FastAPI) -> TestClient:
+    with TestClient(app=app) as tc:
         yield tc
 
 
@@ -102,3 +96,18 @@ async def api_key_dict(real_client: AsyncClient, login_header: str):
 @pytest.fixture(scope="session")
 def random_user():
     return random_user_generator()
+
+
+def pytest_collection_modifyitems(items: Iterable[Function]):
+    app_tests = []
+    redis_tests = []
+    other_tests = []
+    print(items)
+    for item in items:
+        if "websocket_app" in item.fixturenames:
+            app_tests.append(item)
+        elif item.get_closest_marker("redistest") is not None:
+            redis_tests.append(item)
+        else:
+            other_tests.append(item)
+    items[:] = redis_tests + app_tests + other_tests
