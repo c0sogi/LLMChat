@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
-import json
+import orjson
 import tiktoken
 from app.utils.date_utils import UTC
 
@@ -82,7 +82,7 @@ class UserGptContext:  # user gpt context for user and gpt
 
     @classmethod
     def parse_raw(cls, raw: str) -> "UserGptContext":
-        stored: dict = json.loads(raw)
+        stored: dict = orjson.loads(raw)
         return cls(
             user_gpt_profile=UserGptProfile(**stored["user_gpt_profile"]),
             gpt_model=getattr(GPT_MODELS, stored["gpt_model"].replace(".", "_").replace("-", "_")),
@@ -109,7 +109,7 @@ class UserGptContext:  # user gpt context for user and gpt
         }
 
     def json_stringify(self) -> str:
-        return json.dumps(self.json())
+        return orjson.dumps(self.json())
 
     def tokenize(self, message: str) -> list[int]:
         return self.gpt_model.tokenizer.encode(message)

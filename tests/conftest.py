@@ -11,7 +11,8 @@ from app.utils.auth.token import create_access_token
 from app.utils.tests.tests_utils import random_user_generator
 from app.database.schemas.auth import Users
 from app.common.app_settings import create_app
-from app.common.config import Config
+from app.common.config import Config, error_config
+from app.utils.logger import CustomLogger
 from app.viewmodels.base_models import UserToken
 
 """
@@ -22,7 +23,12 @@ from app.viewmodels.base_models import UserToken
 """
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="session", autouse=True)
+def test_logger():
+    return CustomLogger(name="PyTest", error_config=error_config)
+
+
+@pytest.fixture(scope="session", autouse=True)
 def event_loop():
     loop = asyncio.get_event_loop()
     yield loop
@@ -102,7 +108,6 @@ def pytest_collection_modifyitems(items: Iterable[Function]):
     app_tests = []
     redis_tests = []
     other_tests = []
-    print(items)
     for item in items:
         if "websocket_app" in item.fixturenames:
             app_tests.append(item)

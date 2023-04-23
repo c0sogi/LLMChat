@@ -1,4 +1,4 @@
-import json
+import orjson
 import os
 from time import sleep
 import yagmail
@@ -55,7 +55,7 @@ async def send_kakao(request: Request, body: KakaoMsgBody):
         "Content-Type": "application/x-www-form-urlencoded",
     }
 
-    template_object = json.dumps(
+    template_object = orjson.dumps(
         {
             "object_type": "feed",
             "content": {

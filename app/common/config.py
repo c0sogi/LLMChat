@@ -1,8 +1,10 @@
 from __future__ import annotations
+
+import logging
 from dataclasses import dataclass, field
-from re import compile, Pattern
 from os import environ
 from pathlib import Path
+from re import Pattern, compile
 
 
 class SingletonMetaClass(type):
@@ -14,13 +16,20 @@ class SingletonMetaClass(type):
         return cls._instances[cls]
 
 
-DATABASE_URL_FORMAT: str = "{dialect}+{driver}://{user}:{password}@{host}:3306/{database}?charset=utf8mb4"
+MYSQL_URL_FORMAT: str = "{dialect}+{driver}://{user}:{password}@{host}:{port}/{database}?charset=utf8mb4"
 MYSQL_ROOT_PASSWORD: str = environ.get("MYSQL_ROOT_PASSWORD")
 MYSQL_USER: str = environ.get("MYSQL_USER")
 MYSQL_PASSWORD: str = environ.get("MYSQL_PASSWORD")
 MYSQL_DATABASE: str = environ.get("MYSQL_DATABASE")
 MYSQL_TEST_DATABASE: str = environ.get("MYSQL_TEST_DATABASE")
 MYSQL_HOST: str = "db"
+MYSQL_PORT: int = environ.get("MYSQL_PORT", 3306)
+
+REDIS_HOST: str = "cache"
+REDIS_PORT: int = environ.get("REDIS_PORT", 6379)
+REDIS_DATABASE: int = environ.get("REDIS_DATABASE", 0)
+REDIS_PASSWORD: str = environ.get("REDIS_PASSWORD")
+
 HOST_MAIN: str = environ.get("HOST_MAIN")
 JWT_SECRET: str = environ.get("JWT_SECRET")
 AWS_ACCESS_KEY: str = environ.get("AWS_ACCESS_KEY")
@@ -69,15 +78,17 @@ class Config(metaclass=SingletonMetaClass):
     db_echo: bool = True
     debug: bool = False
     test_mode: bool = False
-    database_url_format: str = DATABASE_URL_FORMAT
+    database_url_format: str = MYSQL_URL_FORMAT
     mysql_root_password: str = MYSQL_ROOT_PASSWORD
     mysql_user: str = MYSQL_USER
     mysql_password: str = MYSQL_PASSWORD
     mysql_database: str = MYSQL_DATABASE
     mysql_host: str = MYSQL_HOST
-    redis_host: str = "localhost"
+    mysql_port: int = MYSQL_PORT
+    redis_host: str = REDIS_HOST
     redis_port: int = 6379
-    redis_db: int = 0
+    redis_database: int = REDIS_DATABASE
+    redis_password: str = REDIS_PASSWORD
     trusted_hosts: list = field(default_factory=lambda: ["*"])
     allowed_sites: list = field(default_factory=lambda: ["*"])
 
@@ -93,7 +104,6 @@ class Config(metaclass=SingletonMetaClass):
 @dataclass(frozen=True)
 class LocalConfig(Config, metaclass=SingletonMetaClass):
     debug: bool = True
-    mysql_host: str = "localhost"
 
 
 @dataclass(frozen=True)
@@ -113,7 +123,6 @@ class ProdConfig(Config, metaclass=SingletonMetaClass):
             "localhost",
         ]
     )
-    redis_host: str = "cache"
 
 
 @dataclass(frozen=True)
@@ -122,10 +131,20 @@ class TestConfig(Config, metaclass=SingletonMetaClass):
     debug: bool = False
     mysql_host: str = "localhost"
     mysql_database: str = MYSQL_TEST_DATABASE
+    redis_host: str = "localhost"
+
+
+@dataclass(frozen=True)
+class ErrorConfig:
+    logger_level: int = logging.DEBUG
+    console_log_level: int = logging.INFO
+    file_log_level: int | None = logging.DEBUG
+    file_log_name: str | None = "./logs/debug.log"
+    logging_format: str = "[%(asctime)s] %(name)s:%(levelname)s - %(message)s"
 
 
 config = Config.get()
-
+error_config = ErrorConfig()
 
 if __name__ == "__main__":
     print(BASE_DIR / "app")

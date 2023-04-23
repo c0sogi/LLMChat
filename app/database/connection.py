@@ -22,13 +22,12 @@ from sqlalchemy.ext.asyncio import (
     AsyncEngine,
 )
 from sqlalchemy_utils import database_exists, create_database
-import logging
-from datetime import datetime
-from app.common.config import TestConfig, ProdConfig, LocalConfig, SingletonMetaClass
+from app.utils.logger import CustomLogger
+from app.common.config import error_config, TestConfig, ProdConfig, LocalConfig, SingletonMetaClass
 from . import Base
 
 
-class MySQL:
+class MySQL(metaclass=SingletonMetaClass):
     query_set: dict = {
         "is_user_exists": "SELECT EXISTS(SELECT 1 FROM mysql.user WHERE user = '{user}');",
         "is_db_exists": "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{database}';",
@@ -140,18 +139,23 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         self.engine: AsyncEngine = None
         self.session: AsyncSession = None
         self.is_initiated = False
+        self.logger = CustomLogger("SQLAlchemy", error_config=error_config)
 
     def start(self, config: TestConfig | ProdConfig | LocalConfig) -> None:
         if self.is_initiated:
             return
         self.is_test_mode = True if config.test_mode else False
-        SQLAlchemy.log(f"Current config status: {config}")
+        self.log(
+            f"Current DB connection of {type(config).__name__}: "
+            + f"{config.mysql_host}/{config.mysql_database}@{config.mysql_user}"
+        )
         root_url = config.database_url_format.format(
             dialect="mysql",
             driver="pymysql",
             user="root",
             password=parse.quote(config.mysql_root_password),
             host=config.mysql_host,
+            port=config.mysql_port,
             database=config.mysql_database,
         )
         database_url = config.database_url_format.format(
@@ -160,6 +164,7 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
             user=config.mysql_user,
             password=parse.quote(config.mysql_password),
             host=config.mysql_host,
+            port=config.mysql_port,
             database=config.mysql_database,
         )
         if not database_exists(root_url):
@@ -192,6 +197,11 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
             scopefunc=current_task,
         )
         self.is_initiated = True
+
+    async def close(self) -> None:
+        await self.session.close()
+        await self.engine.dispose()
+        self.is_initiated = False
 
     async def get_db(self) -> AsyncSession:
         async with self.session() as transaction:
@@ -226,9 +236,8 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
 
         return wrapper
 
-    @staticmethod
-    def log(msg) -> None:
-        logging.critical(f"[{datetime.now()}] {msg}")
+    def log(self, msg) -> None:
+        self.logger.critical(msg)
 
     async def _execute(  # To be decorated
         self, session: AsyncSession, stmt: TextClause | Update | Delete | Select
@@ -346,11 +355,16 @@ class RedisFactory(metaclass=SingletonMetaClass):
         self.redis = Redis(
             host=config.redis_host,
             port=config.redis_port,
-            db=config.redis_db,
+            db=config.redis_database,
+            password=config.redis_password,
         )
         if self.is_test_mode:
             ...
         self.is_initiated = True
+
+    async def close(self) -> None:
+        await self.redis.close()
+        self.is_initiated = False
 
 
 db: SQLAlchemy = SQLAlchemy()

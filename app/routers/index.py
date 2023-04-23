@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
 from app.common.config import OPENAI_API_KEY
-from app.utils.logger import logger
+from app.utils.logger import api_logger
 
 router = APIRouter(redirect_slashes=True)
 templates = Jinja2Templates(directory="app")
@@ -28,8 +28,7 @@ async def test(request: Request):
         elif request.url.scheme == "https":
             host_address: str = f"wss://{request.url.hostname}/ws/chatgpt/{OPENAI_API_KEY}"
         else:
-            logger.error("index error")
-        print(host_address)
+            api_logger.error("index error")
         return templates.TemplateResponse(
             status_code=200,
             name="chatgpt.html",
@@ -39,11 +38,6 @@ async def test(request: Request):
             },
         )
     except Exception as exception:
-        logger.error(exception)
+        api_logger.error(exception)
         request.state.inspect = frame()
-        return JSONResponse({"error": exception})
-
-
-# @router.get("/chatgpt")
-# @router.get("/chatgpt/")
-# async def chatgpt(request: Request):
+        return JSONResponse({"detail": "Internal server error"}, status_code=500)

@@ -1,4 +1,4 @@
-import json
+import orjson
 from typing import AsyncGenerator, Callable
 from inspect import iscoroutinefunction
 from fastapi import WebSocket, WebSocketDisconnect
@@ -7,6 +7,7 @@ from app.errors.gpt_exceptions import (
     GptTooMuchTokenException,
 )
 from app.utils.chatgpt.chatgpt_message_manager import MessageManager
+from app.utils.logger import api_logger
 from app.viewmodels.base_models import MessageToWebsocket, MessageFromWebsocket
 from app.viewmodels.gpt_models import UserGptContext
 from app.utils.chatgpt.chatgpt_commands import ChatGptCommands
@@ -23,7 +24,7 @@ async def begin_chat(
     user_gpt_context: UserGptContext = await chatgpt_cache_manager.read_context(user_id)
     await SendToWebsocket.message(
         websocket=websocket,
-        msg=json.dumps(message_history_organizer(user_gpt_context=user_gpt_context, send_to_openai=False)),
+        msg=orjson.dumps(message_history_organizer(user_gpt_context=user_gpt_context, send_to_openai=False)),
         chat_room_id=0,
         init=True,
     )
@@ -72,7 +73,7 @@ async def begin_chat(
             )  # send too much token exception message to websocket
             continue
         except Exception as exception:  # if other exception is raised
-            print(f"chat exception: {exception}")
+            api_logger.error(f"chat exception: {exception}")
             await websocket.send_json(  # finish stream message
                 MessageToWebsocket(
                     msg="",

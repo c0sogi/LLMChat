@@ -1,7 +1,7 @@
 from asyncio import sleep
 from itertools import zip_longest
 from typing import AsyncGenerator
-import json
+import orjson
 import httpx
 
 from app.errors.api_exceptions import Responses_500
@@ -15,7 +15,7 @@ from app.utils.chatgpt.chatgpt_message_manager import MessageManager
 from app.viewmodels.base_models import SendInitToWebsocket, SendToOpenAI
 from app.viewmodels.gpt_models import UserGptContext
 from app.utils.chatgpt.chatgpt_config import ChatGPTConfig
-from app.utils.logger import logger
+from app.utils.logger import api_logger
 
 
 def message_history_organizer(
@@ -54,7 +54,7 @@ async def generate_from_openai(
     async with httpx.AsyncClient(timeout=ChatGPTConfig.wait_for_timeout) as client:  # initialize client
         is_appending_discontinued_message: bool = False
         while True:  # stream until connection is closed
-            logger.info("Generating from OpenAI...")
+            api_logger.debug("Generating from OpenAI...")
             if not user_gpt_context.is_discontinued:
                 gpt_content: str = ""
             try:
@@ -83,7 +83,7 @@ async def generate_from_openai(
                     },  # set json for openai api request
                 ) as streaming_response:
                     if streaming_response.status_code != 200:  # if status code is not 200
-                        error_msg: str = json.loads(await streaming_response.aread()).get("error").get("message")
+                        error_msg: str = orjson.loads(await streaming_response.aread()).get("error").get("message")
                         raise GptConnectionException(
                             msg=f"OpenAI 서버로부터 오류: {error_msg}"
                         )  # raise exception for connection error
@@ -92,12 +92,12 @@ async def generate_from_openai(
                             break
                         for text in ChatGPTConfig.api_regex_pattern.findall(raw_text):  # parse json from stream
                             try:
-                                json_data: dict = json.loads(text)["choices"][0]  # data from api
-                            except json.JSONDecodeError:  # if json is invalid
+                                json_data: dict = orjson.loads(text)["choices"][0]  # data from api
+                            except orjson.JSONDecodeError:  # if json is invalid
                                 continue
                             finish_reason: str | None = json_data.get("finish_reason")  # reason for finishing stream
                             delta: str | None = json_data.get("delta").get("content")  # generated text from api
-                            # logger.info(f"finish_reason: {finish_reason}, delta: {delta}")
+                            api_logger.debug(f"finish_reason: {finish_reason}, delta: {delta}")
                             if finish_reason == "length":
                                 raise GptLengthException(
                                     msg="Incomplete model output due to max_tokens parameter or token limit"
@@ -110,7 +110,7 @@ async def generate_from_openai(
                                 gpt_content += delta
                                 yield delta
             except GptLengthException:
-                logger.error("token limit exceeded")
+                api_logger.error("token limit exceeded")
                 if is_appending_discontinued_message:
                     await MessageManager.set_message_history_safely(
                         user_gpt_context=user_gpt_context,
@@ -128,7 +128,7 @@ async def generate_from_openai(
                 user_gpt_context.is_discontinued = True
                 continue
             except GptException as gpt_exception:
-                logger.error(f"gpt exception: {gpt_exception.msg}")
+                api_logger.error(f"gpt exception: {gpt_exception.msg}")
                 await MessageManager.rpop_message_history_safely(user_gpt_context=user_gpt_context, role="user")
                 yield gpt_exception.msg
                 break

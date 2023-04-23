@@ -1,7 +1,7 @@
 import httpx
 import asyncio
 from os import environ
-import json
+import orjson
 
 
 # Request papago api using httpx
@@ -36,7 +36,7 @@ async def google_translate_api(
     data = {"q": text, "source": src_lang, "target": trg_lang, "format": "text"}
     async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(api_url, data=data)
-    return json.loads(response.text)["data"]["translations"][0]["translatedText"]
+    return orjson.loads(response.text)["data"]["translations"][0]["translatedText"]
 
 
 async def test_papago(sample_text: str):

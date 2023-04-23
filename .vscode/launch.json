@@ -8,10 +8,8 @@
             "name": "Python: FastAPI",
             "type": "python",
             "request": "launch",
-            "module": "uvicorn",
-            "args": [
-                "main:app"
-            ],
+            "module": "main",
+            "args": [],
             "jinja": true,
             "justMyCode": true
         }

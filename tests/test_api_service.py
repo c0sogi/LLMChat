@@ -3,7 +3,6 @@ from httpx import AsyncClient, Response
 import pytest
 from app.utils.date_utils import UTC
 from app.utils.params_utils import hash_params, parse_params
-import logging
 
 
 async def request_service(
@@ -16,6 +15,7 @@ async def request_service(
     required_query_params: dict[str, any] = {},
     required_headers: dict[str, any] = {},
     stream: bool = False,
+    logger=None,
 ) -> any:
     all_query_params: str = parse_params(
         params={
@@ -41,17 +41,17 @@ async def request_service(
             assert response.status_code in allowed_status_codes
             async for chunk in response.aiter_text():
                 response_body += chunk
-                print("Streamed data:", chunk)
+                logger.info(f"Streamed data: {chunk}") if logger is not None else ...
     else:
         response: Response = await getattr(real_client, request_method.lower())(url=url, **method_options)
         response_body: any = response.json()
-        logging.info(msg=response_body)
+        logger.info(f"response_body: {response_body}") if logger is not None else ...
         assert response.status_code in allowed_status_codes
     return response_body
 
 
 @pytest.mark.asyncio
-async def test_request_api(real_client: AsyncClient, api_key_dict: dict):
+async def test_request_api(real_client: AsyncClient, api_key_dict: dict, test_logger):
     access_key, secret_key = api_key_dict["access_key"], api_key_dict["secret_key"]
     service_name: str = ""
     request_method: str = "get"
@@ -68,6 +68,7 @@ async def test_request_api(real_client: AsyncClient, api_key_dict: dict):
         required_query_params=required_query_params,
         required_headers=required_headers,
         stream=False,
+        logger=test_logger,
     )
 
 

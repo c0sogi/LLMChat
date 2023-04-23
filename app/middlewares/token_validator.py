@@ -136,7 +136,7 @@ async def access_control(request: Request, call_next: RequestResponseEndpoint):
     finally:
         # Log error or service info
         if url.startswith("/api/services") or error is not None:
-            api_logger(
+            api_logger.log_api(
                 request=request,
                 response=response,
                 error=error,

@@ -1,6 +1,7 @@
 .env
 acme.json
+PRIVATE_*
 venv/
 *.pyc
-async
 *.dart
+*.log

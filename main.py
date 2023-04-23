@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 
-load_dotenv("./.env")
+
+load_dotenv(".env")
 import uvicorn
 from app.common.app_settings import create_app
 from app.common.config import config

@@ -1,6 +1,5 @@
 import time
 from fastapi.testclient import TestClient
-import logging
 import pytest
 from starlette.testclient import WebSocketTestSession
 from app.common.config import OPENAI_API_KEY, Config
@@ -11,7 +10,7 @@ from app.viewmodels.gpt_models import MessageHistory, UserGptContext
 chatgpt_cache_manager.cache.start(config=Config.get(option="test"))
 
 
-@pytest.mark.skip
+# @pytest.mark.skip
 @pytest.mark.asyncio
 async def test_chatgpt_redis():
     # set random context
@@ -61,7 +60,7 @@ def test_chatgpt_connection(websocket_app: TestClient, base_websocket_url: str):
 
 
 @pytest.mark.skipif(OPENAI_API_KEY is None, reason="OpenAI API Key is not set")
-def test_chatgpt_conversation(websocket_app: TestClient, base_websocket_url: str):
+def test_chatgpt_conversation(websocket_app: TestClient, base_websocket_url: str, test_logger):
     # parameters
     timeout: int = 10
     with websocket_app.websocket_connect(f"{base_websocket_url}/ws/chatgpt/{OPENAI_API_KEY}") as ws_client:
@@ -85,7 +84,7 @@ def test_chatgpt_conversation(websocket_app: TestClient, base_websocket_url: str
 
         # show received messages
         for msg in received_messages:
-            logging.critical(msg)
+            test_logger.info(msg)
 
         # assemble msg from received messages using list comprehension
         received_msg: str = "".join([msg.msg for msg in received_messages])

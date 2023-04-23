@@ -1,4 +1,3 @@
-import logging
 from fastapi import FastAPI, Depends
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -17,6 +16,7 @@ from app.dependencies import (
     api_service_dependency,
     user_dependency,
 )
+from app.utils.logger import api_logger
 from app.utils.chatgpt.chatgpt_cache_manager import chatgpt_cache_manager
 from app.utils.js_initializer import js_url_initializer
 
@@ -77,21 +77,20 @@ def create_app(config: LocalConfig | ProdConfig | TestConfig) -> FastAPI:
     @new_app.on_event("startup")
     async def startup():
         if db.is_initiated:
-            logging.critical("MySQL DB connected!")
+            api_logger.critical("MySQL DB connected!")
         else:
-            logging.critical("MySQL DB connection failed!")
+            api_logger.critical("MySQL DB connection failed!")
         if cache.is_initiated and await cache.redis.ping():
             for role in ["user", "gpt", "system"]:
                 await chatgpt_cache_manager.delete_message_history(user_id=f"testaccount@{HOST_MAIN}", role=role)
-            logging.critical("Redis CACHE connected!")
+            api_logger.critical("Redis CACHE connected!")
         else:
-            logging.critical("Redis CACHE connection failed!")
+            api_logger.critical("Redis CACHE connection failed!")
 
     @new_app.on_event("shutdown")
     async def shutdown():
-        await db.session.remove()
-        await db.engine.dispose()
-        await cache.redis.close()
-        logging.critical("DB & CACHE connection closed!")
+        await db.close()
+        await cache.close()
+        api_logger.critical("DB & CACHE connection closed!")
 
     return new_app

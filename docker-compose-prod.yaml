@@ -19,9 +19,12 @@ services:
     command:
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.mysql.address=:3306"
+      - "--entrypoints.redis.address=:6379"
       - "--entryPoints.web.http.redirections.entryPoint.to=websecure"
       - "--entryPoints.web.http.redirections.entryPoint.scheme=https"
       - "--providers.docker"
+      - "--providers.docker.exposedbydefault=false"
       - "--api.insecure=true"
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
       - "--certificatesresolvers.myresolver.acme.email=${MY_EMAIL}"
@@ -31,6 +34,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "3306:3306"
+      - "6379:6379"
       - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -42,8 +47,6 @@ services:
   db:
     image: mysql
     restart: always
-    ports:
-      - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD}"
       MYSQL_DATABASE: "${MYSQL_DATABASE}"
@@ -55,48 +58,36 @@ services:
       # - ./my.cnf:/etc/mysql/conf.d/my.cnf
     depends_on:
       - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.db.rule=HostSNI(`*`)"
+      - "traefik.tcp.services.db.loadbalancer.server.port=3306"
+      - "traefik.tcp.routers.db.entrypoints=mysql"
     networks:
       reverse-proxy-public:
         ipv4_address: 172.16.0.11 # static IP
 
   cache:
-    image: redis
+    image: redis/redis-stack-server:latest
     restart: always
-    command:
-      [
-        "redis-server",
-        # Memory management
-        "--maxmemory",
-        "100mb",
-        # LRU eviction policy
-        "--maxmemory-policy",
-        "allkeys-lru",
-        # AOF persistence
-        "--appendonly",
-        "yes"
-          # # RDB persistence
-          # "--save",
-          # "900 1",
-          # "--save",
-          # "300 10",
-          # "--save",
-          # "60 10000",
-          # # Disable stop on bgsave error
-          # "--stop-writes-on-bgsave-error",
-          # "no",
-      ]
-    ports:
-      - "6379:6379"
+    environment:
+      - REDIS_ARGS=--requirepass ${REDIS_PASSWORD} --maxmemory 100mb --maxmemory-policy allkeys-lru --appendonly yes
     volumes:
       - redis:/data
     depends_on:
       - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.cache.rule=HostSNI(`*`)"
+      - "traefik.tcp.services.cache.loadbalancer.server.port=6379"
+      - "traefik.tcp.routers.cache.entrypoints=redis"
     networks:
       reverse-proxy-public:
         ipv4_address: 172.16.0.12 # static IP
 
   api:
     labels:
+      - "traefik.enable=true"
       - "traefik.http.routers.api.rule=HostRegexp(`${HOST_MAIN}`, `{subdomain:[a-z]+}.${HOST_MAIN}`, `${HOST_IP}`)"
       - "traefik.http.routers.api.entrypoints=websecure"
       - "traefik.http.services.api.loadbalancer.server.scheme=http"

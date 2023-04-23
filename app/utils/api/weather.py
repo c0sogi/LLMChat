@@ -1,5 +1,5 @@
 import httpx
-import json
+import orjson
 from typing import Literal
 from fastapi import HTTPException
 
@@ -24,7 +24,7 @@ async def fetch_weather_data(
     async with httpx.AsyncClient() as client:
         response = await client.get(base_url + "?" + query_params)
         if response.status_code == 200:
-            weather_data = json.loads(response.content)
+            weather_data = orjson.loads(response.content)
             print("weather_data:", weather_data)
             return weather_data
         else:

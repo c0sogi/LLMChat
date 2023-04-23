@@ -20,6 +20,7 @@ iniconfig
 jinja2
 jmespath
 lxml
+orjson
 packaging
 pluggy
 premailer

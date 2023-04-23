@@ -2,7 +2,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.common.config import HOST_MAIN, OPENAI_API_KEY
 from app.database.crud import api_keys
 from app.database.schemas.auth import Users
-from app.utils.logger import logger
+from app.utils.logger import api_logger
 from app.utils.chatgpt.chatgpt_stream_manager import begin_chat, SendToWebsocket
 
 router = APIRouter()
@@ -28,5 +28,5 @@ async def ws_chatgpt(websocket: WebSocket, api_key: str):
     except WebSocketDisconnect:
         ...
     except Exception as exception:
-        logger.error(exception)
+        api_logger.error(exception)
         await SendToWebsocket.message(websocket=websocket, msg=f"알 수 없는 오류가 발생했습니다. 연결을 종료합니다. ({exception})")

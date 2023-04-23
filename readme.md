@@ -53,7 +53,7 @@ Your ChatGPT Web App Server should now be up and running, ready to provide an en
 This project is licensed under the [MIT License](LICENSE), which allows for free use, modification, and distribution, as long as the original copyright and license notice are included in any copy or substantial portion of the software.
 
 
-# Quick Summary of FastAPI: A Modern, Fast (high-performance), Web Framework for Building APIs
+# Quick Summary of FastAPI
 
 `FastAPI` is a modern web framework for building APIs with Python.
 It has high performance, easy to learn, fast to code, and ready for production.
@@ -102,7 +102,7 @@ However, these two methods are not always good because you can't create an infin
 
 
 
-# Quick summary of Flutter: A Cross-Platform UI Toolkit for Building Beautiful Apps
+# Quick summary of Flutter
 
 `Flutter` is an open-source UI toolkit developed by Google for building native user interfaces for mobile, web, and desktop platforms from a single codebase. It uses `Dart`, a modern object-oriented programming language, and provides a rich set of customizable widgets that can adapt to any design.
 
@@ -118,106 +118,6 @@ Here are some of the main features and benefits of using Flutter for your next a
 - **Access to native features**: Flutter allows you to access native features and services of each platform, such as camera, geolocation, sensors, etc., by using platform channels. Platform channels are a mechanism for communicating between Dart code and native code using asynchronous messages. You can also use existing native libraries or write your own native code in `Java`, `Kotlin`, `Objective-C`, or `Swift`.
 - **High performance**: Flutter apps run at 60 frames per second (FPS) or higher, which ensures smooth animations and transitions. Flutter also uses `ahead-of-time (AOT)` compilation to compile Dart code into native machine code, which improves the startup time and eliminates the performance issues caused by interpreters or virtual machines.
 - **Strong community support**: Flutter has a large and active community of developers who contribute to its development and improvement. You can find many resources online, such as documentation, tutorials, blogs, videos, podcasts, etc., to help you learn and use Flutter. You can also join forums, groups, meetups, or events to connect with other Flutter enthusiasts and experts.
-
-## Code Examples
-
-Here are some code examples that demonstrate how to use Flutter to create simple apps:
-
-### Hello World App
-
-This is the simplest Flutter app that displays `Hello World` on the screen:
-
-```dart
-import 'package:flutter/material.dart';
-
-void main() {
-  runApp(HelloWorldApp());
-}
-
-class HelloWorldApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: Text('Hello World'),
-        ),
-      ),
-    );
-  }
-}
-```
-
-### Counter App
-
-This is a basic Flutter app that displays a counter on the screen and allows you to increment or decrement it by tapping on buttons:
-
-```dart
-import 'package:flutter/material.dart';
-
-void main() {
-  runApp(CounterApp());
-}
-
-class CounterApp extends StatefulWidget {
-  @override
-  _CounterAppState createState() => _CounterAppState();
-}
-
-class _CounterAppState extends State<CounterApp> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      _counter++;
-    });
-  }
-
-  void _decrementCounter() {
-    setState(() {
-      _counter--;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(
-          title: Text('Counter App'),
-        ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('You have pushed the button this many times:'),
-              Text(
-                '$_counter',
-                style: Theme.of(context).textTheme.headline4,
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children:
-                  [
-                    FloatingActionButton(
-                      onPressed: _incrementCounter,
-                      child: Icon(Icons.add),
-                    ),
-                    FloatingActionButton(
-                      onPressed: _decrementCounter,
-                      child: Icon(Icons.remove),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-```
 
 # Middlewares
 

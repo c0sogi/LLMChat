@@ -71193,7 +71193,7 @@ var $async$vE=A.S(function(b,c){if(b===1)return A.O(c,r)
 while(true)switch(s){case 0:p=q.e
 if(p==null)p=q.e=new A.aem(new A.XH(q),new A.XI(q),new A.XJ(q),new A.XK(q))
 s=2
-return A.L(p.qB("wss://walabi.store/ws/chatgpt/"+a),$async$vE)
+return A.L(p.qB("ws://localhost:8000/ws/chatgpt/"+a),$async$vE)
 case 2:return A.P(null,r)}})
 return A.Q($async$vE,r)},
 iL(){var s=0,r=A.R(t.H),q=this,p
@@ -71430,7 +71430,7 @@ case 3:s=5
 return A.L(p.b.tw(a),$async$mv)
 case 5:case 4:n=J
 s=6
-return A.L(A.qR(A.a([A.I_(a,"API \ud0a4\ub97c \ubd88\ub7ec\uc624\ub294\ub370 \uc2e4\ud328\ud558\uc600\uc2b5\ub2c8\ub2e4.",new A.a4W(p),200,"https://walabi.store/api/user/apikeys"),A.I_(a,"\uc0ac\uc6a9\uc790 \uc815\ubcf4\ub97c \ubd88\ub7ec\uc624\ub294\ub370 \uc2e4\ud328\ud558\uc600\uc2b5\ub2c8\ub2e4.",new A.a4X(p),200,"https://walabi.store/api/user/me")],t.GP),!1,t.u),$async$mv)
+return A.L(A.qR(A.a([A.I_(a,"API \ud0a4\ub97c \ubd88\ub7ec\uc624\ub294\ub370 \uc2e4\ud328\ud558\uc600\uc2b5\ub2c8\ub2e4.",new A.a4W(p),200,"http://localhost:8000/api/user/apikeys"),A.I_(a,"\uc0ac\uc6a9\uc790 \uc815\ubcf4\ub97c \ubd88\ub7ec\uc624\ub294\ub370 \uc2e4\ud328\ud558\uc600\uc2b5\ub2c8\ub2e4.",new A.a4X(p),200,"http://localhost:8000/api/user/me")],t.GP),!1,t.u),$async$mv)
 case 6:o=n.arH(c,new A.a4Y())
 if(!o.gaf(o).v()){q=null
 s=1
@@ -71441,7 +71441,7 @@ return A.Q($async$mv,r)},
 eW(a,b,c){return this.agD(0,b,c)},
 agD(a,b,c){var s=0,r=A.R(t.Fd),q,p=this,o,n,m,l,k
 var $async$eW=A.S(function(d,e){if(d===1)return A.O(e,r)
-while(true)switch(s){case 0:o=A.kR("https://walabi.store/api/auth/register/email",0,null)
+while(true)switch(s){case 0:o=A.kR("http://localhost:8000/api/auth/register/email",0,null)
 n=t.N
 m=A.aD(["Content-Type","application/json","Accept","application/json"],n,n)
 s=3
@@ -71461,7 +71461,7 @@ return A.Q($async$eW,r)},
 j1(a,b){return this.aeG(a,b)},
 aeG(a,b){var s=0,r=A.R(t.Fd),q,p=this,o,n,m,l,k
 var $async$j1=A.S(function(c,d){if(c===1)return A.O(d,r)
-while(true)switch(s){case 0:o=A.kR("https://walabi.store/api/auth/login/email",0,null)
+while(true)switch(s){case 0:o=A.kR("http://localhost:8000/api/auth/login/email",0,null)
 n=t.N
 m=A.aD(["Content-Type","application/json","Accept","application/json"],n,n)
 s=3
