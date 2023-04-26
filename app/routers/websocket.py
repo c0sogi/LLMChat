@@ -28,5 +28,5 @@ async def ws_chatgpt(websocket: WebSocket, api_key: str):
     except WebSocketDisconnect:
         ...
     except Exception as exception:
-        api_logger.error(exception)
+        api_logger.error(exception, exc_info=True)
         await SendToWebsocket.message(websocket=websocket, msg=f"알 수 없는 오류가 발생했습니다. 연결을 종료합니다. ({exception})")

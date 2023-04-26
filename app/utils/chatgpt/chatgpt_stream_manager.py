@@ -9,7 +9,7 @@ from app.errors.gpt_exceptions import (
 from app.utils.chatgpt.chatgpt_message_manager import MessageManager
 from app.utils.logger import api_logger
 from app.viewmodels.base_models import MessageToWebsocket, MessageFromWebsocket
-from app.viewmodels.gpt_models import UserGptContext
+from app.viewmodels.gpt_models import GptRoles, UserGptContext
 from app.utils.chatgpt.chatgpt_commands import ChatGptCommands
 from app.utils.chatgpt.chatgpt_cache_manager import chatgpt_cache_manager
 from app.utils.chatgpt.chatgpt_generation import generate_from_openai, message_history_organizer
@@ -154,7 +154,7 @@ class HandleMessage:
             )
             await SendToWebsocket.message(
                 websocket=websocket,
-                msg=f"[번역된 질문]\n{translated_msg}",
+                msg=f"[번역된 질문]\n\n{translated_msg}",
                 chat_room_id=chat_room_id,
             )
 
@@ -164,7 +164,9 @@ class HandleMessage:
                 msg=f"메시지가 너무 길어요. 현재 토큰 개수는 {user_token}로, {user_gpt_context.token_per_request} 이하여야 합니다."
             )
         await MessageManager.add_message_history_safely(
-            user_gpt_context=user_gpt_context, content=translated_msg if translate else msg, role="user"
+            user_gpt_context=user_gpt_context,
+            content=translated_msg if translate else msg,
+            role=GptRoles.USER,
         )
 
     @staticmethod
@@ -191,13 +193,13 @@ class HandleMessage:
             )
             await SendToWebsocket.message(
                 websocket=websocket,
-                msg=f"[번역된 답변]\n{translated_msg}",
+                msg=f"[번역된 답변]\n\n{translated_msg}",
                 chat_room_id=chat_room_id,
             )
 
 
 async def get_command_response(msg: str, user_gpt_context: UserGptContext) -> str | None:
-    user_command: list = msg.split()
+    user_command: list = msg.split(" ")
     callback: Callable[[list, UserGptContext], str] = (
         getattr(ChatGptCommands, user_command[0][1:])
         if hasattr(ChatGptCommands, user_command[0][1:])

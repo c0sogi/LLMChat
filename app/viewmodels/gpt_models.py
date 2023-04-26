@@ -1,8 +1,52 @@
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
+from enum import Enum
+from uuid import uuid4
+from typing import Type
+
 import orjson
 import tiktoken
+
 from app.utils.date_utils import UTC
+
+
+class GptRoles(Enum):
+    GPT = "assistant"
+    SYSTEM = "system"
+    USER = "user"
+
+    @classmethod
+    def get_name(cls, role: Type["GptRoles"] | str) -> str:
+        if isinstance(role, cls):  # when role is member
+            return role.name
+        elif role in cls._value2member_map_:  # when role is value
+            return cls._value2member_map_[role].name
+        elif role.upper() in cls._member_map_:  # when role is name
+            return role
+        else:
+            raise ValueError(f"Invalid role: {role}")
+
+    @classmethod
+    def get_value(cls, role: Type["GptRoles"] | str) -> str:
+        if isinstance(role, cls):  # when role is member
+            return role.value
+        elif role in cls._value2member_map_:  # when role is value
+            return role
+        elif role.upper() in cls._member_map_:  # when role is name
+            return cls._member_map_[role.upper()].value
+        else:
+            raise ValueError(f"Invalid role: {role}")
+
+    @classmethod
+    def get_member(cls, role: Type["GptRoles"] | str) -> Type["GptRoles"]:
+        if isinstance(role, cls):  # when role is member
+            return role
+        elif role in cls._value2member_map_:  # when role is value
+            return cls._value2member_map_[role]
+        elif role.upper() in cls._member_map_:  # when role is name
+            return cls._member_map_[role.upper()]
+        else:
+            raise ValueError(f"Invalid role: {role}")
 
 
 @dataclass
@@ -47,21 +91,25 @@ class MessageHistory:  # message history for user and gpt
     tokens: int
     is_user: bool
     timestamp: int = field(default_factory=lambda: UTC.timestamp(hour_diff=9))
+    uuid: str = field(default_factory=lambda: str(uuid4()))
+
+    def __post_init__(self):
+        self.role = GptRoles.get_value(self.role).lower()
 
     def __repr__(self) -> str:
-        return f"<{self.timestamp_to_datetime}: {self.tokens} tokens> {self.content} </>"
+        return f'<{self.role} uuid="{self.uuid}" date="{self.datetime}" tokens="{self.tokens}">{self.content}</>'
 
     @property
-    def timestamp_to_datetime(self) -> datetime:
+    def datetime(self) -> datetime:
         return UTC.timestamp_to_datetime(self.timestamp)
 
 
 @dataclass
 class UserGptProfile:  # user gpt profile for user and gpt
     user_id: str
-    user_role: str = "user"
-    gpt_role: str = "assistant"
-    system_role: str = "system"
+    user_role: str = field(default=GptRoles.USER.value)
+    gpt_role: str = field(default=GptRoles.GPT.value)
+    system_role: str = field(default=GptRoles.SYSTEM.value)
     temperature: float = 0.9
     top_p: float = 1.0
     presence_penalty: float = 0
@@ -75,40 +123,38 @@ class UserGptContext:  # user gpt context for user and gpt
     user_message_histories: list[MessageHistory] = field(default_factory=list)
     gpt_message_histories: list[MessageHistory] = field(default_factory=list)
     system_message_histories: list[MessageHistory] = field(default_factory=list)
-    user_message_tokens: int = 0
-    gpt_message_tokens: int = 0
-    system_message_tokens: int = 0
+    user_message_tokens: int = field(init=False, default=0)
+    gpt_message_tokens: int = field(init=False, default=0)
+    system_message_tokens: int = field(init=False, default=0)
     is_discontinued: bool = False
 
+    def __post_init__(self):
+        for role in tuple(key.split("_")[0] for key in self.__annotations__.keys() if "message_tokens" in key.lower()):
+            setattr(self, f"{role}_message_tokens", sum([m.tokens for m in getattr(self, f"{role}_message_histories")]))
+
     @classmethod
-    def parse_raw(cls, raw: str) -> "UserGptContext":
-        stored: dict = orjson.loads(raw)
+    def parse_stringified_json(cls, stred_json: str) -> "UserGptContext":
+        stored: dict = orjson.loads(stred_json)
         return cls(
             user_gpt_profile=UserGptProfile(**stored["user_gpt_profile"]),
             gpt_model=getattr(GPT_MODELS, stored["gpt_model"].replace(".", "_").replace("-", "_")),
             user_message_histories=[MessageHistory(**m) for m in stored["user_message_histories"]],
             gpt_message_histories=[MessageHistory(**m) for m in stored["gpt_message_histories"]],
             system_message_histories=[MessageHistory(**m) for m in stored["system_message_histories"]],
-            user_message_tokens=stored["user_message_tokens"],
-            gpt_message_tokens=stored["gpt_message_tokens"],
-            system_message_tokens=stored["system_message_tokens"],
             is_discontinued=stored["is_discontinued"],
         )
 
-    def json(self) -> dict:
+    def to_json(self) -> dict:
         return {
             "user_gpt_profile": asdict(self.user_gpt_profile),
             "gpt_model": self.gpt_model.name,
             "user_message_histories": [m.__dict__ for m in self.user_message_histories],
             "gpt_message_histories": [m.__dict__ for m in self.gpt_message_histories],
             "system_message_histories": [m.__dict__ for m in self.system_message_histories],
-            "user_message_tokens": self.user_message_tokens,
-            "gpt_message_tokens": self.gpt_message_tokens,
-            "system_message_tokens": self.system_message_tokens,
             "is_discontinued": self.is_discontinued,
         }
 
-    def json_stringify(self) -> str:
+    def to_stringified_json(self) -> str:
         return orjson.dumps(self.json())
 
     def tokenize(self, message: str) -> list[int]:

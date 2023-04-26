@@ -1,7 +1,7 @@
 import orjson
-from typing import Literal
 from app.database.connection import RedisFactory, cache
-from app.viewmodels.gpt_models import GPT_MODELS, MessageHistory, UserGptContext, UserGptProfile
+from app.utils.logger import api_logger
+from app.viewmodels.gpt_models import GPT_MODELS, GptRoles, MessageHistory, UserGptContext, UserGptProfile
 
 
 class ChatGptCacheManager:
@@ -9,11 +9,7 @@ class ChatGptCacheManager:
         "user_gpt_profile",
         "gpt_model",
     )
-    _list_fields: tuple[str] = (
-        "user_message_histories",
-        "gpt_message_histories",
-        "system_message_histories",
-    )
+    _list_fields: tuple[str] = tuple(f"{role.name.lower()}_message_histories" for role in GptRoles)
 
     def __init__(self, cache: RedisFactory):
         self.cache = cache
@@ -48,19 +44,14 @@ class ChatGptCacheManager:
             if value is not None:
                 stored_list[field] = [orjson.loads(v) for v in value]
 
-        user_message_histories = [MessageHistory(**m) for m in stored_list["user_message_histories"]]
-        gpt_message_histories = [MessageHistory(**m) for m in stored_list["gpt_message_histories"]]
-        system_message_histories = [MessageHistory(**m) for m in stored_list["system_message_histories"]]
+        api_logger.info(f"stored_string: {stored_string}")
+        api_logger.info(f"stored_list: {stored_list}")
         return UserGptContext(
             user_gpt_profile=UserGptProfile(**stored_string["user_gpt_profile"]),
             gpt_model=getattr(GPT_MODELS, stored_string["gpt_model"].replace(".", "_").replace("-", "_")),
-            user_message_histories=user_message_histories,
-            gpt_message_histories=gpt_message_histories,
-            system_message_histories=system_message_histories,
-            user_message_tokens=sum([m.tokens for m in user_message_histories]),
-            gpt_message_tokens=sum([m.tokens for m in gpt_message_histories]),
-            system_message_tokens=sum([m.tokens for m in system_message_histories]),
-            is_discontinued=False,
+            user_message_histories=[MessageHistory(**m) for m in stored_list["user_message_histories"]],
+            gpt_message_histories=[MessageHistory(**m) for m in stored_list["gpt_message_histories"]],
+            system_message_histories=[MessageHistory(**m) for m in stored_list["system_message_histories"]],
         )
 
     async def create_context(
@@ -70,7 +61,7 @@ class ChatGptCacheManager:
         only_if_exists: bool = False,
         only_if_not_exists: bool = True,
     ) -> bool:
-        json_data = user_gpt_context.json()
+        json_data = user_gpt_context.to_json()
         success: bool = True
 
         for field, key in self._get_string_fields(user_id=user_id).items():
@@ -145,10 +136,10 @@ class ChatGptCacheManager:
     async def update_message_histories(
         self,
         user_id: str,
-        role: Literal["user", "gpt", "system"],
+        role: GptRoles | str,
         message_histories: list[MessageHistory],
     ) -> bool:
-        assert role in ("user", "gpt", "system")
+        role = GptRoles.get_name(role).lower()
         key = self._generate_key(user_id, f"{role}_message_histories")
         message_histories_json = [orjson.dumps(message_history.__dict__) for message_history in message_histories]
         result = await self.cache.redis.delete(key)
@@ -158,10 +149,10 @@ class ChatGptCacheManager:
     async def lpop_message_history(
         self,
         user_id: str,
-        role: Literal["user", "gpt", "system"],
+        role: GptRoles | str,
         count: int | None = None,
     ) -> MessageHistory | None:
-        assert role in ("user", "gpt", "system")
+        role = GptRoles.get_name(role).lower()
         assert count is None or count > 0
         message_history_json = await self.cache.redis.lpop(
             self._generate_key(user_id, f"{role}_message_histories"), count=count
@@ -177,10 +168,10 @@ class ChatGptCacheManager:
     async def rpop_message_history(
         self,
         user_id: str,
-        role: Literal["user", "gpt", "system"],
+        role: GptRoles | str,
         count: int | None = None,
     ) -> MessageHistory | None:
-        assert role in ("user", "gpt", "system")
+        role = GptRoles.get_name(role).lower()
         assert count is None or count > 0
         message_history_json = await self.cache.redis.rpop(
             self._generate_key(user_id, f"{role}_message_histories"), count=count
@@ -196,11 +187,11 @@ class ChatGptCacheManager:
     async def append_message_history(
         self,
         user_id: str,
-        role: Literal["user", "gpt", "system"],
+        role: GptRoles | str,
         message_history: MessageHistory,
         if_exists: bool = False,
     ) -> bool:
-        assert role in ("user", "gpt", "system")
+        role = GptRoles.get_name(role).lower()
         message_history_key = self._generate_key(user_id, f"{role}_message_histories")
         message_history_json = orjson.dumps(message_history.__dict__)
         result = (
@@ -213,9 +204,9 @@ class ChatGptCacheManager:
     async def get_message_history(
         self,
         user_id: str,
-        role: Literal["user", "gpt", "system"],
+        role: GptRoles | str,
     ) -> list[MessageHistory]:
-        assert role in ("user", "gpt", "system")
+        role = GptRoles.get_name(role).lower()
         key = self._generate_key(user_id, f"{role}_message_histories")
         raw_message_histories = await self.cache.redis.lrange(key, 0, -1)
         if raw_message_histories is None:
@@ -225,9 +216,9 @@ class ChatGptCacheManager:
     async def delete_message_history(
         self,
         user_id: str,
-        role: Literal["user", "gpt", "system"],
+        role: GptRoles | str,
     ) -> bool:
-        assert role in ("user", "gpt", "system")
+        role = GptRoles.get_name(role).lower()
         key = self._generate_key(user_id, f"{role}_message_histories")
         result = await self.cache.redis.delete(key)
         return bool(result)
@@ -237,9 +228,9 @@ class ChatGptCacheManager:
         user_id: str,
         message_history: MessageHistory,
         index: int,
-        role: Literal["user", "gpt", "system"],
+        role: GptRoles | str,
     ) -> bool:
-        assert role in ("user", "gpt", "system")
+        role = GptRoles.get_name(role).lower()
         key = self._generate_key(user_id, f"{role}_message_histories")
         # value in redis is a list of message histories
         # set the last element of the list to the new message history

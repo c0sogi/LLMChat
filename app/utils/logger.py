@@ -7,24 +7,24 @@ from time import time
 from fastapi import HTTPException
 from starlette.requests import Request
 from starlette.responses import Response
-from app.common.config import error_config, ErrorConfig
+from app.common.config import logging_config, LoggingConfig
 from app.errors.api_exceptions import APIException, InternalServerError
 
 
 class CustomLogger(logging.Logger):
-    def __init__(self, name: str, error_config: ErrorConfig) -> None:
-        super().__init__(name=name, level=error_config.logger_level)
-        formatter = logging.Formatter(error_config.logging_format)
+    def __init__(self, name: str, logging_config: LoggingConfig) -> None:
+        super().__init__(name=name, level=logging_config.logger_level)
+        formatter = logging.Formatter(logging_config.logging_format)
 
         console = logging.StreamHandler()
-        console.setLevel(error_config.console_log_level)
+        console.setLevel(logging_config.console_log_level)
         console.setFormatter(formatter)
 
-        if error_config.file_log_name is not None:
-            if not os.path.exists(os.path.dirname(error_config.file_log_name)):
-                os.makedirs(os.path.dirname(error_config.file_log_name))
-            file_handler = logging.FileHandler(filename=error_config.file_log_name, mode="a", encoding="utf-8")
-            file_handler.setLevel(error_config.file_log_level)
+        if logging_config.file_log_name is not None:
+            if not os.path.exists(os.path.dirname(logging_config.file_log_name)):
+                os.makedirs(os.path.dirname(logging_config.file_log_name))
+            file_handler = logging.FileHandler(filename=logging_config.file_log_name, mode="a", encoding="utf-8")
+            file_handler.setLevel(logging_config.file_log_level)
             file_handler.setFormatter(formatter)
 
         self.addHandler(console)
@@ -32,8 +32,8 @@ class CustomLogger(logging.Logger):
 
 
 class ApiLogger(CustomLogger):
-    def __init__(self, name: str, error_config: ErrorConfig) -> None:
-        super().__init__(name=name, error_config=error_config)
+    def __init__(self, name: str, logging_config: LoggingConfig) -> None:
+        super().__init__(name=name, logging_config=logging_config)
 
     def _hide_email(self, email: str) -> str:
         separated_email = email.split("@")
@@ -90,7 +90,7 @@ class ApiLogger(CustomLogger):
         self.error(log, exc_info=True) if error and error.status_code >= 500 else self.info(log)
 
 
-api_logger = ApiLogger("FastAPI", error_config=error_config)
+api_logger = ApiLogger("FastAPI", logging_config=logging_config)
 
 if __name__ == "__main__":
     api_logger.debug("Testing logger: debug")

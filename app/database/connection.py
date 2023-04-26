@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy_utils import database_exists, create_database
 from app.utils.logger import CustomLogger
-from app.common.config import error_config, TestConfig, ProdConfig, LocalConfig, SingletonMetaClass
+from app.common.config import logging_config, TestConfig, ProdConfig, LocalConfig, SingletonMetaClass
 from . import Base
 
 
@@ -139,7 +139,7 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         self.engine: AsyncEngine = None
         self.session: AsyncSession = None
         self.is_initiated = False
-        self.logger = CustomLogger("SQLAlchemy", error_config=error_config)
+        self.logger = CustomLogger("SQLAlchemy", logging_config=logging_config)
 
     def start(self, config: TestConfig | ProdConfig | LocalConfig) -> None:
         if self.is_initiated:

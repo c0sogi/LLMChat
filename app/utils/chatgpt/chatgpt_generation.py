@@ -13,7 +13,7 @@ from app.errors.gpt_exceptions import (
 )
 from app.utils.chatgpt.chatgpt_message_manager import MessageManager
 from app.viewmodels.base_models import SendInitToWebsocket, SendToOpenAI
-from app.viewmodels.gpt_models import UserGptContext
+from app.viewmodels.gpt_models import GptRoles, UserGptContext
 from app.utils.chatgpt.chatgpt_config import ChatGPTConfig
 from app.utils.logger import api_logger
 
@@ -115,28 +115,28 @@ async def generate_from_openai(
                     await MessageManager.set_message_history_safely(
                         user_gpt_context=user_gpt_context,
                         new_content=gpt_content,
-                        role="gpt",
+                        role=GptRoles.GPT,
                         index=-1,
                     )
                 else:
                     await MessageManager.add_message_history_safely(
                         user_gpt_context=user_gpt_context,
                         content=gpt_content,
-                        role="gpt",
+                        role=GptRoles.GPT,
                     )
                     is_appending_discontinued_message = True
                 user_gpt_context.is_discontinued = True
                 continue
             except GptException as gpt_exception:
                 api_logger.error(f"gpt exception: {gpt_exception.msg}")
-                await MessageManager.rpop_message_history_safely(user_gpt_context=user_gpt_context, role="user")
+                await MessageManager.rpop_message_history_safely(user_gpt_context=user_gpt_context, role=GptRoles.USER)
                 yield gpt_exception.msg
                 break
             except httpx.TimeoutException:
                 await sleep(ChatGPTConfig.wait_for_reconnect)
                 continue
             except Exception as exception:
-                await MessageManager.rpop_message_history_safely(user_gpt_context=user_gpt_context, role="user")
+                await MessageManager.rpop_message_history_safely(user_gpt_context=user_gpt_context, role=GptRoles.USER)
                 raise Responses_500.websocket_error(
                     msg=f"unexpected exception generating text from openai: {exception}"
                 )

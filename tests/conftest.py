@@ -11,7 +11,7 @@ from app.utils.auth.token import create_access_token
 from app.utils.tests.tests_utils import random_user_generator
 from app.database.schemas.auth import Users
 from app.common.app_settings import create_app
-from app.common.config import Config, error_config
+from app.common.config import Config, logging_config
 from app.utils.logger import CustomLogger
 from app.viewmodels.base_models import UserToken
 
@@ -25,7 +25,7 @@ from app.viewmodels.base_models import UserToken
 
 @pytest.fixture(scope="session", autouse=True)
 def test_logger():
-    return CustomLogger(name="PyTest", error_config=error_config)
+    return CustomLogger(name="PyTest", logging_config=logging_config)
 
 
 @pytest.fixture(scope="session", autouse=True)

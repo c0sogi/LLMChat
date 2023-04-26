@@ -5,7 +5,7 @@ from starlette.testclient import WebSocketTestSession
 from app.common.config import OPENAI_API_KEY, Config
 from app.viewmodels.base_models import MessageFromWebsocket, MessageToWebsocket
 from app.utils.chatgpt.chatgpt_cache_manager import chatgpt_cache_manager
-from app.viewmodels.gpt_models import MessageHistory, UserGptContext
+from app.viewmodels.gpt_models import GptRoles, MessageHistory, UserGptContext
 
 chatgpt_cache_manager.cache.start(config=Config.get(option="test"))
 
@@ -15,7 +15,7 @@ chatgpt_cache_manager.cache.start(config=Config.get(option="test"))
 async def test_chatgpt_redis():
     # set random context
     user_id: str = ""
-    role: str = "user"
+    role: str = GptRoles.USER
     message: str = "test message"
     default_context: UserGptContext = UserGptContext.construct_default(user_id=user_id)
 

@@ -135,7 +135,7 @@ class TestConfig(Config, metaclass=SingletonMetaClass):
 
 
 @dataclass(frozen=True)
-class ErrorConfig:
+class LoggingConfig:
     logger_level: int = logging.DEBUG
     console_log_level: int = logging.INFO
     file_log_level: int | None = logging.DEBUG
@@ -144,7 +144,7 @@ class ErrorConfig:
 
 
 config = Config.get()
-error_config = ErrorConfig()
+logging_config = LoggingConfig()
 
 if __name__ == "__main__":
     print(BASE_DIR / "app")

@@ -1,5 +1,5 @@
 from app.utils.chatgpt.chatgpt_message_manager import MessageManager
-from app.viewmodels.gpt_models import MessageHistory, UserGptContext
+from app.viewmodels.gpt_models import GptRoles, MessageHistory, UserGptContext
 from app.utils.chatgpt.chatgpt_cache_manager import chatgpt_cache_manager
 
 
@@ -14,9 +14,9 @@ class ChatGptCommands:  # commands for chat gpt
         n_user_tokens: int = user_gpt_context.user_message_tokens
         n_gpt_tokens: int = user_gpt_context.gpt_message_tokens
         n_system_tokens: int = user_gpt_context.system_message_tokens
-        for role in ("user", "gpt", "system"):
-            getattr(user_gpt_context, f"{role}_message_histories").clear()
-            setattr(user_gpt_context, f"{role}_message_tokens", 0)
+        for role in GptRoles:
+            getattr(user_gpt_context, f"{role.name.lower()}_message_histories").clear()
+            setattr(user_gpt_context, f"{role.name.lower()}_message_tokens", 0)
             await chatgpt_cache_manager.delete_message_history(
                 user_id=user_gpt_context.user_gpt_profile.user_id, role=role
             )
@@ -95,11 +95,7 @@ class ChatGptCommands:  # commands for chat gpt
             return "/poplastmessage user|system|gpt와 같은 형식으로 입력해야 합니다."  # return fail message
         # if args contains arg equal to --silent, return no message
         is_silent: bool = "--silent" in args
-        if args[0] not in (
-            "user",
-            "system",
-            "gpt",
-        ):  # if args[0] is not user or system or gpt
+        if not isinstance(args[0], str) or args[0].upper() not in GptRoles._member_names_:
             return "user, system, gpt 중 하나를 입력해야 합니다." if not is_silent else ""  # return fail message
         last_message_history: MessageHistory | None = await MessageManager.rpop_message_history_safely(
             user_gpt_context=user_gpt_context, role=args[0]
@@ -115,9 +111,45 @@ class ChatGptCommands:  # commands for chat gpt
         # retry last gpt message, format: /retry
         if len(user_gpt_context.user_message_histories) < 1 or len(user_gpt_context.gpt_message_histories) < 1:
             return "메시지가 없어서 다시 할 수 없습니다."
-        await MessageManager.rpop_message_history_safely(user_gpt_context=user_gpt_context, role="gpt")
+        await MessageManager.rpop_message_history_safely(user_gpt_context=user_gpt_context, role=GptRoles.GPT)
         return None
 
     @staticmethod
     def ping(*args, user_gpt_context: UserGptContext) -> str:
         return "pong"
+
+    @staticmethod
+    async def codex(*args, user_gpt_context: UserGptContext) -> str:
+        system_message = """Act as CODEX ("COding DEsign eXpert"), an expert coder with experience in multiple coding languages.
+Always follow the coding best practices by writing clean, modular code with proper security measures and leveraging design patterns.
+You can break down your code into parts whenever possible to avoid breaching the chatgpt output character limit. Write code part by part when I send "continue". If you reach the character limit, I will send "continue" and then you should continue without repeating any previous code.
+Do not assume anything from your side; please ask me a numbered list of essential questions before starting.
+If you have trouble fixing a bug, ask me for the latest code snippets for reference from the official documentation.
+I am using [MacOS], [VSCode] and prefer [brew] package manager.
+Start a conversation as "CODEX: Hi, what are we coding today?"
+        """
+        await MessageManager.clear_message_history_safely(user_gpt_context=user_gpt_context, role=GptRoles.SYSTEM)
+        await MessageManager.add_message_history_safely(
+            user_gpt_context=user_gpt_context, role=GptRoles.SYSTEM, content=system_message
+        )
+        return "CODEX mode ON"
+
+    @staticmethod
+    async def redx(*args, user_gpt_context: UserGptContext) -> str:
+        system_message = """compress the following text in a way that fits in a tweet (ideally) and such that you (GPT) can reconstruct the intention of the human who wrote text as close as possible to the original intention. This is for yourself. It does not need to be human readable or understandable. Abuse of language mixing, abbreviations, symbols (unicode and emoji), or any other encodings or internal representations is all permissible, as long as it, if pasted in a new inference cycle, will yield near-identical results as the original text: """
+        await MessageManager.clear_message_history_safely(user_gpt_context=user_gpt_context, role=GptRoles.SYSTEM)
+        await MessageManager.add_message_history_safely(
+            user_gpt_context=user_gpt_context, role=GptRoles.SYSTEM, content=system_message
+        )
+        return "REDX mode ON"
+
+    @staticmethod
+    def echo(*args, user_gpt_context: UserGptContext) -> str:
+        return " ".join(args)
+
+    @staticmethod
+    def codeblock(*args, user_gpt_context: UserGptContext) -> str:
+        if len(args) < 2:
+            return "/codeblock [language] [code]와 같은 형식으로 입력해야 합니다."
+        language: str = args[0]
+        return f"```{language.lower()}\n" + " ".join(args[1:]) + "\n```"

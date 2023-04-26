@@ -2,6 +2,11 @@
 
 Welcome to the ChatGPT Web App Server repository, a full-stack implementation of an API server built with Python FastAPI, and a beautiful frontend powered by Flutter. This project is designed to deliver a seamless chat experience with the advanced GPT-3 model, offering a modern infrastructure that can be easily extended when GPT-4's Multimodal and Plugin features become available. Enjoy your stay! 🚀
 
+
+<p align="center">
+  <img src="https://user-images.githubusercontent.com/121936784/234617595-bcb2f1c7-2bc9-43ee-b774-1aac25e4d2f7.gif"/>
+</p>
+
 ## Key Features
 
 - FastAPI - High-performance web framework for building APIs with Python.
