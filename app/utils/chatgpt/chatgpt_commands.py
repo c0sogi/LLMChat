@@ -18,7 +18,9 @@ class ChatGptCommands:  # commands for chat gpt
             getattr(user_gpt_context, f"{role.name.lower()}_message_histories").clear()
             setattr(user_gpt_context, f"{role.name.lower()}_message_tokens", 0)
             await chatgpt_cache_manager.delete_message_history(
-                user_id=user_gpt_context.user_gpt_profile.user_id, role=role
+                user_id=user_gpt_context.user_gpt_profile.user_id,
+                chat_room_id=user_gpt_context.user_gpt_profile.chat_room_id,
+                role=role,
             )
         response: str = f"총 {n_user_tokens}개의 사용자 토큰, {n_gpt_tokens}개의 GPT 토큰, {n_system_tokens}개의 시스템 토큰이 삭제되었습니다."
         return response  # return success message
@@ -31,7 +33,8 @@ class ChatGptCommands:  # commands for chat gpt
     async def reset(*args, user_gpt_context: UserGptContext) -> str:  # reset user_gpt_context
         user_gpt_context.reset()
         if await chatgpt_cache_manager.reset_context(
-            user_id=user_gpt_context.user_gpt_profile.user_id
+            user_id=user_gpt_context.user_gpt_profile.user_id,
+            chat_room_id=user_gpt_context.user_gpt_profile.chat_room_id,
         ):  # if reset success
             return "컨텍스트를 리셋했습니다."
         else:

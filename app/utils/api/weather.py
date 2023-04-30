@@ -48,18 +48,3 @@ def get_temperature(
         temp = None
 
     return temp
-
-
-if __name__ == "__main__":
-    from asyncio import run
-
-    print(
-        run(
-            fetch_weather_data(
-                lat=37,
-                lon=120,
-                api_key="4096ab0a66614894bc2794ce8a704d64",
-                source="weatherbit",
-            )
-        )
-    )

@@ -11,9 +11,10 @@ from app.utils.auth.token import create_access_token
 from app.utils.tests.tests_utils import random_user_generator
 from app.database.schemas.auth import Users
 from app.common.app_settings import create_app
-from app.common.config import Config, logging_config
+from app.common.config import HOST_MAIN, Config, logging_config
 from app.utils.logger import CustomLogger
 from app.viewmodels.base_models import UserToken
+from app.utils.chatgpt.chatgpt_cache_manager import chatgpt_cache_manager as ccm
 
 """
 1. DB 생성
@@ -23,7 +24,18 @@ from app.viewmodels.base_models import UserToken
 """
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
+def config():
+    return Config.get(option="test")
+
+
+@pytest.fixture(scope="session")
+def chatgpt_cache_manager():
+    ccm.cache.start(config=Config.get(option="test"))
+    return ccm
+
+
+@pytest.fixture(scope="session")
 def test_logger():
     return CustomLogger(name="PyTest", logging_config=logging_config)
 
@@ -36,8 +48,8 @@ def event_loop():
 
 
 @pytest.fixture(scope="session")
-def app() -> FastAPI:
-    return create_app(Config.get(option="test"))
+def app(config) -> FastAPI:
+    return create_app(config)
 
 
 @pytest.fixture(scope="session")

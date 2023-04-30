@@ -141,7 +141,7 @@ def send_email(**kwargs):
     last_email = ""
     if mailing_list:
         try:
-            yag = yagmail.SMTP({email_addr: "라이언X코알라"}, email_password)
+            yag = yagmail.SMTP({email_addr: "Admin"}, email_password)
             # https://myaccount.google.com/u/1/lesssecureapps
             for m_l in mailing_list:
                 contents = [email_content.format(m_l.name)]

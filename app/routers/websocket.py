@@ -18,7 +18,11 @@ async def ws_chatgpt(websocket: WebSocket, api_key: str):
             else:
                 user: Users = Users(email=f"testaccount@{HOST_MAIN}")
         except Exception as exception:
-            await SendToWebsocket.message(websocket=websocket, msg=f"유효하지 않은 API 키입니다. 연결을 종료합니다. ({exception})")
+            await SendToWebsocket.message(
+                websocket=websocket,
+                msg=f"유효하지 않은 API 키입니다. 연결을 종료합니다. ({exception})",
+                chat_room_id="null",
+            )
             return
         await begin_chat(
             websocket=websocket,
@@ -29,4 +33,8 @@ async def ws_chatgpt(websocket: WebSocket, api_key: str):
         ...
     except Exception as exception:
         api_logger.error(exception, exc_info=True)
-        await SendToWebsocket.message(websocket=websocket, msg=f"알 수 없는 오류가 발생했습니다. 연결을 종료합니다. ({exception})")
+        await SendToWebsocket.message(
+            websocket=websocket,
+            msg=f"알 수 없는 오류가 발생했습니다. 연결을 종료합니다. ({exception})",
+            chat_room_id="null",
+        )

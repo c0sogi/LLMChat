@@ -26,3 +26,15 @@ class GptTooMuchTokenException(GptException):
     def __init__(self, *, msg: str | None = None) -> None:
         self.msg = msg
         super().__init__(msg=msg)
+
+
+class GptTextGenerationException(GptException):
+    def __init__(self, *, msg: str | None = None) -> None:
+        self.msg = msg
+        super().__init__(msg=msg)
+
+
+class GptOtherException(GptException):
+    def __init__(self, *, msg: str | None = None) -> None:
+        self.msg = msg
+        super().__init__(msg=msg)

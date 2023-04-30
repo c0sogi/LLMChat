@@ -12,7 +12,9 @@ from app.errors.api_exceptions import APIException, InternalServerError
 
 
 class CustomLogger(logging.Logger):
-    def __init__(self, name: str, logging_config: LoggingConfig) -> None:
+    def __init__(self, name: str, logging_config: LoggingConfig = None) -> None:
+        if logging_config is None:
+            logging_config = LoggingConfig()
         super().__init__(name=name, level=logging_config.logger_level)
         formatter = logging.Formatter(logging_config.logging_format)
 
@@ -32,7 +34,7 @@ class CustomLogger(logging.Logger):
 
 
 class ApiLogger(CustomLogger):
-    def __init__(self, name: str, logging_config: LoggingConfig) -> None:
+    def __init__(self, name: str, logging_config: LoggingConfig = None) -> None:
         super().__init__(name=name, logging_config=logging_config)
 
     def _hide_email(self, email: str) -> str:

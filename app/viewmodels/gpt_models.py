@@ -91,7 +91,7 @@ class MessageHistory:  # message history for user and gpt
     tokens: int
     is_user: bool
     timestamp: int = field(default_factory=lambda: UTC.timestamp(hour_diff=9))
-    uuid: str = field(default_factory=lambda: str(uuid4()))
+    uuid: str = field(default_factory=lambda: uuid4().hex)
 
     def __post_init__(self):
         self.role = GptRoles.get_value(self.role).lower()
@@ -107,6 +107,8 @@ class MessageHistory:  # message history for user and gpt
 @dataclass
 class UserGptProfile:  # user gpt profile for user and gpt
     user_id: str
+    chat_room_id: str = field(default_factory=lambda: uuid4().hex)
+    created_at: int = field(default_factory=lambda: UTC.timestamp(hour_diff=9))
     user_role: str = field(default=GptRoles.USER.value)
     gpt_role: str = field(default=GptRoles.GPT.value)
     system_role: str = field(default=GptRoles.SYSTEM.value)
@@ -200,14 +202,23 @@ Total token consumed: {self.total_tokens}
 Remaining token: {self.left_tokens}"""
 
     @classmethod
-    def construct_default(cls, user_id: str, gpt_model_name: str = "gpt-3.5-turbo"):
+    def construct_default(
+        cls,
+        user_id: str,
+        chat_room_id: str,
+        gpt_model_name: str = "gpt-3.5-turbo",
+    ):
         return cls(
-            user_gpt_profile=UserGptProfile(user_id=user_id),
+            user_gpt_profile=UserGptProfile(user_id=user_id, chat_room_id=chat_room_id),
             gpt_model=getattr(GPT_MODELS, gpt_model_name.replace(".", "_").replace("-", "_")),
         )
 
     def reset(self):
-        for k, v in self.construct_default(self.user_gpt_profile.user_id, self.gpt_model.name).__dict__.items():
+        for k, v in self.construct_default(
+            self.user_gpt_profile.user_id,
+            self.user_gpt_profile.chat_room_id,
+            self.gpt_model.name,
+        ).__dict__.items():
             setattr(self, k, v)
 
     def ensure_token_not_exceed(

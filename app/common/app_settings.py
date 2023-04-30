@@ -82,14 +82,14 @@ def create_app(config: LocalConfig | ProdConfig | TestConfig) -> FastAPI:
         else:
             api_logger.critical("MySQL DB connection failed!")
         if cache.is_initiated and await cache.redis.ping():
-            for role in GptRoles:
-                await chatgpt_cache_manager.delete_message_history(user_id=f"testaccount@{HOST_MAIN}", role=role)
+            await chatgpt_cache_manager.delete_user(f"testaccount@{HOST_MAIN}")
             api_logger.critical("Redis CACHE connected!")
         else:
             api_logger.critical("Redis CACHE connection failed!")
 
     @new_app.on_event("shutdown")
     async def shutdown():
+        # await chatgpt_cache_manager.delete_user(f"testaccount@{HOST_MAIN}")
         await db.close()
         await cache.close()
         api_logger.critical("DB & CACHE connection closed!")

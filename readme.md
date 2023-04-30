@@ -358,6 +358,9 @@ from app.database.crud.users import register_new_user, get_me, is_email_exist
 from app.database.crud.api_keys import create_api_key, get_api_keys, update_api_key, delete_api_key
 
 async def main():
+    # `user_id` is an integer index in the MySQL database, and `email` is user's actual name
+    # the email will be used as `user_id` in ChatGpt. Don't confuse with `user_id` in MySQL
+
     # Register a new user
     new_user = await register_new_user(email="test@test.com", hashed_password="...")
 
@@ -488,6 +491,7 @@ The Cache Manager (`ChatGptCacheManager`) is responsible for handling user conte
 - `get_message_history`: Retrieves the message history for a specific role.
 - `delete_message_history`: Deletes the message history for a specific role.
 - `set_message_history`: Sets a specific message history for a role and index.
+- `get_all_chat_rooms`: Retrieves all chat rooms of an user from Redis.
 
 ## Message Manager
 
@@ -511,17 +515,18 @@ Then, you can use their methods to interact with the Redis cache and manage mess
 For example, to create a new user GPT context:
 
 ```python
-user_id = "example_user_id"
-default_context = UserGptContext.construct_default(user_id=user_id)
-await chatgpt_cache_manager.create_context(user_id=user_id, user_gpt_context=default_context)
+user_id = "example@user.com"  # email format
+chat_room_id = "example_chat_room_id"  # usually the 32 characters from `uuid.uuid4().hex`
+default_context = UserGptContext.construct_default(user_id=user_id, chat_room_id=chat_room_id)
+await chatgpt_cache_manager.create_context(user_gpt_context=default_context)
 ```
 
 To safely add a message history to the user's GPT context:
 
 ```python
-user_gpt_context = await chatgpt_cache_manager.read_context(user_id)
+user_gpt_context = await chatgpt_cache_manager.read_context(user_id=user_id, chat_room_id=chat_room_id)
 content = "This is a sample message."
-role = "user"  # can be "user", "gpt", or "system"
+role = "user"  # can be "user", "gpt", or "system", or use enum such as GptRoles.USER, GptRoles.GPT, GptRoles.SYSTEM
 await MessageManager.add_message_history_safely(user_gpt_context, content, role)
 ```
 

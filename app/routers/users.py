@@ -35,7 +35,7 @@ async def get_api_keys(request: Request):
     return await api_keys.get_api_keys(user_id=request.state.user.id)
 
 
-@router.post("/apikeys", response_model=GetApiKeyFirstTime)
+@router.post("/apikeys", response_model=GetApiKeyFirstTime, status_code=201)
 async def create_api_key(request: Request, api_key_info: AddApiKey):
     return await api_keys.create_api_key(user_id=request.state.user.id, additional_key_info=api_key_info)
 

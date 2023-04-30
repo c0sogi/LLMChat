@@ -54,9 +54,8 @@ async def generate_from_openai(
     async with httpx.AsyncClient(timeout=ChatGPTConfig.wait_for_timeout) as client:  # initialize client
         is_appending_discontinued_message: bool = False
         while True:  # stream until connection is closed
-            api_logger.debug("Generating from OpenAI...")
             if not user_gpt_context.is_discontinued:
-                gpt_content: str = ""
+                content_buffer: str = ""
             try:
                 async with client.stream(
                     method="POST",
@@ -87,17 +86,18 @@ async def generate_from_openai(
                         raise GptConnectionException(
                             msg=f"OpenAI 서버로부터 오류: {error_msg}"
                         )  # raise exception for connection error
-                    async for raw_text in streaming_response.aiter_text():  # stream from api
-                        if raw_text == "data: [DONE]":  # if stream is done
-                            break
-                        for text in ChatGPTConfig.api_regex_pattern.findall(raw_text):  # parse json from stream
+                    stream_buffer: str = ""
+                    async for stream in streaming_response.aiter_text():  # stream from api
+                        stream_buffer += stream
+                        match_found: bool = False
+                        for match in ChatGPTConfig.api_regex_pattern.finditer(stream_buffer):  # parse json from stream
+                            match_found = True
                             try:
-                                json_data: dict = orjson.loads(text)["choices"][0]  # data from api
+                                json_data: dict = orjson.loads(match.group(1))["choices"][0]  # data from api
                             except orjson.JSONDecodeError:  # if json is invalid
                                 continue
                             finish_reason: str | None = json_data.get("finish_reason")  # reason for finishing stream
                             delta: str | None = json_data.get("delta").get("content")  # generated text from api
-                            api_logger.debug(f"finish_reason: {finish_reason}, delta: {delta}")
                             if finish_reason == "length":
                                 raise GptLengthException(
                                     msg="Incomplete model output due to max_tokens parameter or token limit"
@@ -107,21 +107,23 @@ async def generate_from_openai(
                                     msg="Omitted content due to a flag from our content filters"
                                 )  # raise exception for openai content filter
                             elif delta is not None:
-                                gpt_content += delta
+                                content_buffer += delta
                                 yield delta
+                        if match_found:  # if match is found, reset stream buffer
+                            stream_buffer = stream_buffer[match.end() :]  # noqa: E203
             except GptLengthException:
                 api_logger.error("token limit exceeded")
                 if is_appending_discontinued_message:
                     await MessageManager.set_message_history_safely(
                         user_gpt_context=user_gpt_context,
-                        new_content=gpt_content,
+                        new_content=content_buffer,
                         role=GptRoles.GPT,
                         index=-1,
                     )
                 else:
                     await MessageManager.add_message_history_safely(
                         user_gpt_context=user_gpt_context,
-                        content=gpt_content,
+                        content=content_buffer,
                         role=GptRoles.GPT,
                     )
                     is_appending_discontinued_message = True
@@ -135,14 +137,9 @@ async def generate_from_openai(
             except httpx.TimeoutException:
                 await sleep(ChatGPTConfig.wait_for_reconnect)
                 continue
-            except Exception as exception:
-                await MessageManager.rpop_message_history_safely(user_gpt_context=user_gpt_context, role=GptRoles.USER)
-                raise Responses_500.websocket_error(
-                    msg=f"unexpected exception generating text from openai: {exception}"
-                )
             else:
                 await MessageManager.add_message_history_safely(
-                    user_gpt_context=user_gpt_context, content=gpt_content, role="gpt"
+                    user_gpt_context=user_gpt_context, content=content_buffer, role=GptRoles.GPT
                 )
                 user_gpt_context.is_discontinued = False
                 break

@@ -19,6 +19,7 @@ idna
 iniconfig
 jinja2
 jmespath
+langchain
 lxml
 orjson
 packaging
