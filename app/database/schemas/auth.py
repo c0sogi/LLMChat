@@ -50,8 +50,8 @@ class ApiKeys(Base, Mixin):
 
 class ApiWhiteLists(Base, Mixin):
     __tablename__ = "api_whitelists"
-    api_key_id: Mapped[int] = Column(Integer, ForeignKey("api_keys.id"))
-    ip_address: Mapped[str] = Column(String(length=64))
+    api_key_id: Mapped[int] = mapped_column(Integer, ForeignKey("api_keys.id"))
+    ip_address: Mapped[str] = mapped_column(String(length=64))
 
 
 class ChatRooms(Base, Mixin):

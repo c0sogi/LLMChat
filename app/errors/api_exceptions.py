@@ -37,7 +37,9 @@ class APIException(Exception):
         lazy_format: Optional[dict[str, str]] = None,
         ex: Optional[Exception] = None,
     ) -> "APIException":
-        if lazy_format is not None:  # lazy format for msg and detail
+        if (
+            self.msg is not None and self.detail is not None and lazy_format is not None
+        ):  # lazy format for msg and detail
             self.msg = self.msg.format(**lazy_format)
             self.detail = self.detail.format(**lazy_format)
         if ex is not None:  # set exception if exists
@@ -112,7 +114,12 @@ class Responses_400:
         msg=f"화이트리스트 생성은 {MAX_API_WHITELIST}개 까지 가능합니다.",
         detail="Max Whitelist Count Reached",
     )
-    invalid_ip: Type[InvalidIpError] = InvalidIpError
+    invalid_ip: APIException = APIException(
+        status_code=400,
+        internal_code=10,
+        msg="{ip}는 올바른 IP 가 아닙니다.",
+        detail="invalid IP : {ip}",
+    )
     invalid_api_query: APIException = APIException(
         status_code=400,
         internal_code=11,
@@ -191,9 +198,15 @@ class Responses_404:
     )
     not_found_api_key: APIException = APIException(
         status_code=404,
-        internal_code=4,
+        internal_code=7,
         msg="제공된 조건에 부합하는 Api key를 찾을 수 없습니다.",
         detail="No API Key matched such conditions",
+    )
+    not_found_preset: APIException = APIException(
+        status_code=404,
+        internal_code=13,
+        msg="제공된 조건에 부합하는 프리셋을 찾을 수 없습니다.",
+        detail="No preset matched such conditions",
     )
 
 
@@ -203,16 +216,28 @@ class Responses_500:
     서버 내부적으로 오류가 발생하였음
     """
 
-    enforce_domain_wildcard: APIException = APIException(
+    middleware_exception: APIException = APIException(
         status_code=500,
         internal_code=2,
-        detail="Domain wildcard patterns must be like '*.example.com'.",
+        detail="Middleware could not be initialized",
     )
     websocket_error: APIException = APIException(
         status_code=500,
         internal_code=3,
         msg="웹소켓 연결에 문제 발생",
         detail="Websocket error",
+    )
+    database_not_initialized: APIException = APIException(
+        status_code=500,
+        internal_code=4,
+        msg="데이터베이스가 초기화 되지 않았습니다.",
+        detail="Database not initialized",
+    )
+    cache_not_initialized: APIException = APIException(
+        status_code=500,
+        internal_code=5,
+        msg="캐시가 초기화 되지 않았습니다.",
+        detail="Cache not initialized",
     )
 
 

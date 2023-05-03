@@ -1,6 +1,6 @@
 from collections.abc import Iterable
 from asyncio import current_task
-from typing import Callable, Optional, Type
+from typing import AsyncGenerator, Callable, Optional, Type, Any
 from urllib import parse
 from redis.asyncio import Redis
 from sqlalchemy import (
@@ -22,9 +22,10 @@ from sqlalchemy.ext.asyncio import (
     AsyncEngine,
 )
 from sqlalchemy_utils import database_exists, create_database
+from app.errors.api_exceptions import Responses_500
 from app.utils.logger import CustomLogger
 from app.common.config import logging_config, TestConfig, ProdConfig, LocalConfig, SingletonMetaClass
-from . import Base
+from . import Base, DeclarativeMeta
 
 
 class MySQL(metaclass=SingletonMetaClass):
@@ -42,7 +43,7 @@ class MySQL(metaclass=SingletonMetaClass):
     }
 
     @staticmethod
-    def execute(query: str, engine_or_conn: Engine | Connection, scalar: bool = False) -> Optional[any]:
+    def execute(query: str, engine_or_conn: Engine | Connection, scalar: bool = False) -> Any | None:
         if isinstance(engine_or_conn, Engine) and not isinstance(engine_or_conn, Connection):
             with engine_or_conn.connect() as conn:
                 cursor = conn.execute(text(query + ";" if not query.endswith(";") else query))
@@ -56,7 +57,8 @@ class MySQL(metaclass=SingletonMetaClass):
         with engine.connect() as conn:
             conn.execute(text("SET FOREIGN_KEY_CHECKS = 0;"))
             for table in Base.metadata.sorted_tables:
-                conn.execute(table.delete()) if table.name not in except_tables else ...
+                if except_tables is not None:
+                    conn.execute(table.delete()) if table.name not in except_tables else ...
             conn.execute(text("SET FOREIGN_KEY_CHECKS = 1;"))
             conn.commit()
 
@@ -134,10 +136,10 @@ class MySQL(metaclass=SingletonMetaClass):
 
 class SQLAlchemy(metaclass=SingletonMetaClass):
     def __init__(self):
-        self.is_test_mode: bool = None
-        self.root_engine: Engine = None
-        self.engine: AsyncEngine = None
-        self.session: AsyncSession = None
+        self.is_test_mode: bool = False
+        self.root_engine: Engine | None = None
+        self.engine: AsyncEngine | None = None
+        self.session: async_scoped_session[AsyncSession] | None = None
         self.is_initiated = False
         self.logger = CustomLogger("SQLAlchemy", logging_config=logging_config)
 
@@ -199,23 +201,29 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         self.is_initiated = True
 
     async def close(self) -> None:
+        if self.session is None or self.engine is None:
+            return
         await self.session.close()
         await self.engine.dispose()
         self.is_initiated = False
 
-    async def get_db(self) -> AsyncSession:
+    async def get_db(self) -> AsyncGenerator[AsyncSession, str]:
+        if self.session is None:
+            raise Responses_500.database_not_initialized
         async with self.session() as transaction:
             yield transaction
 
-    def run_in_session(self, func: Callable[..., any]) -> Callable[..., any]:
+    def run_in_session(self, func: Callable) -> Callable:
         async def wrapper(
             session: AsyncSession | None = None,
             autocommit: bool = False,
             refresh: bool = False,
-            *args: any,
-            **kwargs: any,
+            *args: Any,
+            **kwargs: Any,
         ):
             if session is None:
+                if self.session is None:
+                    raise Responses_500.database_not_initialized
                 async with self.session() as transaction:
                     result = await func(transaction, *args, **kwargs)
                     if autocommit:
@@ -248,7 +256,7 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         self,
         session: AsyncSession,
         stmt: Select,
-    ) -> any:
+    ) -> Any:
         return await session.scalar(stmt)
 
     async def _scalars(  # To be decorated
@@ -261,24 +269,24 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
     async def _add(  # To be decorated
         self,
         session: AsyncSession,
-        instance: Base,
-    ) -> Base:
+        instance: DeclarativeMeta,
+    ) -> DeclarativeMeta:
         session.add(instance)
         return instance
 
     async def _add_all(  # To be decorated
         self,
         session: AsyncSession,
-        instances: Iterable[Base],
-    ) -> Iterable[Base]:
+        instances: Iterable[DeclarativeMeta],
+    ) -> Iterable[DeclarativeMeta]:
         session.add_all(instances)
         return instances
 
     async def _delete(  # To be decorated
         self,
         session: AsyncSession,
-        instance: Base,
-    ) -> Base:
+        instance: DeclarativeMeta,
+    ) -> DeclarativeMeta:
         await session.delete(instance)
         return instance
 
@@ -291,7 +299,7 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
     ) -> Result:
         return await self.run_in_session(self._execute)(session, autocommit=autocommit, refresh=refresh, stmt=stmt)
 
-    async def scalar(self, stmt: Select, session: AsyncSession | None = None) -> any:
+    async def scalar(self, stmt: Select, session: AsyncSession | None = None) -> Any:
         return await self.run_in_session(self._scalar)(session, stmt=stmt)
 
     async def scalars(self, stmt: Select, session: AsyncSession | None = None) -> ScalarResult:
@@ -299,46 +307,48 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
 
     async def add(
         self,
-        schema: Type[Base],
+        schema: Type[DeclarativeMeta],
         autocommit: bool = False,
         refresh: bool = False,
         session: AsyncSession | None = None,
-        **kwargs: any,
-    ) -> Base:
-        instance = schema(**kwargs)
+        **kwargs: Any,
+    ) -> DeclarativeMeta:
+        instance = schema(**kwargs)  # type: ignore
         return await self.run_in_session(self._add)(session, autocommit=autocommit, refresh=refresh, instance=instance)
 
     async def add_all(
         self,
-        schema: Type[Base],
+        schema: Type[DeclarativeMeta],
         *args: dict,
         autocommit: bool = False,
         refresh: bool = False,
         session: AsyncSession | None = None,
-    ) -> list[Base]:
-        instances = [schema(**arg) for arg in args]
+    ) -> list[DeclarativeMeta]:
+        instances = [schema(**arg) for arg in args]  # type: ignore
         return await self.run_in_session(self._add_all)(
             session, autocommit=autocommit, refresh=refresh, instances=instances
         )
 
     async def delete(
         self,
-        instance: Base,
+        instance: DeclarativeMeta,
         autocommit: bool = False,
         session: AsyncSession | None = None,
-    ) -> Base:
+    ) -> DeclarativeMeta:
         return await self.run_in_session(self._delete)(session, autocommit=autocommit, instance=instance)
 
-    async def scalars__fetchall(self, stmt: Select, session: AsyncSession | None = None) -> list[Base]:
+    async def scalars__fetchall(self, stmt: Select, session: AsyncSession | None = None) -> list[DeclarativeMeta]:
         return (await self.run_in_session(self._scalars)(session, stmt=stmt)).fetchall()
 
-    async def scalars__one(self, stmt: Select, session: AsyncSession | None = None) -> Base:
+    async def scalars__one(self, stmt: Select, session: AsyncSession | None = None) -> DeclarativeMeta:
         return (await self.run_in_session(self._scalars)(session, stmt=stmt)).one()
 
-    async def scalars__first(self, stmt: Select, session: AsyncSession | None = None) -> Base:
+    async def scalars__first(self, stmt: Select, session: AsyncSession | None = None) -> DeclarativeMeta:
         return (await self.run_in_session(self._scalars)(session, stmt=stmt)).first()
 
-    async def scalars__one_or_none(self, stmt: Select, session: AsyncSession | None = None) -> Optional[Base]:
+    async def scalars__one_or_none(
+        self, stmt: Select, session: AsyncSession | None = None
+    ) -> Optional[DeclarativeMeta]:
         return (await self.run_in_session(self._scalars)(session, stmt=stmt)).one_or_none()
 
 
@@ -363,6 +373,8 @@ class RedisFactory(metaclass=SingletonMetaClass):
         self.is_initiated = True
 
     async def close(self) -> None:
+        if self.redis is None:
+            return
         await self.redis.close()
         self.is_initiated = False
 

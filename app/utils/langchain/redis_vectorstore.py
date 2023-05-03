@@ -22,7 +22,7 @@ try:
     if TYPE_CHECKING:
         from redis.client import Pipeline as PipelineType
         from redis.client import Redis as RedisType
-        from redis.commands.search.field import FieldType
+        from redis.commands.search.field import Field as FieldType
     from redis.commands.search.field import TextField, VectorField
     from redis.commands.search.indexDefinition import IndexDefinition, IndexType
     from redis.commands.search.query import Query
@@ -48,7 +48,7 @@ REDIS_REQUIRED_MODULES = [
 ]
 
 
-class DistanceMetric(Enum):
+class DistanceMetric(str, Enum):
     """Enum for distance metrics for vectors."""
 
     EUCLIDEAN = "EUCLIDEAN"
@@ -150,7 +150,7 @@ def _redis_vectorstore_schema(
     vector_key: str,
     dim: int,
     distance_metric: str,
-) -> Tuple[FieldType]:
+) -> Tuple[TextField, TextField, VectorField]:
     return (
         TextField(name=content_key),
         TextField(name=metadata_key),
@@ -172,10 +172,10 @@ def _redis_embed_texts_to_pipeline(
     content_key: str,
     metadata_key: str,
     vector_key: str,
-    embeddings: List[np.ndarray],
+    embeddings: List[List[float]],
     pipeline: Union[PipelineType, AsyncPipelineType],
     metadatas: Optional[List[dict]] = None,
-) -> List[dict]:
+) -> None:
     for i, text in enumerate(texts):
         key = _redis_key(prefix)
         metadata = metadatas[i] if metadatas else {}
@@ -313,7 +313,7 @@ class Redis(VectorStore):
     ) -> List[str]:
         """Add texts data to an existing index."""
         ids, pipeline = self._add_texts(texts, metadatas, **kwargs)
-        await pipeline.execute()
+        await pipeline.execute()  # type: ignore
         return ids
 
     def similarity_search(self, query: str, k: int = 4, **kwargs: Any) -> List[Document]:
@@ -451,7 +451,7 @@ class Redis(VectorStore):
         redis_query, params_dict = self._similarity_search_with_score(query, k=k)
 
         # perform vector search
-        results = await self.client.ft(self.index_name).search(redis_query, params_dict)
+        results = await self.client.ft(self.index_name).search(redis_query, params_dict)  # type: ignore
 
         docs = [
             (

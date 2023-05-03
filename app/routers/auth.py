@@ -33,19 +33,19 @@ async def register(
     sns_type: SnsType,
     reg_info: UserRegister,
 ) -> Token:
-    if sns_type == SnsType.email:
+    if sns_type == SnsType.EMAIL:
         if not (reg_info.email and reg_info.password):
             raise Responses_400.no_email_or_password
         if await is_email_exist(reg_info.email):
             raise Responses_400.email_already_exists
-        hashed_password: bytes = bcrypt.hashpw(
+        hashed_password: str = bcrypt.hashpw(
             password=reg_info.password.encode("utf-8"),
             salt=bcrypt.gensalt(),
-        )
+        ).decode("utf-8")
         new_user: Users = await register_new_user(
             email=reg_info.email,
             hashed_password=hashed_password,
-            ip_address=request.client.host,
+            ip_address=request.client.host if request.client is not None else None,
         )
         data_to_be_tokenized: dict = UserToken.from_orm(new_user).dict(exclude={"password", "marketing_agree"})
         token: str = create_access_token(data=data_to_be_tokenized, expires_delta=TOKEN_EXPIRE_HOURS)
@@ -66,15 +66,11 @@ async def login(
     sns_type: SnsType,
     user_info: UserRegister,
 ) -> Token:
-    if sns_type == SnsType.email:
+    if sns_type == SnsType.EMAIL:
         if not (user_info.email and user_info.password):
             raise Responses_400.no_email_or_password
-        try:
-            matched_user: Users = await Users.first_filtered_by(email=user_info.email)
-        except Exception as e:
-            print("SQLERROR: ", e)
-            return
-        if matched_user is None:
+        matched_user: Users = await Users.first_filtered_by(email=user_info.email)  # type: ignore
+        if matched_user is None or matched_user.password is None:
             raise Responses_404.not_found_user
         if not bcrypt.checkpw(
             password=user_info.password.encode("utf-8"),

@@ -21,16 +21,25 @@ async def is_valid_api_key(access_key: str) -> bool:
 async def register_new_user(
     email: str,
     hashed_password: str,
-    ip_address: str,
+    ip_address: str | None,
 ) -> Users:
-    return await Users.add_one(
-        autocommit=True,
-        refresh=True,
-        email=email,
-        password=hashed_password,
-        ip_address=ip_address,
-    )
+    return (
+        await Users.add_one(
+            autocommit=True,
+            refresh=True,
+            email=email,
+            password=hashed_password,
+            ip_address=ip_address,
+        )
+        if ip_address
+        else await Users.add_one(
+            autocommit=True,
+            refresh=True,
+            email=email,
+            password=hashed_password,
+        )
+    )  # type: ignore
 
 
 async def find_matched_user(email: str) -> Users:
-    return await Users.first_filtered_by(email=email)
+    return await Users.first_filtered_by(email=email)  # type: ignore

@@ -2,7 +2,7 @@ from httpx import AsyncClient
 import pytest
 from fastapi import status
 from app.errors.api_exceptions import Responses_400
-from app.utils.tests.tests_utils import random_user_generator
+from app.utils.tests.random import random_user_generator
 
 # @pytest.mark.asyncio
 # async def test_registration(client, random_user):

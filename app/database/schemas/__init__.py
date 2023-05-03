@@ -1,19 +1,12 @@
-from typing import Optional
-from sqlalchemy import (
-    Column,
-    func,
-    String,
-    Select,
-    select,
-    update,
-)
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import (
-    Mapped,
-    mapped_column,
-)
 from datetime import datetime
-from .. import Base
+from typing import Any, Optional
+
+from sqlalchemy import Column, Select, String, func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql._typing import _ColumnExpressionArgument
+
+from .. import DeclarativeMeta
 from ..connection import db
 
 
@@ -30,9 +23,9 @@ class Mixin:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-    def to_dict(self, *args, exclude: list = None):
+    def to_dict(self, *args, exclude: list | None = None):
         q_dict: dict = {}
-        for c in self.__table__.columns:
+        for c in self.__table__.columns:  # type: ignore
             if not args or c.name in args:
                 if not exclude or c.name not in exclude:
                     q_dict[c.name] = getattr(self, c.name)
@@ -40,7 +33,7 @@ class Mixin:
 
     @property
     def columns(self) -> list[Column]:
-        return [col for col in self.__table__.columns if (not col.primary_key) and (col.name != "created_at")]
+        return [col for col in self.__table__.columns if (not col.primary_key) and (col.name != "created_at")]  # type: ignore
 
     @classmethod
     async def add_all(
@@ -49,8 +42,14 @@ class Mixin:
         autocommit: bool = False,
         refresh: bool = False,
         session: AsyncSession | None = None,
-    ) -> list[Base]:
-        return await db.add_all(cls, *args, autocommit=autocommit, refresh=refresh, session=session)
+    ) -> list[DeclarativeMeta]:
+        return await db.add_all(
+            cls,  # type: ignore
+            *args,
+            autocommit=autocommit,
+            refresh=refresh,
+            session=session,
+        )
 
     @classmethod
     async def add_one(
@@ -58,9 +57,15 @@ class Mixin:
         autocommit: bool = False,
         refresh: bool = False,
         session: AsyncSession | None = None,
-        **kwargs: any,
-    ) -> Base:
-        return await db.add(cls, autocommit=autocommit, refresh=refresh, session=session, **kwargs)
+        **kwargs: Any,
+    ) -> DeclarativeMeta:
+        return await db.add(
+            cls,  # type: ignore
+            autocommit=autocommit,
+            refresh=refresh,
+            session=session,
+            **kwargs,
+        )
 
     @classmethod
     async def update_where(
@@ -70,46 +75,61 @@ class Mixin:
         autocommit: bool = False,
         refresh: bool = False,
         session: AsyncSession | None = None,
-    ) -> Base:
+    ) -> DeclarativeMeta:
         stmt = update(cls).filter_by(**filter_by).values(**updated)
-        return await db.run_in_session(db._execute)(session, autocommit=autocommit, refresh=refresh, stmt=stmt)
+        return await db.run_in_session(db._execute)(
+            session,
+            autocommit=autocommit,
+            refresh=refresh,
+            stmt=stmt,
+        )
 
     @classmethod
-    async def fetchall_filtered_by(cls, session: AsyncSession | None = None, **kwargs: any) -> list[Base]:
+    async def fetchall_filtered_by(cls, session: AsyncSession | None = None, **kwargs: Any) -> list[DeclarativeMeta]:
         stmt: Select[tuple] = select(cls).filter_by(**kwargs)
         return await db.scalars__fetchall(stmt=stmt, session=session)
 
     @classmethod
-    async def one_filtered_by(cls, session: AsyncSession | None = None, **kwargs: any) -> Base:
+    async def one_filtered_by(cls, session: AsyncSession | None = None, **kwargs: Any) -> DeclarativeMeta:
         stmt: Select[tuple] = select(cls).filter_by(**kwargs)
         return await db.scalars__one(stmt=stmt, session=session)
 
     @classmethod
-    async def first_filtered_by(cls, session: AsyncSession | None = None, **kwargs: any) -> Base:
+    async def first_filtered_by(cls, session: AsyncSession | None = None, **kwargs: Any) -> DeclarativeMeta:
         stmt: Select[tuple] = select(cls).filter_by(**kwargs)
         return await db.scalars__first(stmt=stmt, session=session)
 
     @classmethod
-    async def one_or_none_filtered_by(cls, session: AsyncSession | None = None, **kwargs: any) -> Optional[Base]:
+    async def one_or_none_filtered_by(
+        cls, session: AsyncSession | None = None, **kwargs: Any
+    ) -> Optional[DeclarativeMeta]:
         stmt: Select[tuple] = select(cls).filter_by(**kwargs)
         return await db.scalars__one_or_none(stmt=stmt, session=session)
 
     @classmethod
-    async def fetchall_filtered(cls, *criteria: bool, session: AsyncSession | None = None) -> list[Base]:
+    async def fetchall_filtered(
+        cls, *criteria: _ColumnExpressionArgument[bool], session: AsyncSession | None = None
+    ) -> list[DeclarativeMeta]:
         stmt: Select[tuple] = select(cls).filter(*criteria)
         return await db.scalars__fetchall(stmt=stmt, session=session)
 
     @classmethod
-    async def one_filtered(cls, *criteria: bool, session: AsyncSession | None = None) -> Base:
+    async def one_filtered(
+        cls, *criteria: _ColumnExpressionArgument[bool], session: AsyncSession | None = None
+    ) -> DeclarativeMeta:
         stmt: Select[tuple] = select(cls).filter(*criteria)
         return await db.scalars__one(stmt=stmt, session=session)
 
     @classmethod
-    async def first_filtered(cls, *criteria: bool, session: AsyncSession | None = None) -> Base:
+    async def first_filtered(
+        cls, *criteria: _ColumnExpressionArgument[bool], session: AsyncSession | None = None
+    ) -> DeclarativeMeta:
         stmt: Select[tuple] = select(cls).filter(*criteria)
         return await db.scalars__first(stmt=stmt, session=session)
 
     @classmethod
-    async def one_or_none_filtered(cls, *criteria: bool, session: AsyncSession | None = None) -> Optional[Base]:
+    async def one_or_none_filtered(
+        cls, *criteria: _ColumnExpressionArgument[bool], session: AsyncSession | None = None
+    ) -> Optional[DeclarativeMeta]:
         stmt: Select[tuple] = select(cls).filter(*criteria)
         return await db.scalars__one_or_none(stmt=stmt, session=session)

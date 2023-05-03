@@ -1,16 +1,16 @@
 from app.utils.chatgpt.chatgpt_message_manager import MessageManager
-from app.viewmodels.gpt_models import GptRoles, MessageHistory, UserGptContext
+from app.viewmodels.gpt_models import GptRoles, MessageHistory, UserGptContext, OpenAIModels, LLMModel
 from app.utils.chatgpt.chatgpt_cache_manager import chatgpt_cache_manager
 
 
 class ChatGptCommands:  # commands for chat gpt
     @staticmethod
     def not_existing_callback(*args, user_gpt_context: UserGptContext) -> str:  # callback for not existing command
-        return f"{user_gpt_context.user_gpt_profile.user_id}님, 죄송합니다. 현재 그런 명령어는 지원하지 않습니다."
+        return f"{user_gpt_context.user_id}님, 죄송합니다. 현재 그런 명령어는 지원하지 않습니다."
 
     @staticmethod
     async def clear(*args, user_gpt_context: UserGptContext) -> str:  # clear user and gpt message histories
-        # user_id: str = user_gpt_context.user_gpt_profile.user_id
+        # user_id: str = user_gpt_context.user_id
         n_user_tokens: int = user_gpt_context.user_message_tokens
         n_gpt_tokens: int = user_gpt_context.gpt_message_tokens
         n_system_tokens: int = user_gpt_context.system_message_tokens
@@ -18,8 +18,8 @@ class ChatGptCommands:  # commands for chat gpt
             getattr(user_gpt_context, f"{role.name.lower()}_message_histories").clear()
             setattr(user_gpt_context, f"{role.name.lower()}_message_tokens", 0)
             await chatgpt_cache_manager.delete_message_history(
-                user_id=user_gpt_context.user_gpt_profile.user_id,
-                chat_room_id=user_gpt_context.user_gpt_profile.chat_room_id,
+                user_id=user_gpt_context.user_id,
+                chat_room_id=user_gpt_context.chat_room_id,
                 role=role,
             )
         response: str = f"총 {n_user_tokens}개의 사용자 토큰, {n_gpt_tokens}개의 GPT 토큰, {n_system_tokens}개의 시스템 토큰이 삭제되었습니다."
@@ -33,8 +33,8 @@ class ChatGptCommands:  # commands for chat gpt
     async def reset(*args, user_gpt_context: UserGptContext) -> str:  # reset user_gpt_context
         user_gpt_context.reset()
         if await chatgpt_cache_manager.reset_context(
-            user_id=user_gpt_context.user_gpt_profile.user_id,
-            chat_room_id=user_gpt_context.user_gpt_profile.chat_room_id,
+            user_id=user_gpt_context.user_id,
+            chat_room_id=user_gpt_context.chat_room_id,
         ):  # if reset success
             return "컨텍스트를 리셋했습니다."
         else:
@@ -64,14 +64,14 @@ class ChatGptCommands:  # commands for chat gpt
         except AssertionError:  # if temperature is not between 0 and 1
             return "temperature는 0 이상 1 이하여야 합니다."  # return fail message
         else:
-            previous_temperature: str = user_gpt_context.user_gpt_profile.temperature
+            previous_temperature: str = str(user_gpt_context.user_gpt_profile.temperature)
             user_gpt_context.user_gpt_profile.temperature = now_temperature
             await chatgpt_cache_manager.update_profile_and_model(user_gpt_context)  # update user_gpt_context
             return f"temperature 값을 {previous_temperature}에서 {now_temperature}로 바꿨어요."  # return success message
 
     @classmethod
-    def settemp(cls, *args, user_gpt_context: UserGptContext) -> str:  # alias for settemperature
-        return cls.settemperature(*args, user_gpt_context=user_gpt_context)
+    async def settemp(cls, *args, user_gpt_context: UserGptContext) -> str:  # alias for settemperature
+        return await cls.settemperature(*args, user_gpt_context=user_gpt_context)
 
     @staticmethod
     async def settopp(*args, user_gpt_context: UserGptContext) -> str:  # set top_p of gpt
@@ -85,7 +85,7 @@ class ChatGptCommands:  # commands for chat gpt
         except AssertionError:  # if top_p is not between 0 and 1
             return "top_p는 0 이상 1 이하여야 합니다."  # return fail message
         else:
-            previous_top_p: str = user_gpt_context.user_gpt_profile.top_p
+            previous_top_p: str = str(user_gpt_context.user_gpt_profile.top_p)
             user_gpt_context.user_gpt_profile.top_p = now_top_p  # set top_p
             await chatgpt_cache_manager.update_profile_and_model(user_gpt_context)  # update user_gpt_context
             return f"top_p 값을 {previous_top_p}에서 {now_top_p}로 바꿨어요."  # return success message
@@ -156,3 +156,21 @@ Start a conversation as "CODEX: Hi, what are we coding today?"
             return "/codeblock [language] [code]와 같은 형식으로 입력해야 합니다."
         language: str = args[0]
         return f"```{language.lower()}\n" + " ".join(args[1:]) + "\n```"
+
+    @staticmethod
+    async def changemodel(*args, user_gpt_context: UserGptContext) -> str:
+        if len(args) < 1 or args[0] not in OpenAIModels._member_names_:
+            return (
+                f"/changemodel [model_name]와 같은 형식으로 입력해야 합니다. 현재 가능한 모델은 {', '.join(OpenAIModels._member_names_)}입니다."
+            )
+        llm_model: OpenAIModels = OpenAIModels._member_map_[args[0]]  # type: ignore
+        user_gpt_context.gpt_model = llm_model
+        await chatgpt_cache_manager.update_profile_and_model(user_gpt_context)
+        return f"LLM을 {args[0]}로 바꿨어요. LLM 모델명은 {llm_model.name} 입니다."
+
+    @staticmethod
+    async def addoptionalinfo(*args, user_gpt_context: UserGptContext) -> str:
+        if len(args) < 2:
+            return "/addoptionalinfo [key] [value]와 같은 형식으로 입력해야 합니다."
+        user_gpt_context.optional_info[args[0]] = " ".join(args[1:])
+        return f"optional_info에 {args[0]}: {user_gpt_context.optional_info[args[0]]}를 추가했어요."

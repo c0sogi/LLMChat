@@ -1,17 +1,17 @@
 import asyncio
 from datetime import datetime
-from typing import Iterable
+from typing import AsyncGenerator, Generator, Iterable
 from fastapi import FastAPI, Response
 from fastapi.testclient import TestClient
 import pytest
 from pytest import Function
-from httpx import AsyncClient
+import httpx
 import pytest_asyncio
 from app.utils.auth.token import create_access_token
-from app.utils.tests.tests_utils import random_user_generator
+from app.utils.tests.random import random_user_generator
 from app.database.schemas.auth import Users
 from app.common.app_settings import create_app
-from app.common.config import HOST_MAIN, Config, logging_config
+from app.common.config import Config, logging_config
 from app.utils.logger import CustomLogger
 from app.viewmodels.base_models import UserToken
 from app.utils.chatgpt.chatgpt_cache_manager import chatgpt_cache_manager as ccm
@@ -63,13 +63,13 @@ def base_websocket_url() -> str:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def real_client(app: FastAPI, base_http_url: str) -> AsyncClient:
-    async with AsyncClient(app=app, base_url=base_http_url) as ac:
+async def real_client(app: FastAPI, base_http_url: str) -> AsyncGenerator[httpx.AsyncClient, None]:
+    async with httpx.AsyncClient(app=app, base_url=base_http_url) as ac:
         yield ac
 
 
 @pytest.fixture(scope="session")
-def websocket_app(app: FastAPI) -> TestClient:
+def websocket_app(app: FastAPI) -> Generator[TestClient, None, None]:
     with TestClient(app=app) as tc:
         yield tc
 
@@ -88,15 +88,15 @@ async def login_header(random_user: dict[str, str]) -> dict[str, str]:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def api_key_dict(real_client: AsyncClient, login_header: str):
+async def api_key_dict(real_client: httpx.AsyncClient, login_header: dict[str, str]):
     api_key_memo: str = f"TESTING : {str(datetime.now())}"
-    response: Response = await real_client.post(
+    response: httpx.Response = await real_client.post(
         "/api/user/apikeys",
         json={"user_memo": api_key_memo},
         headers=login_header,
     )
     response_body = response.json()
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert "access_key" in response_body
     assert "secret_key" in response_body
     apikey = {
@@ -116,7 +116,7 @@ def random_user():
     return random_user_generator()
 
 
-def pytest_collection_modifyitems(items: Iterable[Function]):
+def pytest_collection_modifyitems(items):
     app_tests = []
     redis_tests = []
     other_tests = []

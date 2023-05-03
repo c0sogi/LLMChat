@@ -6,7 +6,7 @@ from app.errors.api_exceptions import Responses_401
 from app.common.config import JWT_ALGORITHM, JWT_SECRET
 
 
-def create_access_token(*, data: dict = None, expires_delta: int = None) -> str:
+def create_access_token(*, data: dict, expires_delta: int | None = None) -> str:
     to_encode: dict = data.copy()
     if expires_delta is not None and expires_delta != 0:
         to_encode.update({"exp": datetime.utcnow() + timedelta(hours=expires_delta)})

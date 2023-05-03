@@ -15,7 +15,7 @@ db.start(config=Config.get(option="test"))
 
 @pytest.mark.asyncio
 async def test_apikey_idenfitication(random_user: dict[str, str]):
-    user: Users = await Users.add_one(autocommit=True, refresh=True, **random_user)
+    user: Users = await Users.add_one(autocommit=True, refresh=True, **random_user)  # type: ignore
     additional_key_info: AddApiKey = AddApiKey(user_memo="[Testing] test_apikey_query")
     new_api_key: ApiKeys = await create_api_key(user_id=user.id, additional_key_info=additional_key_info)
     matched_api_key, matched_user = await get_api_key_and_owner(access_key=new_api_key.access_key)
@@ -25,7 +25,7 @@ async def test_apikey_idenfitication(random_user: dict[str, str]):
 
 @pytest.mark.asyncio
 async def test_api_key_validation(random_user: dict[str, str]):
-    user: Users = await Users.add_one(autocommit=True, refresh=True, **random_user)
+    user: Users = await Users.add_one(autocommit=True, refresh=True, **random_user)  # type: ignore
     additional_key_info: AddApiKey = AddApiKey(user_memo="[Testing] test_apikey_query")
     new_api_key: ApiKeys = await create_api_key(user_id=user.id, additional_key_info=additional_key_info)
     timestamp: str = str(UTC.timestamp(hour_diff=9))
@@ -61,9 +61,9 @@ async def test_crud():
     result_1 = await db.scalars__fetchall(result_1_stmt)
     assert len(result_1) == 3
     for user_idx, fetched_user in enumerate(result_1):
-        assert fetched_user.email == users[user_idx]["email"] if user_idx != 1 else fetched_user.email == "UPDATED"
+        assert fetched_user.email == users[user_idx]["email"] if user_idx != 1 else fetched_user.email == "UPDATED"  # type: ignore
     result_2 = await Users.one_filtered_by(**user_3)
-    assert result_2.email == user_3["email"]
+    assert result_2.email == user_3["email"]  # type: ignore
     result_3 = await Users.fetchall_filtered_by(**user_4)
     assert len(result_3) == 0
 

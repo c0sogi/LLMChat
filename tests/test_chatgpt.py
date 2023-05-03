@@ -4,7 +4,7 @@ import pytest
 from starlette.testclient import WebSocketTestSession
 from app.common.config import HOST_MAIN, OPENAI_API_KEY, Config
 from app.viewmodels.base_models import MessageFromWebsocket, MessageToWebsocket
-from app.viewmodels.gpt_models import GPT_MODELS, GptRoles, MessageHistory, UserGptContext, UserGptProfile
+from app.viewmodels.gpt_models import OpenAIModels, GptRoles, MessageHistory, UserGptContext, UserGptProfile
 
 
 # @pytest.mark.skip
@@ -13,12 +13,12 @@ async def test_chatgpt_redis(chatgpt_cache_manager):
     # set random context
     user_id: str = "test_user"
     test_chat_room_id: str = "test_chat_room"
-    role: str = GptRoles.USER
+    role: GptRoles = GptRoles.USER
     message: str = "test message"
     default_context: UserGptContext = UserGptContext.construct_default(user_id=user_id, chat_room_id=test_chat_room_id)
     new_context: UserGptContext = UserGptContext(
         user_gpt_profile=UserGptProfile(user_id=user_id, chat_room_id=test_chat_room_id, user_role="test_user"),
-        gpt_model=GPT_MODELS.gpt_4,
+        gpt_model=OpenAIModels.gpt_4,
     )
 
     # delete test chat room
@@ -33,7 +33,7 @@ async def test_chatgpt_redis(chatgpt_cache_manager):
 
     # add new message to redis
     new_message: MessageHistory = MessageHistory(
-        role=role, content=message, is_user=True, tokens=len(new_context.tokenize(message))
+        role=role.value, content=message, is_user=True, tokens=len(new_context.tokenize(message))
     )
     await chatgpt_cache_manager.append_message_history(
         user_id=user_id, chat_room_id=test_chat_room_id, role=role, message_history=new_message

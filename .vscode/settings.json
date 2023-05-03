@@ -18,11 +18,5 @@
         "**/.pytest_cache": true,
         "**/api_request_in_flutter.dart": true,
     },
-    "DockerRun.DisableDockerrc": true,
-    "DockerRun.Containers": [
-        "6274a4bb5131",
-        "5a95e400a504",
-        "18c49bc01b52",
-        "9392c2ab1999"
-    ]
+    "python.analysis.typeCheckingMode": "basic",
 }

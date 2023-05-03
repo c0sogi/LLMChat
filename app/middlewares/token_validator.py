@@ -29,11 +29,12 @@ from app.utils.params_utils import hash_params
 class StateManager:
     @staticmethod
     def init(request: Request):
-        request.state.req_time: datetime = UTC.now()
-        request.state.start: float = time()
-        request.state.ip: str = request.client.host.split(",")[0] if "," in request.client.host else request.client.host
-        request.state.inspect: Optional[FrameType] = None
-        request.state.user: Optional[UserToken] = None
+        request.state.req_time = UTC.now()
+        request.state.start = time()
+        if request.client is not None:
+            request.state.ip = request.client.host.split(",")[0] if "," in request.client.host else request.client.host
+        request.state.inspect = None
+        request.state.user = None
 
 
 class AccessControl:
@@ -62,9 +63,9 @@ class AccessControl:
         cookies: dict[str, str],
     ) -> UserToken:
         if "authorization" in headers.keys():
-            token = headers.get("authorization")
+            token = headers["authorization"]
         elif "Authorization" in cookies.keys():
-            token = cookies.get("Authorization")
+            token = cookies["Authorization"]
         else:
             raise Responses_401.not_authorized
         return Validator.jwt(token)
@@ -75,7 +76,7 @@ class Validator:
     async def api_key(
         api_access_key: str,
         hashed_secret: str,
-        query_params: QueryParams,
+        query_params: QueryParams | str,
         timestamp: str,
     ) -> UserToken:
         matched_api_key, matched_user = await get_api_key_and_owner(access_key=api_access_key)
@@ -100,8 +101,6 @@ class Validator:
 async def access_control(request: Request, call_next: RequestResponseEndpoint):
     StateManager.init(request=request)
     url: str = request.url.path
-    error: Optional[InternalServerError | HTTPException | APIException] = None
-    response: Optional[Response] = None
 
     try:
         if EXCEPT_PATH_REGEX.match(url) is not None:
@@ -110,36 +109,44 @@ async def access_control(request: Request, call_next: RequestResponseEndpoint):
             ...  # Whitelist endpoint
         elif url.startswith("/api/services"):
             # Api-service endpoint (required: accesskey + secretkey)
-            request.state.user: UserToken = await AccessControl.api_service(
+            request.state.user = await AccessControl.api_service(
                 query_params=request.query_params,
                 headers=request.headers,
             )
         else:
             # Non Api-service endpoint (required: jwttoken)
-            request.state.user: UserToken = AccessControl.non_api_service(
+            request.state.user = AccessControl.non_api_service(
                 headers=request.headers,
                 cookies=request.cookies,
             )
-        response = await call_next(request)  # actual endpoint response
+        response: Response = await call_next(request)  # actual endpoint response
 
     except Exception as exception:  # If any error occurs...
         error: HTTPException | InternalServerError | APIException = exception_handler(error=exception)
-        response = JSONResponse(
+        response: Response = JSONResponse(
             status_code=error.status_code,
             content={
                 "status": error.status_code,
-                "msg": error.msg,
-                "detail": error.detail,
-                "code": error.code,
+                "msg": error.msg if not isinstance(error, HTTPException) else None,
+                "detail": error.detail if not isinstance(error, HTTPException) else error.detail,
+                "code": error.code if not isinstance(error, HTTPException) else None,
             },
         )
-    finally:
+        api_logger.log_api(
+            request=request,
+            response=response,
+            error=error,
+            cookies=request.cookies,
+            headers=dict(request.headers),
+            query_params=dict(request.query_params),
+        )
+        return response  # The final response from server
+    else:
         # Log error or service info
-        if url.startswith("/api/services") or error is not None:
+        if url.startswith("/api/services"):
             api_logger.log_api(
                 request=request,
                 response=response,
-                error=error,
                 cookies=request.cookies,
                 headers=dict(request.headers),
                 query_params=dict(request.query_params),

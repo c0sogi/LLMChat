@@ -1,3 +1,4 @@
+from typing import Any
 import orjson
 import os
 from time import sleep
@@ -35,7 +36,9 @@ async def get_all_services(request: Request):
 
 @router.get("/weather", status_code=200)
 async def weather(latitude: float, longitude: float):
-    weather_data: any = await fetch_weather_data(
+    if WEATHERBIT_API_KEY is None:
+        raise Responses_400.not_supported_feature
+    weather_data: Any = await fetch_weather_data(
         lat=latitude,
         lon=longitude,
         api_key=WEATHERBIT_API_KEY,
@@ -80,7 +83,6 @@ async def send_kakao(request: Request, body: KakaoMsgBody):
                 },
             ],
         },
-        ensure_ascii=False,
     )
     data = {"template_object": template_object}
     print(data)
@@ -211,7 +213,7 @@ Amazon SES는 이러한 부담이 없으므로 몇 분 만에 이메일 발송�
     except ClientError as e:
         print(e.response["Error"]["Message"])
     else:
-        print("Email sent! Message ID:"),
+        print("Email sent! Message ID:")
         print(response["MessageId"])
 
     return MessageOk()

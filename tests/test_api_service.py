@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 from httpx import AsyncClient, Response
 import pytest
 from app.utils.date_utils import UTC
@@ -10,13 +10,13 @@ async def request_service(
     access_key: str,
     secret_key: str,
     request_method: Literal["get", "post", "put", "delete", "options"],
-    allowed_status_codes: tuple[int] = (200, 307),
+    allowed_status_codes: tuple = (200, 201, 307),
     service_name: str = "",
-    required_query_params: dict[str, any] = {},
-    required_headers: dict[str, any] = {},
+    required_query_params: dict[str, Any] = {},
+    required_headers: dict[str, Any] = {},
     stream: bool = False,
     logger=None,
-) -> any:
+) -> Any:
     all_query_params: str = parse_params(
         params={
             "key": access_key,
@@ -44,7 +44,7 @@ async def request_service(
                 logger.info(f"Streamed data: {chunk}") if logger is not None else ...
     else:
         response: Response = await getattr(real_client, request_method.lower())(url=url, **method_options)
-        response_body: any = response.json()
+        response_body: Any = response.json()
         logger.info(f"response_body: {response_body}") if logger is not None else ...
         assert response.status_code in allowed_status_codes
     return response_body
@@ -55,9 +55,9 @@ async def test_request_api(real_client: AsyncClient, api_key_dict: dict, test_lo
     access_key, secret_key = api_key_dict["access_key"], api_key_dict["secret_key"]
     service_name: str = ""
     request_method: str = "get"
-    required_query_params: dict[str, any] = {}
-    required_headers: dict[str, any] = {}
-    allowed_status_codes: tuple[int] = (200, 307)
+    required_query_params: dict[str, Any] = {}
+    required_headers: dict[str, Any] = {}
+    allowed_status_codes: tuple = (200, 201, 307)
     await request_service(
         real_client=real_client,
         access_key=access_key,

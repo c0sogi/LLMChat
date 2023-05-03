@@ -3,6 +3,5 @@ acme.json
 PRIVATE_*
 venv/
 *.pyc
-*.dart
 *.log
 *.txt

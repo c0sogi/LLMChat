@@ -4,7 +4,7 @@ Welcome to the ChatGPT Web App Server repository, a full-stack implementation of
 
 
 <p align="center">
-  <img src="https://user-images.githubusercontent.com/121936784/234617595-bcb2f1c7-2bc9-43ee-b774-1aac25e4d2f7.gif"/>
+  <img src="https://user-images.githubusercontent.com/121936784/236275771-cabf63c8-eaef-47a5-8738-51e9a89a43d9.gif"/>
 </p>
 
 ## Key Features

@@ -8,19 +8,19 @@ from pydantic.main import BaseModel
 
 
 class UserRegister(BaseModel):
-    email: str = None
-    password: str = None
+    email: str
+    password: str
 
 
 class SnsType(str, Enum):
-    email: str = "email"
-    facebook: str = "facebook"
-    google: str = "google"
-    kakao: str = "kakao"
+    EMAIL = "email"
+    FACEBOOK = "facebook"
+    GOOGLE = "google"
+    KAKAO = "kakao"
 
 
 class Token(BaseModel):
-    Authorization: str = None
+    Authorization: str
 
 
 class EmailRecipients(BaseModel):
@@ -29,11 +29,11 @@ class EmailRecipients(BaseModel):
 
 
 class SendEmail(BaseModel):
-    email_to: list[EmailRecipients] = None
+    email_to: list[EmailRecipients]
 
 
 class KakaoMsgBody(BaseModel):
-    msg: str = None
+    msg: str
 
 
 class MessageOk(BaseModel):
@@ -42,11 +42,11 @@ class MessageOk(BaseModel):
 
 class UserToken(BaseModel):
     id: int
-    email: str = None
-    name: str = None
-    phone_number: str = None
-    profile_img: str = None
-    sns_type: str = None
+    email: str | None = None
+    name: str | None = None
+    phone_number: str | None = None
+    profile_img: str | None = None
+    sns_type: str | None = None
 
     class Config:
         orm_mode = True
@@ -54,35 +54,35 @@ class UserToken(BaseModel):
 
 class UserMe(BaseModel):
     id: int
-    email: str = None
-    name: str = None
-    phone_number: str = None
-    profile_img: str = None
-    sns_type: str = None
+    email: str | None = None
+    name: str | None = None
+    phone_number: str | None = None
+    profile_img: str | None = None
+    sns_type: str | None = None
 
     class Config:
         orm_mode = True
 
 
 class AddApiKey(BaseModel):
-    user_memo: str = None
+    user_memo: str | None = None
 
     class Config:
         orm_mode = True
 
 
 class GetApiKey(AddApiKey):
-    id: int = None
-    access_key: str = None
-    created_at: datetime = None
+    id: int
+    access_key: str
+    created_at: datetime
 
 
 class GetApiKeyFirstTime(GetApiKey):
-    secret_key: str = None
+    secret_key: str
 
 
 class CreateApiWhiteList(BaseModel):
-    ip_address: str = None
+    ip_address: str
 
 
 class GetApiWhiteList(CreateApiWhiteList):
@@ -125,7 +125,7 @@ class MessageFromWebsocket(BaseModel):
 class CreateChatRoom(BaseModel):  # stub
     chat_room_type: str
     name: str
-    description: str = None
+    description: str | None = None
     user_id: int
 
     class Config:

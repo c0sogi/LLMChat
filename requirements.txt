@@ -15,6 +15,7 @@ email-validator
 fastapi
 h11
 httptools
+httpx
 idna
 iniconfig
 jinja2
@@ -22,6 +23,7 @@ jmespath
 langchain
 lxml
 orjson
+openai
 packaging
 pluggy
 premailer

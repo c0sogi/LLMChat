@@ -16,33 +16,8 @@ class SingletonMetaClass(type):
         return cls._instances[cls]
 
 
-MYSQL_URL_FORMAT: str = "{dialect}+{driver}://{user}:{password}@{host}:{port}/{database}?charset=utf8mb4"
-MYSQL_ROOT_PASSWORD: str = environ.get("MYSQL_ROOT_PASSWORD")
-MYSQL_USER: str = environ.get("MYSQL_USER")
-MYSQL_PASSWORD: str = environ.get("MYSQL_PASSWORD")
-MYSQL_DATABASE: str = environ.get("MYSQL_DATABASE")
-MYSQL_TEST_DATABASE: str = environ.get("MYSQL_TEST_DATABASE")
-MYSQL_HOST: str = "db"
-MYSQL_PORT: int = environ.get("MYSQL_PORT", 3306)
+# API Server Variables
 
-REDIS_HOST: str = "cache"
-REDIS_PORT: int = environ.get("REDIS_PORT", 6379)
-REDIS_DATABASE: int = environ.get("REDIS_DATABASE", 0)
-REDIS_PASSWORD: str = environ.get("REDIS_PASSWORD")
-
-HOST_MAIN: str = environ.get("HOST_MAIN")
-JWT_SECRET: str = environ.get("JWT_SECRET")
-AWS_ACCESS_KEY: str = environ.get("AWS_ACCESS_KEY")
-AWS_SECRET_KEY: str = environ.get("AWS_SECRET_KEY")
-AWS_AUTHORIZED_EMAIL: str = environ.get("AWS_AUTHORIZED_EMAIL")
-SAMPLE_JWT_TOKEN: str = environ.get("SAMPLE_JWT_TOKEN")
-SAMPLE_ACCESS_KEY: str = environ.get("SAMPLE_ACCESS_KEY")
-SAMPLE_SECRET_KEY: str = environ.get("SAMPLE_SECRET_KEY")
-OPENAI_API_KEY: str = environ.get("OPENAI_API_KEY")
-KAKAO_RESTAPI_TOKEN: str = environ.get("KAKAO_RESTAPI_TOKEN")
-WEATHERBIT_API_KEY: str = environ.get("WEATHERBIT_API_KEY")
-GOOGLE_TRANSLATE_API_KEY: str = environ.get("GOOGLE_TRANSLATE_API_KEY")
-JWT_ALGORITHM: str = "HS256"
 EXCEPT_PATH_LIST: tuple = (
     "/",
     "/openapi.json",
@@ -52,8 +27,46 @@ EXCEPT_PATH_REGEX: Pattern = compile("^(/docs|/redoc|/api/auth|/favicon.ico|/cha
 TOKEN_EXPIRE_HOURS: int = 168
 MAX_API_KEY: int = 3
 MAX_API_WHITELIST: int = 10
-KAKAO_IMAGE_URL: str = "http://k.kakaocdn.net/dn/wwWjr/btrYVhCnZDF/2bgXDJth2LyIajIjILhLK0/kakaolink40_original.png"
-BASE_DIR: str = Path(__file__).parents[2]
+BASE_DIR: Path = Path(__file__).parents[2]
+
+# MySQL Variables
+MYSQL_URL_FORMAT: str = "{dialect}+{driver}://{user}:{password}@{host}:{port}/{database}?charset=utf8mb4"
+MYSQL_ROOT_PASSWORD: str = environ["MYSQL_ROOT_PASSWORD"]
+MYSQL_USER: str = environ["MYSQL_USER"]
+MYSQL_PASSWORD: str = environ.get("MYSQL_PASSWORD", "")
+MYSQL_DATABASE: str = environ["MYSQL_DATABASE"]
+MYSQL_TEST_DATABASE: str = environ.get("MYSQL_TEST_DATABASE", MYSQL_DATABASE)
+MYSQL_HOST: str = "db"
+MYSQL_PORT: int = int(environ.get("MYSQL_PORT", 3306))
+
+# Redis Variables
+REDIS_HOST: str = "cache"
+REDIS_PORT: int = int(environ.get("REDIS_PORT", 6379))
+REDIS_DATABASE: int = int(environ.get("REDIS_DATABASE", 0))
+REDIS_PASSWORD: str = environ["REDIS_PASSWORD"]
+
+# Other Required Variables
+HOST_MAIN: str = environ.get("HOST_MAIN", "localhost:8000")
+JWT_SECRET: str = environ["JWT_SECRET"]
+JWT_ALGORITHM: str = "HS256"
+
+
+# Optional Service Variables
+OPENAI_API_KEY: str | None = environ.get("OPENAI_API_KEY")
+GOOGLE_TRANSLATE_API_KEY: str | None = environ.get("GOOGLE_TRANSLATE_API_KEY")
+PAPAGO_CLIENT_ID: str | None = environ.get("PAPAGO_CLIENT_ID")
+PAPAGO_CLIENT_SECRET: str | None = environ.get("PAPAGO_CLIENT_SECRET")
+AWS_ACCESS_KEY: str | None = environ.get("AWS_ACCESS_KEY")
+AWS_SECRET_KEY: str | None = environ.get("AWS_SECRET_KEY")
+AWS_AUTHORIZED_EMAIL: str | None = environ.get("AWS_AUTHORIZED_EMAIL")
+SAMPLE_JWT_TOKEN: str | None = environ.get("SAMPLE_JWT_TOKEN")
+SAMPLE_ACCESS_KEY: str | None = environ.get("SAMPLE_ACCESS_KEY")
+SAMPLE_SECRET_KEY: str | None = environ.get("SAMPLE_SECRET_KEY")
+KAKAO_RESTAPI_TOKEN: str | None = environ.get("KAKAO_RESTAPI_TOKEN")
+WEATHERBIT_API_KEY: str | None = environ.get("WEATHERBIT_API_KEY")
+KAKAO_IMAGE_URL: str | None = (
+    "http://k.kakaocdn.net/dn/wwWjr/btrYVhCnZDF/2bgXDJth2LyIajIjILhLK0/kakaolink40_original.png"
+)
 
 """
 400 Bad Request
@@ -86,11 +99,11 @@ class Config(metaclass=SingletonMetaClass):
     mysql_host: str = MYSQL_HOST
     mysql_port: int = MYSQL_PORT
     redis_host: str = REDIS_HOST
-    redis_port: int = 6379
+    redis_port: int = REDIS_PORT
     redis_database: int = REDIS_DATABASE
     redis_password: str = REDIS_PASSWORD
-    trusted_hosts: list = field(default_factory=lambda: ["*"])
-    allowed_sites: list = field(default_factory=lambda: ["*"])
+    trusted_hosts: list[str] = field(default_factory=lambda: ["*"])
+    allowed_sites: list[str] = field(default_factory=lambda: ["*"])
 
     @staticmethod
     def get(

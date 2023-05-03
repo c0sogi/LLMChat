@@ -80,7 +80,7 @@ async def create_api_keys_whitelist(
     try:
         ipaddress.ip_address(ip_address)
     except Exception as exception:
-        raise Responses_400.invalid_ip(ip=ip_address, ex=exception)
+        raise Responses_400.invalid_ip(lazy_format={"ip": ip_address}, ex=exception)
     return await api_whitelists.create_api_key_whitelist(ip_address=ip_address, api_key_id=api_key_id)
 
 

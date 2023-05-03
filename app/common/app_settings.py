@@ -19,7 +19,6 @@ from app.dependencies import (
 from app.utils.logger import api_logger
 from app.utils.chatgpt.chatgpt_cache_manager import chatgpt_cache_manager
 from app.utils.js_initializer import js_url_initializer
-from app.viewmodels.gpt_models import GptRoles
 
 
 def create_app(config: LocalConfig | ProdConfig | TestConfig) -> FastAPI:
@@ -81,6 +80,8 @@ def create_app(config: LocalConfig | ProdConfig | TestConfig) -> FastAPI:
             api_logger.critical("MySQL DB connected!")
         else:
             api_logger.critical("MySQL DB connection failed!")
+        if cache.redis is None:
+            raise ConnectionError("Redis is not connected yet!")
         if cache.is_initiated and await cache.redis.ping():
             await chatgpt_cache_manager.delete_user(f"testaccount@{HOST_MAIN}")
             api_logger.critical("Redis CACHE connected!")
