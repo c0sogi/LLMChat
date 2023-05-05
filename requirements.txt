@@ -36,6 +36,7 @@ pyparsing
 pytest
 pytest-asyncio
 python-dateutil
+python-dotenv
 redis
 requests
 s3transfer

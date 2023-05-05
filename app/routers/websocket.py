@@ -4,7 +4,8 @@ from app.database.crud import api_keys
 from app.database.schemas.auth import Users
 from app.errors.api_exceptions import Responses_400
 from app.utils.logger import api_logger
-from app.utils.chatgpt.chatgpt_stream_manager import begin_chat, SendToWebsocket
+from app.utils.chatgpt.chatgpt_stream_manager import begin_chat
+from app.utils.chatgpt.chatgpt_websocket_manager import SendToWebsocket
 
 router = APIRouter()
 

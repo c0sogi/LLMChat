@@ -2,7 +2,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
 from uuid import uuid4
-from typing import Type, Union
+from typing import Union
 
 import orjson
 import tiktoken
@@ -260,6 +260,10 @@ class UserGptContext:  # user gpt context for user and gpt
             self.chat_room_id,
             self.gpt_model,
         ).__dict__.items():
+            setattr(self, k, v)
+
+    def copy_from(self, user_gpt_context: "UserGptContext") -> None:
+        for k, v in user_gpt_context.__dict__.items():
             setattr(self, k, v)
 
     def ensure_token_not_exceed(
