@@ -1,16 +1,19 @@
 from asyncio import gather
 from enum import Enum
+from functools import wraps
 from inspect import Parameter, iscoroutinefunction, signature
 from typing import Any, Callable, Tuple
 from uuid import uuid4
-from functools import wraps
+
 from fastapi import WebSocket
 
 from app.errors.api_exceptions import InternalServerError
-from app.utils.chatgpt.chatgpt_cache_manager import chatgpt_cache_manager
-from app.utils.chatgpt.chatgpt_message_manager import MessageManager
-from app.utils.chatgpt.chatgpt_websocket_manager import SendToWebsocket
 from app.utils.chatgpt.chatgpt_buffer import BufferedUserContext
+from app.utils.chatgpt.chatgpt_cache_manager import ChatGptCacheManager
+from app.utils.chatgpt.chatgpt_message_manager import MessageManager
+from app.utils.chatgpt.chatgpt_vectorstore_manager import Document, VectorStoreManager
+from app.utils.chatgpt.chatgpt_websocket_manager import HandleMessage, SendToWebsocket
+from app.viewmodels.base_models import MessageFromWebsocket
 from app.viewmodels.gpt_models import GptRoles, MessageHistory, OpenAIModels, UserGptContext
 
 
@@ -60,7 +63,7 @@ async def create_new_chat_room(
         user_id=user_id,
         chat_room_id=new_chat_room_id if new_chat_room_id else uuid4().hex,
     )
-    await chatgpt_cache_manager.create_context(user_gpt_context=default)
+    await ChatGptCacheManager.create_context(user_gpt_context=default)
     if buffer is not None:
         buffer.insert_context(user_gpt_context=default)
         buffer.change_context_to(index=0)
@@ -72,7 +75,7 @@ async def delete_chat_room(
     chat_room_id: str,
     buffer: BufferedUserContext | None = None,
 ) -> None:
-    await chatgpt_cache_manager.delete_chat_room(user_id=user_id, chat_room_id=chat_room_id)
+    await ChatGptCacheManager.delete_chat_room(user_id=user_id, chat_room_id=chat_room_id)
     if buffer is not None:
         index: int | None = buffer.find_index_of_chatroom(chat_room_id=chat_room_id)
         if index is not None:
@@ -93,12 +96,65 @@ async def get_contexts_sorted_from_recent_to_past(user_id: str, chat_room_ids: l
         # get latest chatroom
         contexts: list[UserGptContext] = await gather(
             *[
-                chatgpt_cache_manager.read_context(user_id=user_id, chat_room_id=chat_room_id)
+                ChatGptCacheManager.read_context(user_id=user_id, chat_room_id=chat_room_id)
                 for chat_room_id in chat_room_ids
             ]
         )
         contexts.sort(key=lambda x: x.user_gpt_profile.created_at, reverse=True)
         return contexts
+
+
+async def command_handler(
+    callback_name: str,
+    callback_args: list[str],
+    received: MessageFromWebsocket,
+    websocket: WebSocket,
+    buffer: BufferedUserContext,
+    openai_api_key: str,
+):
+    callback_response, response_type = await ChatGptCommands._get_command_response(
+        callback_name=callback_name,
+        callback_args=callback_args,
+        buffer=buffer,
+    )
+    if response_type is ResponseType.DO_NOTHING:
+        return
+    elif response_type is ResponseType.HANDLE_GPT:
+        await HandleMessage.gpt(
+            translate=received.translate,
+            openai_api_key=openai_api_key,
+            buffer=buffer,
+        )
+        return
+    elif response_type is ResponseType.HANDLE_USER:
+        await HandleMessage.user(
+            msg=callback_response,
+            translate=received.translate,
+            buffer=buffer,
+        )
+        return
+    elif response_type is ResponseType.HANDLE_BOTH:
+        await HandleMessage.user(
+            msg=callback_response,
+            translate=received.translate,
+            buffer=buffer,
+        )
+        await HandleMessage.gpt(
+            translate=received.translate,
+            openai_api_key=openai_api_key,
+            buffer=buffer,
+        )
+        return
+    elif response_type is ResponseType.REPEAT_COMMAND:
+        splitted: list[str] = callback_response.split(" ")
+        await command_handler(
+            callback_name=splitted[0][1:] if splitted[0].startswith("/") else splitted[0],
+            callback_args=splitted[1:],
+            received=received,
+            websocket=websocket,
+            buffer=buffer,
+            openai_api_key=openai_api_key,
+        )
 
 
 def arguments_provider(
@@ -258,7 +314,7 @@ class ChatGptCommands:  # commands for chat gpt
         for role in GptRoles:
             getattr(user_gpt_context, f"{role.name.lower()}_message_histories").clear()
             setattr(user_gpt_context, f"{role.name.lower()}_message_tokens", 0)
-            await chatgpt_cache_manager.delete_message_history(
+            await ChatGptCacheManager.delete_message_history(
                 user_id=user_gpt_context.user_id,
                 chat_room_id=user_gpt_context.chat_room_id,
                 role=role,
@@ -282,7 +338,7 @@ class ChatGptCommands:  # commands for chat gpt
         """Reset user_gpt_context\n
         /reset"""
         user_gpt_context.reset()
-        if await chatgpt_cache_manager.reset_context(
+        if await ChatGptCacheManager.reset_context(
             user_id=user_gpt_context.user_id,
             chat_room_id=user_gpt_context.chat_room_id,
         ):  # if reset success
@@ -314,7 +370,7 @@ class ChatGptCommands:  # commands for chat gpt
         else:
             previous_temperature: str = str(user_gpt_context.user_gpt_profile.temperature)
             user_gpt_context.user_gpt_profile.temperature = temp_to_change
-            await chatgpt_cache_manager.update_profile_and_model(user_gpt_context)  # update user_gpt_context
+            await ChatGptCacheManager.update_profile_and_model(user_gpt_context)  # update user_gpt_context
             return (
                 f"I've changed temperature from {previous_temperature} to {temp_to_change}."  # return success message
             )
@@ -337,7 +393,7 @@ class ChatGptCommands:  # commands for chat gpt
         else:
             previous_top_p: str = str(user_gpt_context.user_gpt_profile.top_p)
             user_gpt_context.user_gpt_profile.top_p = top_p_to_change  # set top_p
-            await chatgpt_cache_manager.update_profile_and_model(user_gpt_context)  # update user_gpt_context
+            await ChatGptCacheManager.update_profile_and_model(user_gpt_context)  # update user_gpt_context
             return f"I've changed top_p from {previous_top_p} to {top_p_to_change}."  # return success message
 
     @classmethod
@@ -422,7 +478,7 @@ Start a conversation as "CODEX: Hi, what are we coding today?"
 
     @staticmethod
     @CommandResponse.do_nothing
-    async def echo2(msg: str, /, websocket: WebSocket, user_gpt_context: UserGptContext) -> None:
+    async def sendtowebsocket(msg: str, /, websocket: WebSocket, user_gpt_context: UserGptContext) -> None:
         """Send all messages to websocket\n
         /sendtowebsocket"""
         await SendToWebsocket.message(
@@ -447,7 +503,7 @@ Start a conversation as "CODEX: Hi, what are we coding today?"
             return f"Model must be one of {', '.join(OpenAIModels._member_names_)}"
         llm_model: OpenAIModels = OpenAIModels._member_map_[model]  # type: ignore
         user_gpt_context.gpt_model = llm_model
-        await chatgpt_cache_manager.update_profile_and_model(user_gpt_context)
+        await ChatGptCacheManager.update_profile_and_model(user_gpt_context)
         return f"Model changed to {model}. Actual model: {llm_model.value.name}"
 
     @staticmethod
@@ -458,8 +514,58 @@ Start a conversation as "CODEX: Hi, what are we coding today?"
         user_gpt_context.optional_info[key] = " ".join(value)
         return f"I've added {key}={value} to your optional info."
 
-    @staticmethod
-    def info(key: str, value: str, user_gpt_context: UserGptContext) -> str:
+    @classmethod
+    def info(cls, key: str, value: str, user_gpt_context: UserGptContext) -> str:
         """Alias for addoptionalinfo\n
         /info <key> <value>"""
-        return ChatGptCommands.addoptionalinfo(key, value, user_gpt_context=user_gpt_context)
+        return cls.addoptionalinfo(key, value, user_gpt_context=user_gpt_context)
+
+    @staticmethod
+    async def testchaining(chain_size: int, buffer: BufferedUserContext) -> Tuple[str, ResponseType]:
+        """Test chains of commands\n
+        /testchaining <size_of_chain>"""
+        if chain_size <= 0:
+            return "Chaining Complete!", ResponseType.SEND_MESSAGE_AND_STOP
+        await SendToWebsocket.message(
+            websocket=buffer.websocket,
+            msg=f"Current Chaining: {chain_size}",
+            chat_room_id=buffer.current_chat_room_id,
+        )
+        return f"/testchaining {chain_size-1}", ResponseType.REPEAT_COMMAND
+
+    @staticmethod
+    @CommandResponse.send_message_and_stop
+    async def query(query: str, /, buffer: BufferedUserContext) -> None:
+        """Query from redis vectorstore\n
+        /query <query>"""
+        k: int = 3
+        found_document: list[Document] = (await VectorStoreManager.asimilarity_search(queries=[query], k=k))[0]
+        found_text: str = "\n\n".join([f"...{document.page_content}..." for document in found_document])
+        if len(found_document) > 0:
+            query = f"""Please answer my question: `{query}`\n
+And below text, enclosed in triple backticked, is everything I could find in my vectorstore:
+```
+{found_text}
+```"""
+        else:
+            await SendToWebsocket.message(
+                websocket=buffer.websocket,
+                msg="No results found from vectorstore. Just sending your query...",
+                chat_room_id=buffer.current_chat_room_id,
+            )
+        await MessageManager.add_message_history_safely(
+            user_gpt_context=buffer.current_user_gpt_context,
+            content=query,
+            role=GptRoles.USER,
+        )
+
+    @staticmethod
+    @CommandResponse.send_message_and_stop
+    async def embed(text_to_embed: str, /) -> str:
+        """Embed the text and save its vectors in the redis vectorstore.\n
+        /embed <text_to_embed>"""
+        await VectorStoreManager.create_documents(
+            text=text_to_embed,
+            chunk_size=500,
+        )
+        return "Embedding successful!"

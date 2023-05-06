@@ -2,7 +2,7 @@ import time
 from fastapi.testclient import TestClient
 import pytest
 from starlette.testclient import WebSocketTestSession
-from app.common.config import HOST_MAIN, OPENAI_API_KEY, Config
+from app.common.config import OPENAI_API_KEY
 from app.viewmodels.base_models import MessageFromWebsocket, MessageToWebsocket
 from app.viewmodels.gpt_models import OpenAIModels, GptRoles, MessageHistory, UserGptContext, UserGptProfile
 

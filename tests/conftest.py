@@ -14,7 +14,7 @@ from app.common.app_settings import create_app
 from app.common.config import Config, logging_config
 from app.utils.logger import CustomLogger
 from app.viewmodels.base_models import UserToken
-from app.utils.chatgpt.chatgpt_cache_manager import chatgpt_cache_manager as ccm
+from app.utils.chatgpt.chatgpt_cache_manager import ChatGptCacheManager, cache
 
 """
 1. DB 생성
@@ -31,8 +31,8 @@ def config():
 
 @pytest.fixture(scope="session")
 def chatgpt_cache_manager():
-    ccm.cache.start(config=Config.get(option="test"))
-    return ccm
+    cache.start(config=Config.get(option="test"))
+    return ChatGptCacheManager
 
 
 @pytest.fixture(scope="session")

@@ -1,4 +1,4 @@
-from app.utils.chatgpt.chatgpt_cache_manager import chatgpt_cache_manager
+from app.utils.chatgpt.chatgpt_cache_manager import ChatGptCacheManager
 from app.viewmodels.gpt_models import GptRoles, MessageHistory, UserGptContext
 
 
@@ -24,7 +24,7 @@ class MessageManager:
             getattr(user_gpt_context, f"{role}_message_tokens") + tokens,
         )
         num_of_deleted_histories: int = user_gpt_context.ensure_token_not_exceed()
-        await chatgpt_cache_manager.append_message_history(
+        await ChatGptCacheManager.append_message_history(
             user_id=user_gpt_context.user_id,
             chat_room_id=user_gpt_context.chat_room_id,
             role=role,
@@ -32,7 +32,7 @@ class MessageManager:
         )
         if num_of_deleted_histories > 0:
             for role in (GptRoles.GPT, GptRoles.USER):
-                await chatgpt_cache_manager.lpop_message_history(
+                await ChatGptCacheManager.lpop_message_history(
                     user_id=user_gpt_context.user_id,
                     chat_room_id=user_gpt_context.chat_room_id,
                     role=role,
@@ -54,7 +54,7 @@ class MessageManager:
             f"{role}_message_tokens",
             getattr(user_gpt_context, f"{role}_message_tokens") - message_history.tokens,
         )
-        await chatgpt_cache_manager.rpop_message_history(
+        await ChatGptCacheManager.rpop_message_history(
             user_id=user_gpt_context.user_id,
             chat_room_id=user_gpt_context.chat_room_id,
             role=role,
@@ -80,7 +80,7 @@ class MessageManager:
             getattr(user_gpt_context, f"{role}_message_tokens") + new_tokens - old_tokens,
         )
         num_of_deleted_histories: int = user_gpt_context.ensure_token_not_exceed()
-        await chatgpt_cache_manager.set_message_history(
+        await ChatGptCacheManager.set_message_history(
             user_id=user_gpt_context.user_id,
             chat_room_id=user_gpt_context.chat_room_id,
             role=role,
@@ -89,7 +89,7 @@ class MessageManager:
         )
         if num_of_deleted_histories > 0:
             for role in (GptRoles.GPT, GptRoles.USER):
-                await chatgpt_cache_manager.lpop_message_history(
+                await ChatGptCacheManager.lpop_message_history(
                     user_id=user_gpt_context.user_id,
                     chat_room_id=user_gpt_context.chat_room_id,
                     role=role,
@@ -104,7 +104,7 @@ class MessageManager:
         role = GptRoles.get_name(role).lower()
         setattr(user_gpt_context, f"{role}_message_histories", [])
         setattr(user_gpt_context, f"{role}_message_tokens", 0)
-        await chatgpt_cache_manager.delete_message_history(
+        await ChatGptCacheManager.delete_message_history(
             user_id=user_gpt_context.user_id,
             chat_room_id=user_gpt_context.chat_room_id,
             role=role,

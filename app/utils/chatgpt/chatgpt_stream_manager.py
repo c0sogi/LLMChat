@@ -1,12 +1,11 @@
 from fastapi import WebSocket, WebSocketDisconnect
 
 from app.errors.gpt_exceptions import GptOtherException, GptTextGenerationException, GptTooMuchTokenException
-from app.utils.chatgpt.chatgpt_cache_manager import chatgpt_cache_manager
+from app.utils.chatgpt.chatgpt_cache_manager import ChatGptCacheManager
 from app.utils.chatgpt.chatgpt_commands import (
-    ChatGptCommands,
-    ResponseType,
     create_new_chat_room,
     get_contexts_sorted_from_recent_to_past,
+    command_handler,
 )
 from app.utils.chatgpt.chatgpt_message_manager import MessageManager
 from app.utils.chatgpt.chatgpt_websocket_manager import HandleMessage, SendToWebsocket
@@ -14,58 +13,6 @@ from app.utils.logger import api_logger
 from app.utils.chatgpt.chatgpt_buffer import BufferedUserContext
 from app.viewmodels.base_models import MessageFromWebsocket, MessageToWebsocket
 from app.viewmodels.gpt_models import GptRoles
-
-
-async def command_handler(
-    callback_name: str,
-    callback_args: list[str],
-    received: MessageFromWebsocket,
-    websocket: WebSocket,
-    buffer: BufferedUserContext,
-    openai_api_key: str,
-):
-    callback_response, response_type = await ChatGptCommands._get_command_response(
-        callback_name=callback_name,
-        callback_args=callback_args,
-        buffer=buffer,
-    )
-    if response_type is ResponseType.DO_NOTHING:
-        return
-    elif response_type is ResponseType.HANDLE_GPT:
-        await HandleMessage.gpt(
-            translate=received.translate,
-            openai_api_key=openai_api_key,
-            buffer=buffer,
-        )
-        return
-    elif response_type is ResponseType.HANDLE_USER:
-        await HandleMessage.user(
-            msg=callback_response,
-            translate=received.translate,
-            buffer=buffer,
-        )
-        return
-    elif response_type is ResponseType.HANDLE_BOTH:
-        await HandleMessage.user(
-            msg=callback_response,
-            translate=received.translate,
-            buffer=buffer,
-        )
-        await HandleMessage.gpt(
-            translate=received.translate,
-            openai_api_key=openai_api_key,
-            buffer=buffer,
-        )
-        return
-    elif response_type is ResponseType.REPEAT_COMMAND:
-        await command_handler(
-            callback_name=callback_name,
-            callback_args=callback_args,
-            received=received,
-            websocket=websocket,
-            buffer=buffer,
-            openai_api_key=openai_api_key,
-        )
 
 
 async def begin_chat(
@@ -79,7 +26,7 @@ async def begin_chat(
         websocket=websocket,
         sorted_ctxts=await get_contexts_sorted_from_recent_to_past(
             user_id=user_id,
-            chat_room_ids=await chatgpt_cache_manager.get_all_chat_rooms(user_id=user_id),
+            chat_room_ids=await ChatGptCacheManager.get_all_chat_rooms(user_id=user_id),
         ),
     )
     await SendToWebsocket.initiation_of_chat(websocket=websocket, buffer=buffer)

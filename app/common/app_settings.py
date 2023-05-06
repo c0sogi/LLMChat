@@ -17,7 +17,7 @@ from app.dependencies import (
     user_dependency,
 )
 from app.utils.logger import api_logger
-from app.utils.chatgpt.chatgpt_cache_manager import chatgpt_cache_manager
+from app.utils.chatgpt.chatgpt_cache_manager import ChatGptCacheManager
 from app.utils.js_initializer import js_url_initializer
 
 
@@ -83,14 +83,14 @@ def create_app(config: LocalConfig | ProdConfig | TestConfig) -> FastAPI:
         if cache.redis is None:
             raise ConnectionError("Redis is not connected yet!")
         if cache.is_initiated and await cache.redis.ping():
-            await chatgpt_cache_manager.delete_user(f"testaccount@{HOST_MAIN}")
+            await ChatGptCacheManager.delete_user(f"testaccount@{HOST_MAIN}")
             api_logger.critical("Redis CACHE connected!")
         else:
             api_logger.critical("Redis CACHE connection failed!")
 
     @new_app.on_event("shutdown")
     async def shutdown():
-        # await chatgpt_cache_manager.delete_user(f"testaccount@{HOST_MAIN}")
+        # await ChatGptCacheManager.delete_user(f"testaccount@{HOST_MAIN}")
         await db.close()
         await cache.close()
         api_logger.critical("DB & CACHE connection closed!")

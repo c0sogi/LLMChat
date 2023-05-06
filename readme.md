@@ -506,7 +506,7 @@ The Message Manager (`MessageManager`) ensures that the number of tokens in mess
 To use the cache manager and message manager in your project, import them as follows:
 
 ```python
-from app.utils.chatgpt.chatgpt_cache_manager import chatgpt_cache_manager
+from app.utils.chatgpt.chatgpt_cache_manager import ChatGptCacheManager
 from app.utils.chatgpt.chatgpt_message_manager import MessageManager
 ```
 
@@ -518,13 +518,13 @@ For example, to create a new user GPT context:
 user_id = "example@user.com"  # email format
 chat_room_id = "example_chat_room_id"  # usually the 32 characters from `uuid.uuid4().hex`
 default_context = UserGptContext.construct_default(user_id=user_id, chat_room_id=chat_room_id)
-await chatgpt_cache_manager.create_context(user_gpt_context=default_context)
+await ChatGptCacheManager.create_context(user_gpt_context=default_context)
 ```
 
 To safely add a message history to the user's GPT context:
 
 ```python
-user_gpt_context = await chatgpt_cache_manager.read_context(user_id=user_id, chat_room_id=chat_room_id)
+user_gpt_context = await ChatGptCacheManager.read_context(user_id=user_id, chat_room_id=chat_room_id)
 content = "This is a sample message."
 role = "user"  # can be "user", "gpt", or "system", or use enum such as GptRoles.USER, GptRoles.GPT, GptRoles.SYSTEM
 await MessageManager.add_message_history_safely(user_gpt_context, content, role)

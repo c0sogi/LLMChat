@@ -2,7 +2,7 @@ from collections.abc import Iterable
 from asyncio import current_task
 from typing import AsyncGenerator, Callable, Optional, Type, Any
 from urllib import parse
-from redis.asyncio import Redis
+from redis.asyncio import Redis as AsyncRedisType
 from sqlalchemy import (
     Result,
     ScalarResult,
@@ -26,6 +26,13 @@ from app.errors.api_exceptions import Responses_500
 from app.utils.logger import CustomLogger
 from app.common.config import logging_config, TestConfig, ProdConfig, LocalConfig, SingletonMetaClass
 from . import Base, DeclarativeMeta
+
+import openai
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.embeddings.base import Embeddings
+from app.utils.langchain.redis_vectorstore import Redis as RedisVectorStore
+from app.utils.langchain.redis_vectorstore import _ensure_index_exist, _redis_prefix
+from app.common.config import OPENAI_API_KEY
 
 
 class MySQL(metaclass=SingletonMetaClass):
@@ -354,32 +361,86 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
 
 class RedisFactory(metaclass=SingletonMetaClass):
     def __init__(self):
-        self.redis: Redis | None = None
+        self._vectorstore: RedisVectorStore | None = None
         self.is_test_mode: bool = False
         self.is_initiated: bool = False
 
-    def start(self, config: TestConfig | ProdConfig | LocalConfig) -> None:
+    def start(
+        self,
+        config: TestConfig | ProdConfig | LocalConfig,
+        index_name: str = "vectorstore",
+        content_key: str = "content",
+        metadata_key: str = "metadata",
+        vector_key: str = "content_vector",
+        vector_dimension: int = 1536,
+        openai_api_key: str | None = OPENAI_API_KEY,
+    ) -> None:
         if self.is_initiated:
             return
         self.is_test_mode = True if config.test_mode else False
-        self.redis = Redis.from_url(
-            config.redis_url_format.format(
-                username="",
-                password=config.redis_password,
-                host=config.redis_host,
-                port=config.redis_port,
-                db=config.redis_database,
-            )
+        redis_url = config.redis_url_format.format(
+            username="",
+            password=config.redis_password,
+            host=config.redis_host,
+            port=config.redis_port,
+            db=config.redis_database,
         )
-        if self.is_test_mode:
-            ...
+        embeddings: Embeddings = OpenAIEmbeddings(
+            client=openai.Embedding,
+            openai_api_key=openai_api_key,
+        )
+        _tmp_ = RedisVectorStore(
+            redis_url=redis_url,
+            index_name=index_name,
+            embedding_function=embeddings.embed_query,
+            content_key=content_key,
+            metadata_key=metadata_key,
+            vector_key=vector_key,
+            is_async=False,
+        )
+        _ensure_index_exist(
+            client=_tmp_.client,  # type: ignore
+            index_name=index_name,
+            prefix=_redis_prefix(index_name),
+            content_key=content_key,
+            metadata_key=metadata_key,
+            vector_key=vector_key,
+            dim=vector_dimension,
+        )
+        _tmp_.client.close()
+        self._vectorstore = RedisVectorStore(  # type: ignore
+            redis_url=redis_url,
+            index_name=index_name,
+            embedding_function=embeddings.embed_query,
+            content_key=content_key,
+            metadata_key=metadata_key,
+            vector_key=vector_key,
+            is_async=True,
+        )
         self.is_initiated = True
 
     async def close(self) -> None:
-        if self.redis is None:
-            return
-        await self.redis.close()
+        if self._vectorstore is not None:
+            assert isinstance(self._vectorstore.client, AsyncRedisType)
+            await self._vectorstore.client.close()
         self.is_initiated = False
+
+    @property
+    def redis(self) -> AsyncRedisType:
+        try:
+            assert self._vectorstore is not None
+            assert isinstance(self._vectorstore.client, AsyncRedisType)
+        except AssertionError:
+            raise Responses_500.cache_not_initialized
+        return self._vectorstore.client
+
+    @property
+    def vectorstore(self) -> RedisVectorStore:
+        try:
+            assert self._vectorstore is not None
+        except AssertionError:
+            raise Responses_500.cache_not_initialized
+        return self._vectorstore
 
 
 db: SQLAlchemy = SQLAlchemy()
