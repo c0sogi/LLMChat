@@ -239,6 +239,12 @@ class Responses_500:
         msg="캐시가 초기화 되지 않았습니다.",
         detail="Cache not initialized",
     )
+    vectorestore_not_initialized: APIException = APIException(
+        status_code=500,
+        internal_code=5,
+        msg="벡터 저장소가 초기화 되지 않았습니다.",
+        detail="Vector Store not initialized",
+    )
 
 
 def exception_handler(

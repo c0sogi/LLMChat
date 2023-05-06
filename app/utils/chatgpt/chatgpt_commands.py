@@ -21,6 +21,7 @@ class ResponseType(str, Enum):
     HANDLE_GPT = "handle_gpt"
     HANDLE_BOTH = "handle_both"
     DO_NOTHING = "do_nothing"
+    REPEAT_COMMAND = "repeat_command"
 
 
 class CommandResponse:
@@ -47,6 +48,7 @@ class CommandResponse:
     handle_gpt = _wrapper(ResponseType.HANDLE_GPT)
     handle_both = _wrapper(ResponseType.HANDLE_BOTH)
     do_nothing = _wrapper(ResponseType.DO_NOTHING)
+    repeat_command = _wrapper(ResponseType.REPEAT_COMMAND)
 
 
 async def create_new_chat_room(
@@ -156,21 +158,18 @@ class ChatGptCommands:  # commands for chat gpt
     @classmethod
     async def _get_command_response(
         cls,
-        msg: str,
-        user_gpt_context: UserGptContext,
-        websocket: WebSocket,
+        callback_name: str,
+        callback_args: list[str],
+        buffer: BufferedUserContext,
         **kwargs: Any,
-    ) -> ResponseType:
-        user_command: list = msg.split(" ")
-        callback_name: str = user_command[0][1:]  # get callback name
-        callback_args: list = user_command[1:]  # command args
+    ) -> Tuple[Any, ResponseType]:
         if callback_name.startswith("_"):
             await SendToWebsocket.message(
-                websocket=websocket,
+                websocket=buffer.websocket,
                 msg="Command name cannot start with '_'",
-                chat_room_id=user_gpt_context.chat_room_id,
+                chat_room_id=buffer.current_chat_room_id,
             )
-            return ResponseType.SEND_MESSAGE_AND_STOP
+            return None, ResponseType.DO_NOTHING
         else:
             callback: Callable = getattr(cls, callback_name, cls.not_existing_callback)  # get callback function
         try:
@@ -178,25 +177,26 @@ class ChatGptCommands:  # commands for chat gpt
                 func=callback,
                 available_args=callback_args,
                 available_annotated={
-                    UserGptContext: user_gpt_context,
-                    WebSocket: websocket,
+                    UserGptContext: buffer.current_user_gpt_context,
+                    WebSocket: buffer.websocket,
+                    BufferedUserContext: buffer,
                 },
-                available_kwargs=user_gpt_context.optional_info | kwargs,
+                available_kwargs=buffer.current_user_gpt_context.optional_info | kwargs,
             )
         except TypeError:
             await SendToWebsocket.message(
-                websocket=websocket,
+                websocket=buffer.websocket,
                 msg="Wrong argument type",
-                chat_room_id=user_gpt_context.chat_room_id,
+                chat_room_id=buffer.current_chat_room_id,
             )
-            return ResponseType.SEND_MESSAGE_AND_STOP
+            return None, ResponseType.DO_NOTHING
         except IndexError:
             await SendToWebsocket.message(
-                websocket=websocket,
+                websocket=buffer.websocket,
                 msg="Not enough arguments",
-                chat_room_id=user_gpt_context.chat_room_id,
+                chat_room_id=buffer.current_chat_room_id,
             )
-            return ResponseType.SEND_MESSAGE_AND_STOP
+            return None, ResponseType.DO_NOTHING
         else:
             if iscoroutinefunction(callback):  # if callback is coroutine function
                 callback_response = await callback(*args_to_pass, **kwargs_to_pass)
@@ -206,23 +206,23 @@ class ChatGptCommands:  # commands for chat gpt
                 callback_response, response_type = callback_response
                 if response_type in (ResponseType.SEND_MESSAGE_AND_STOP, ResponseType.SEND_MESSAGE_AND_KEEP_GOING):
                     await SendToWebsocket.message(
-                        websocket=websocket,
+                        websocket=buffer.websocket,
                         msg=callback_response,
-                        chat_room_id=user_gpt_context.chat_room_id,
+                        chat_room_id=buffer.current_chat_room_id,
                     )
-                    return (
+                    return callback_response, (
                         ResponseType.HANDLE_BOTH
                         if response_type == ResponseType.SEND_MESSAGE_AND_KEEP_GOING
                         else ResponseType.DO_NOTHING
                     )
-                return response_type
+                return callback_response, response_type
             else:
                 await SendToWebsocket.message(
-                    websocket=websocket,
+                    websocket=buffer.websocket,
                     msg=callback_response,
-                    chat_room_id=user_gpt_context.chat_room_id,
+                    chat_room_id=buffer.current_chat_room_id,
                 )
-                return ResponseType.DO_NOTHING
+                return None, ResponseType.DO_NOTHING
 
     @staticmethod
     @CommandResponse.send_message_and_stop
@@ -236,6 +236,16 @@ class ChatGptCommands:  # commands for chat gpt
             getattr(cls, callback_name).__doc__ for callback_name in dir(cls) if not callback_name.startswith("_")
         ]
         return "\n\n".join([doc for doc in docs if doc is not None])
+
+    @staticmethod
+    @CommandResponse.do_nothing
+    async def deletechatroom(buffer: BufferedUserContext) -> None:
+        await delete_chat_room(
+            user_id=buffer.user_id,
+            chat_room_id=buffer.current_chat_room_id,
+            buffer=buffer,
+        )
+        await SendToWebsocket.initiation_of_chat(websocket=buffer.websocket, buffer=buffer)
 
     @staticmethod
     @CommandResponse.send_message_and_stop
@@ -411,6 +421,17 @@ Start a conversation as "CODEX: Hi, what are we coding today?"
         return msg
 
     @staticmethod
+    @CommandResponse.do_nothing
+    async def echo2(msg: str, /, websocket: WebSocket, user_gpt_context: UserGptContext) -> None:
+        """Send all messages to websocket\n
+        /sendtowebsocket"""
+        await SendToWebsocket.message(
+            websocket=websocket,
+            msg=msg,
+            chat_room_id=user_gpt_context.chat_room_id,
+        )
+
+    @staticmethod
     @CommandResponse.send_message_and_stop
     def codeblock(language, codes: str, /) -> str:
         """Send codeblock\n
@@ -438,20 +459,7 @@ Start a conversation as "CODEX: Hi, what are we coding today?"
         return f"I've added {key}={value} to your optional info."
 
     @staticmethod
-    @CommandResponse.send_message_and_stop
     def info(key: str, value: str, user_gpt_context: UserGptContext) -> str:
         """Alias for addoptionalinfo\n
         /info <key> <value>"""
         return ChatGptCommands.addoptionalinfo(key, value, user_gpt_context=user_gpt_context)
-
-    @staticmethod
-    @CommandResponse.send_message_and_stop
-    async def sendtowebsocket(msg: str, /, websocket: WebSocket, user_gpt_context: UserGptContext) -> str:
-        """Send all messages to websocket\n
-        /sendtowebsocket"""
-        await SendToWebsocket.message(
-            websocket=websocket,
-            msg=msg,
-            chat_room_id=user_gpt_context.chat_room_id,
-        )
-        return "Sent all messages to websocket."

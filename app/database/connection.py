@@ -362,11 +362,14 @@ class RedisFactory(metaclass=SingletonMetaClass):
         if self.is_initiated:
             return
         self.is_test_mode = True if config.test_mode else False
-        self.redis = Redis(
-            host=config.redis_host,
-            port=config.redis_port,
-            db=config.redis_database,
-            password=config.redis_password,
+        self.redis = Redis.from_url(
+            config.redis_url_format.format(
+                username="",
+                password=config.redis_password,
+                host=config.redis_host,
+                port=config.redis_port,
+                db=config.redis_database,
+            )
         )
         if self.is_test_mode:
             ...

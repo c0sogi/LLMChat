@@ -5,6 +5,9 @@ from dataclasses import dataclass, field
 from os import environ
 from pathlib import Path
 from re import Pattern, compile
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class SingletonMetaClass(type):
@@ -40,6 +43,7 @@ MYSQL_HOST: str = "db"
 MYSQL_PORT: int = int(environ.get("MYSQL_PORT", 3306))
 
 # Redis Variables
+REDIS_URL_FORMAT: str = "redis://{username}:{password}@{host}:{port}/{db}"
 REDIS_HOST: str = "cache"
 REDIS_PORT: int = int(environ.get("REDIS_PORT", 6379))
 REDIS_DATABASE: int = int(environ.get("REDIS_DATABASE", 0))
@@ -53,6 +57,7 @@ JWT_ALGORITHM: str = "HS256"
 
 # Optional Service Variables
 OPENAI_API_KEY: str | None = environ.get("OPENAI_API_KEY")
+RAPID_API_KEY: str | None = environ.get("RAPID_API_KEY")
 GOOGLE_TRANSLATE_API_KEY: str | None = environ.get("GOOGLE_TRANSLATE_API_KEY")
 PAPAGO_CLIENT_ID: str | None = environ.get("PAPAGO_CLIENT_ID")
 PAPAGO_CLIENT_SECRET: str | None = environ.get("PAPAGO_CLIENT_SECRET")
@@ -98,6 +103,7 @@ class Config(metaclass=SingletonMetaClass):
     mysql_database: str = MYSQL_DATABASE
     mysql_host: str = MYSQL_HOST
     mysql_port: int = MYSQL_PORT
+    redis_url_format: str = REDIS_URL_FORMAT
     redis_host: str = REDIS_HOST
     redis_port: int = REDIS_PORT
     redis_database: int = REDIS_DATABASE

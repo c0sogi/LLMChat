@@ -4,7 +4,7 @@ from fastapi import WebSocket
 import orjson
 
 from app.errors.gpt_exceptions import GptOtherException, GptTextGenerationException, GptTooMuchTokenException
-from app.utils.api.translate import papago_translate_api
+from app.utils.api.translate import Translator
 from app.utils.chatgpt.chatgpt_buffer import BufferedUserContext
 from app.utils.chatgpt.chatgpt_generation import generate_from_openai, message_history_organizer
 from app.utils.chatgpt.chatgpt_message_manager import MessageManager
@@ -106,20 +106,21 @@ class HandleMessage:
         buffer: BufferedUserContext,
     ) -> None:
         if translate:  # if user message is translated
-            msg = await papago_translate_api(
+            msg = await Translator.auto_translate(
                 text=msg,
                 src_lang="ko",
                 trg_lang="en",
             )
             await SendToWebsocket.message(
                 websocket=buffer.websocket,
-                msg=f"[번역된 질문]\n\n{msg}",
+                msg=f"## 번역된 질문\n\n{msg}\n\n## 생성된 답변\n\n",
                 chat_room_id=buffer.current_chat_room_id,
+                finish=False,
             )
         user_token: int = len(buffer.current_user_gpt_context.tokenize(msg))
         if user_token > buffer.current_user_gpt_context.token_per_request:  # if user message is too long
             raise GptTooMuchTokenException(
-                msg=f"메시지가 너무 길어요. 현재 토큰 개수는 {user_token}로, {buffer.current_user_gpt_context.token_per_request} 이하여야 합니다."
+                msg=f"Message too long. Now {user_token} tokens, but {buffer.current_user_gpt_context.token_per_request} tokens allowed."
             )
         await MessageManager.add_message_history_safely(
             user_gpt_context=buffer.current_user_gpt_context,
@@ -141,19 +142,20 @@ class HandleMessage:
                     user_gpt_context=buffer.current_user_gpt_context,
                     openai_api_key=openai_api_key,
                 ),
+                finish=False if translate else True,
             )
         except Exception:
             raise GptTextGenerationException(msg="텍스트를 생성하는데 문제가 발생했습니다.")
         try:
             if translate:  # if user message is translated
-                translated_msg = await papago_translate_api(
+                translated_msg = await Translator.auto_translate(
                     text=msg,
                     src_lang="en",
                     trg_lang="ko",
                 )
                 await SendToWebsocket.message(
                     websocket=buffer.websocket,
-                    msg=f"[번역된 답변]\n\n{translated_msg}",
+                    msg=f"\n\n## 번역된 답변\n\n{translated_msg}",
                     chat_room_id=buffer.current_chat_room_id,
                 )
         except Exception:
