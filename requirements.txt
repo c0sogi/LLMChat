@@ -1,5 +1,6 @@
-attrs
+aiofiles
 aiomysql
+attrs
 bcrypt
 boto3
 botocore
@@ -33,6 +34,7 @@ pydantic
 PyJWT
 PyMySQL
 pyparsing
+pytesseract
 pytest
 pytest-asyncio
 python-dateutil
@@ -46,6 +48,7 @@ sqlalchemy-utils
 starlette
 tiktoken
 toml
+unstructured
 urllib3
 uvicorn
 websockets

@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import json
 import logging
-from uuid import uuid4
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Type, Union
+from uuid import uuid4
 
 import numpy as np
 import pkg_resources
@@ -16,6 +16,10 @@ from langchain.utils import get_from_dict_or_env
 from langchain.vectorstores.base import VectorStore
 from pydantic import BaseModel, root_validator
 
+try:
+    from starlette.concurrency import run_in_threadpool
+except ImportError:
+    raise ImportError("Please install starlette to use the Redis vector store. " "pip install starlette")
 try:
     import redis
 
@@ -312,7 +316,7 @@ class Redis(VectorStore):
         **kwargs: Any,
     ) -> List[str]:
         """Add texts data to an existing index."""
-        ids, pipeline = self._add_texts(texts, metadatas, **kwargs)
+        ids, pipeline = await run_in_threadpool(self._add_texts, texts, metadatas, **kwargs)
         await pipeline.execute()  # type: ignore
         return ids
 
@@ -448,7 +452,7 @@ class Redis(VectorStore):
         Returns:
             List of Documents most similar to the query and score for each
         """
-        redis_query, params_dict = self._similarity_search_with_score(query, k=k)
+        redis_query, params_dict = await run_in_threadpool(self._similarity_search_with_score, query, k)
 
         # perform vector search
         results = await self.client.ft(self.index_name).search(redis_query, params_dict)  # type: ignore

@@ -1,5 +1,6 @@
 from asyncio import gather
 from langchain.text_splitter import TokenTextSplitter
+from langchain.document_loaders import UnstructuredFileLoader
 from app.utils.langchain.redis_vectorstore import Document
 from app.database.connection import cache
 
@@ -8,17 +9,17 @@ class VectorStoreManager:
     @staticmethod
     async def create_documents(
         text: str,
-        chunk_size: int,
+        chunk_size: int = 500,
         chunk_overlap: int = 0,
         tokenizer_model: str = "gpt-3.5-turbo",
     ) -> list[str]:
-        return await cache.vectorstore.aadd_texts(
-            texts=TokenTextSplitter(
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                model_name=tokenizer_model,
-            ).split_text(text)
-        )
+        texts = TokenTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            model_name=tokenizer_model,
+        ).split_text(text)
+        await cache.vectorstore.aadd_texts(texts=texts)
+        return texts
 
     @staticmethod
     async def asimilarity_search(queries: list[str], k: int = 1) -> list[list[Document]]:

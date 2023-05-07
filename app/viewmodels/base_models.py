@@ -118,9 +118,6 @@ class MessageFromWebsocket(BaseModel):
     translate: bool
     chat_room_id: str
 
-    class Config:
-        orm_mode = True
-
 
 class CreateChatRoom(BaseModel):  # stub
     chat_room_type: str

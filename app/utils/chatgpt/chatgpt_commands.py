@@ -6,7 +6,6 @@ from typing import Any, Callable, Tuple
 from uuid import uuid4
 
 from fastapi import WebSocket
-
 from app.errors.api_exceptions import InternalServerError
 from app.utils.chatgpt.chatgpt_buffer import BufferedUserContext
 from app.utils.chatgpt.chatgpt_cache_manager import ChatGptCacheManager
@@ -534,7 +533,7 @@ Start a conversation as "CODEX: Hi, what are we coding today?"
         return f"/testchaining {chain_size-1}", ResponseType.REPEAT_COMMAND
 
     @staticmethod
-    @CommandResponse.send_message_and_stop
+    @CommandResponse.handle_gpt
     async def query(query: str, /, buffer: BufferedUserContext) -> None:
         """Query from redis vectorstore\n
         /query <query>"""
@@ -566,6 +565,5 @@ And below text, enclosed in triple backticked, is everything I could find in my 
         /embed <text_to_embed>"""
         await VectorStoreManager.create_documents(
             text=text_to_embed,
-            chunk_size=500,
         )
         return "Embedding successful!"

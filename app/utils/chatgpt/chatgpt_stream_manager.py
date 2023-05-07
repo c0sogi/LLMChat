@@ -1,16 +1,20 @@
 from fastapi import WebSocket, WebSocketDisconnect
-
+from fastapi.concurrency import run_in_threadpool
+from pydantic import ValidationError
 from app.errors.gpt_exceptions import GptOtherException, GptTextGenerationException, GptTooMuchTokenException
+from app.utils.chatgpt.chatgpt_buffer import BufferedUserContext
 from app.utils.chatgpt.chatgpt_cache_manager import ChatGptCacheManager
 from app.utils.chatgpt.chatgpt_commands import (
+    ChatGptCommands,
+    command_handler,
     create_new_chat_room,
     get_contexts_sorted_from_recent_to_past,
-    command_handler,
 )
+from app.utils.chatgpt.chatgpt_fileloader import read_bytes_to_text
 from app.utils.chatgpt.chatgpt_message_manager import MessageManager
+from app.utils.chatgpt.chatgpt_vectorstore_manager import VectorStoreManager
 from app.utils.chatgpt.chatgpt_websocket_manager import HandleMessage, SendToWebsocket
 from app.utils.logger import api_logger
-from app.utils.chatgpt.chatgpt_buffer import BufferedUserContext
 from app.viewmodels.base_models import MessageFromWebsocket, MessageToWebsocket
 from app.viewmodels.gpt_models import GptRoles
 
@@ -33,8 +37,20 @@ async def begin_chat(
 
     while True:  # loop until connection is closed
         try:
-            # receive message from websocket
-            received: MessageFromWebsocket = MessageFromWebsocket.parse_raw(await websocket.receive_text())
+            rcvd: dict = await websocket.receive_json()
+            assert isinstance(rcvd, dict)
+            if "filename" in rcvd:
+                text: str = await run_in_threadpool(
+                    read_bytes_to_text, await websocket.receive_bytes(), rcvd["filename"]
+                )
+                docs: list[str] = await VectorStoreManager.create_documents(text)
+                await SendToWebsocket.message(
+                    websocket=websocket,
+                    msg=f"Successfully embedded documents. You uploaded file begins with...\n\n```{docs[0][:50]}```...",
+                    chat_room_id=buffer.current_chat_room_id,
+                )
+                continue
+            received: MessageFromWebsocket = MessageFromWebsocket(**rcvd)
 
             if received.chat_room_id != buffer.current_chat_room_id:  # change chat room
                 index: int | None = buffer.find_index_of_chatroom(received.chat_room_id)
@@ -76,6 +92,20 @@ async def begin_chat(
 
         except WebSocketDisconnect:
             raise WebSocketDisconnect(code=1000, reason="client disconnected")
+        except (AssertionError, ValidationError):
+            await SendToWebsocket.message(
+                websocket=websocket,
+                msg="Invalid message. Message is not in the correct format, maybe frontend - backend version mismatch?",
+                chat_room_id=buffer.current_chat_room_id,
+            )
+            continue
+        except ValueError:
+            await SendToWebsocket.message(
+                websocket=websocket,
+                msg="Invalid file type.",
+                chat_room_id=buffer.current_chat_room_id,
+            )
+            continue
         except GptTextGenerationException:
             await MessageManager.rpop_message_history_safely(
                 user_gpt_context=buffer.current_user_gpt_context, role=GptRoles.USER
