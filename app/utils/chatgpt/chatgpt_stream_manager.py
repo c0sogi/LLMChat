@@ -5,7 +5,6 @@ from app.errors.gpt_exceptions import GptOtherException, GptTextGenerationExcept
 from app.utils.chatgpt.chatgpt_buffer import BufferedUserContext
 from app.utils.chatgpt.chatgpt_cache_manager import ChatGptCacheManager
 from app.utils.chatgpt.chatgpt_commands import (
-    ChatGptCommands,
     command_handler,
     create_new_chat_room,
     get_contexts_sorted_from_recent_to_past,
@@ -16,13 +15,12 @@ from app.utils.chatgpt.chatgpt_vectorstore_manager import VectorStoreManager
 from app.utils.chatgpt.chatgpt_websocket_manager import HandleMessage, SendToWebsocket
 from app.utils.logger import api_logger
 from app.viewmodels.base_models import MessageFromWebsocket, MessageToWebsocket
-from app.viewmodels.gpt_models import GptRoles
+from app.models.gpt_models import GptRoles
 
 
 async def begin_chat(
     websocket: WebSocket,
     user_id: str,
-    openai_api_key: str,
 ) -> None:
     # initialize variables
     buffer: BufferedUserContext = BufferedUserContext(
@@ -33,6 +31,7 @@ async def begin_chat(
             chat_room_ids=await ChatGptCacheManager.get_all_chat_rooms(user_id=user_id),
         ),
     )
+
     await SendToWebsocket.initiation_of_chat(websocket=websocket, buffer=buffer)
 
     while True:  # loop until connection is closed
@@ -75,7 +74,6 @@ async def begin_chat(
                     received=received,
                     websocket=websocket,
                     buffer=buffer,
-                    openai_api_key=openai_api_key,
                 )
                 continue
 
@@ -86,7 +84,6 @@ async def begin_chat(
             )
             await HandleMessage.gpt(
                 translate=received.translate,
-                openai_api_key=openai_api_key,
                 buffer=buffer,
             )
 
@@ -99,7 +96,8 @@ async def begin_chat(
                 chat_room_id=buffer.current_chat_room_id,
             )
             continue
-        except ValueError:
+        except ValueError as e:
+            api_logger.error(e, exc_info=True)
             await SendToWebsocket.message(
                 websocket=websocket,
                 msg="Invalid file type.",
@@ -107,14 +105,14 @@ async def begin_chat(
             )
             continue
         except GptTextGenerationException:
-            await MessageManager.rpop_message_history_safely(
+            await MessageManager.pop_message_history_safely(
                 user_gpt_context=buffer.current_user_gpt_context, role=GptRoles.USER
             )
         except GptOtherException:
-            await MessageManager.rpop_message_history_safely(
+            await MessageManager.pop_message_history_safely(
                 user_gpt_context=buffer.current_user_gpt_context, role=GptRoles.USER
             )
-            await MessageManager.rpop_message_history_safely(
+            await MessageManager.pop_message_history_safely(
                 user_gpt_context=buffer.current_user_gpt_context, role=GptRoles.GPT
             )
         except GptTooMuchTokenException as too_much_token_exception:  # if user message is too long

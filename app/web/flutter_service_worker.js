@@ -3,11 +3,12 @@ const MANIFEST = 'flutter-app-manifest';
 const TEMP = 'flutter-temp-cache';
 const CACHE_NAME = 'flutter-app-cache';
 const RESOURCES = {
-  "assets/AssetManifest.json": "f0d37ab3388fe661ab62017ee6592a4f",
+  "assets/AssetManifest.json": "0ff2defb18c7e340b510ba722447bc00",
 "assets/assets/images/favicon.ico": "4d9ea72b55947c612992a73d1c6f769d",
 "assets/assets/images/gpt_profile.png": "f449c50e04bb43f6a46b2daa84a05622",
 "assets/assets/images/site_logo.png": "0fb92091fe8696aa5cfeafb0d1a01cbc",
 "assets/assets/images/user_profile.png": "62ec3ddb01749f1173ca5e2972504c03",
+"assets/assets/images/vicuna_profile.jpg": "a7c80221ab611e7c68f12e9b9794bc81",
 "assets/FontManifest.json": "dc3d03800ccca4601324923c0b1d6d57",
 "assets/fonts/MaterialIcons-Regular.otf": "e7069dfd19b331be16bed984668fe080",
 "assets/NOTICES": "b67701d66ab4415275394db0a602d216",
@@ -22,9 +23,9 @@ const RESOURCES = {
 "icons/Icon-512.png": "c9242a8fc92d16303b04ac108c9ac581",
 "icons/Icon-maskable-192.png": "710e5d264b437fe72bdb99ba514e2266",
 "icons/Icon-maskable-512.png": "c9242a8fc92d16303b04ac108c9ac581",
-"index.html": "00bbbe3b446dd2ffa5ee43d4e0902e3e",
-"/": "00bbbe3b446dd2ffa5ee43d4e0902e3e",
-"main.dart.js": "0214b9f8354e4111b7edb14011b9364c",
+"index.html": "cacffd2519678827e11267d0dd2b80e9",
+"/": "cacffd2519678827e11267d0dd2b80e9",
+"main.dart.js": "c7c9709add8b72e35ec8dc81ba10134b",
 "manifest.json": "7e9cc88c98034abad925a9f0f78c53d4",
 "site_logo.png": "0fb92091fe8696aa5cfeafb0d1a01cbc",
 "version.json": "9094aacdae789dccd67fa32109ff1a18"

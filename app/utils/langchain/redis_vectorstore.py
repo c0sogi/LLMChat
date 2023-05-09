@@ -1,8 +1,8 @@
 """Wrapper around Redis vector database."""
 from __future__ import annotations
 
-import json
-import logging
+from orjson import dumps as orjson_dumps
+from orjson import loads as orjson_loads
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Type, Union
 from uuid import uuid4
@@ -16,6 +16,8 @@ from langchain.utils import get_from_dict_or_env
 from langchain.vectorstores.base import VectorStore
 from pydantic import BaseModel, root_validator
 
+from app.utils.logger import api_logger
+
 try:
     from starlette.concurrency import run_in_threadpool
 except ImportError:
@@ -26,7 +28,6 @@ try:
     if TYPE_CHECKING:
         from redis.client import Pipeline as PipelineType
         from redis.client import Redis as RedisType
-        from redis.commands.search.field import Field as FieldType
     from redis.commands.search.field import TextField, VectorField
     from redis.commands.search.indexDefinition import IndexDefinition, IndexType
     from redis.commands.search.query import Query
@@ -41,9 +42,6 @@ except ImportError:
     raise ValueError("Could not import redis python package. " "Please install it with `pip install redis`.")
 except pkg_resources.ResolutionError:
     raise ValueError("Redis version >= 4.2.0rc1 is required. " "Please upgrade it with `pip install redis>=4.2.0rc1`.")
-
-
-logger = logging.getLogger(__name__)
 
 
 # required modules
@@ -74,7 +72,7 @@ def _check_redis_module_exist(client: RedisType, modules: List[dict]) -> None:
                 "You must add the RediSearch (>= 2.4) module from Redis Stack. "
                 "Please refer to Redis Stack docs: https://redis.io/docs/stack/"
             )
-            logging.error(error_message)
+            api_logger.error(error_message)
             raise ValueError(error_message)
 
 
@@ -90,7 +88,7 @@ async def _acheck_redis_module_exist(client: AsyncRedisType, modules: List[dict]
                 "You must add the RediSearch (>= 2.4) module from Redis Stack. "
                 "Please refer to Redis Stack docs: https://redis.io/docs/stack/"
             )
-            logging.error(error_message)
+            api_logger.error(error_message)
             raise ValueError(error_message)
 
 
@@ -99,9 +97,9 @@ def _check_index_exists(client: RedisType, index_name: str) -> bool:
     try:
         client.ft(index_name).info()
     except:  # noqa: E722
-        logger.info("Index does not exist")
+        api_logger.info("Index does not exist")
         return False
-    logger.info("Index already exists")
+    api_logger.info("Index already exists")
     return True
 
 
@@ -110,9 +108,9 @@ async def _acheck_index_exists(client: AsyncRedisType, index_name: str) -> bool:
     try:
         await client.ft(index_name).info()
     except:  # noqa: E722
-        logger.info("Index does not exist")
+        api_logger.info("Index does not exist")
         return False
-    logger.info("Index already exists")
+    api_logger.info("Index already exists")
     return True
 
 
@@ -188,7 +186,7 @@ def _redis_embed_texts_to_pipeline(
             mapping={
                 content_key: text,
                 vector_key: np.array(embeddings[i], dtype=np.float32).tobytes(),
-                metadata_key: json.dumps(metadata),
+                metadata_key: orjson_dumps(metadata),
             },
         )
 
@@ -292,7 +290,7 @@ class Redis(VectorStore):
                 mapping={
                     self.content_key: text,
                     self.vector_key: np.array(self.embedding_function(text), dtype=np.float32).tobytes(),
-                    self.metadata_key: json.dumps(metadata),
+                    self.metadata_key: orjson_dumps(metadata),
                 },
             )
             ids.append(key)
@@ -434,7 +432,7 @@ class Redis(VectorStore):
 
         docs = [
             (
-                Document(page_content=result.content, metadata=json.loads(result.metadata)),
+                Document(page_content=result.content, metadata=orjson_loads(result.metadata)),
                 float(result.vector_score),
             )
             for result in results.docs
@@ -459,11 +457,14 @@ class Redis(VectorStore):
 
         docs = [
             (
-                Document(page_content=result.content, metadata=json.loads(result.metadata)),
+                Document(page_content=result.content, metadata=orjson_loads(result.metadata)),
                 float(result.vector_score),
             )
             for result in results.docs
         ]
+        api_logger.info(f"Total docs: {len(docs)}, and all vectors: {[doc[1] for doc in docs]}")
+        for doc in docs:
+            api_logger.info(f"doc: {doc[0].page_content} score: {doc[1]}")
 
         return docs
 
@@ -650,7 +651,7 @@ class Redis(VectorStore):
         # Check if index exists
         try:
             client.ft(index_name).dropindex(delete_documents)
-            logger.info("Drop index")
+            api_logger.info("Drop index")
             return True
         except:  # noqa: E722
             # Index not exist
@@ -684,7 +685,7 @@ class Redis(VectorStore):
         # Check if index exists
         try:
             await client.ft(index_name).dropindex(delete_documents)
-            logger.info("Drop index")
+            api_logger.info("Drop index")
             return True
         except:  # noqa: E722
             # Index not exist

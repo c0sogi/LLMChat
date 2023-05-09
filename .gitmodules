@@ -1,6 +1,3 @@
-[submodule "ChatGPT-Flutter-App"]
-	path = ChatGPT-Flutter-App
-	url = https://github.com/c0sogi/ChatGPT-Flutter-App
 [submodule "frontend"]
 	path = frontend
 	url = https://github.com/c0sogi/ChatGPT-Flutter-App

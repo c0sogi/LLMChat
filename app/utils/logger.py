@@ -1,8 +1,7 @@
-import json
+from orjson import dumps as orjson_dumps
 import logging
 import os
 from datetime import datetime, timedelta
-from inspect import currentframe as frame
 from time import time
 from typing import Optional
 from sys import exc_info
@@ -98,7 +97,7 @@ class ApiLogger(CustomLogger):
             "datetimeUTC": utc_now.strftime("%Y/%m/%d %H:%M:%S"),
             "datetimeKST": (utc_now + timedelta(hours=9)).strftime("%Y/%m/%d %H:%M:%S"),
         } | kwargs
-        log = json.dumps(json_data)
+        log: str = orjson_dumps(json_data).decode("utf-8")
         self.error(log, exc_info=True) if error and error.status_code >= 500 else self.info(log)
 
 

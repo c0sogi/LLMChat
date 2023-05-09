@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy_utils import database_exists, create_database
 from app.errors.api_exceptions import Responses_500
 from app.utils.logger import CustomLogger
-from app.common.config import logging_config, TestConfig, ProdConfig, LocalConfig, SingletonMetaClass
+from app.common.config import logging_config, Config, SingletonMetaClass
 from . import Base, DeclarativeMeta
 
 import openai
@@ -150,7 +150,7 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         self.is_initiated = False
         self.logger = CustomLogger("SQLAlchemy", logging_config=logging_config)
 
-    def start(self, config: TestConfig | ProdConfig | LocalConfig) -> None:
+    def start(self, config: Config) -> None:
         if self.is_initiated:
             return
         self.is_test_mode = True if config.test_mode else False
@@ -367,7 +367,7 @@ class RedisFactory(metaclass=SingletonMetaClass):
 
     def start(
         self,
-        config: TestConfig | ProdConfig | LocalConfig,
+        config: Config,
         index_name: str = "vectorstore",
         content_key: str = "content",
         metadata_key: str = "metadata",

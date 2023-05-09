@@ -8,5 +8,13 @@
             "program": "frontend/lib/main.dart",
             "deviceId": "edge"
         },
+        {
+            "name": "Python: FastAPI",
+            "type": "python",
+            "request": "launch",
+            "module": "main",
+            "jinja": true,
+            "justMyCode": true
+        }
     ]
 }

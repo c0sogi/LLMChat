@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Type
+from typing import Optional
 from fastapi.exceptions import HTTPException
 from sqlalchemy.exc import OperationalError
 from app.common.config import MAX_API_KEY, MAX_API_WHITELIST

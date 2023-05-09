@@ -1,5 +1,4 @@
 from sqlalchemy import (
-    Column,
     String,
     Integer,
     Enum,

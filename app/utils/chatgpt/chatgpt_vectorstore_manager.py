@@ -1,6 +1,5 @@
 from asyncio import gather
 from langchain.text_splitter import TokenTextSplitter
-from langchain.document_loaders import UnstructuredFileLoader
 from app.utils.langchain.redis_vectorstore import Document
 from app.database.connection import cache
 
