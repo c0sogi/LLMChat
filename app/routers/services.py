@@ -12,7 +12,7 @@ from starlette.requests import Request
 from app.errors.api_exceptions import Responses_400
 from app.viewmodels.base_models import MessageOk, KakaoMsgBody, SendEmail
 from app.common.config import (
-    HOST_MAIN,
+    config,
     KAKAO_RESTAPI_TOKEN,
     KAKAO_IMAGE_URL,
     AWS_ACCESS_KEY,
@@ -158,7 +158,7 @@ def send_email(**kwargs):
 
 @router.post("/email/send_by_ses")
 async def email_by_ses():
-    sender = encode_from_utf8(f"운영자 admin <admin@{HOST_MAIN}>")
+    sender = encode_from_utf8(f"운영자 admin <admin@{config.host_main}>")
     recipient = [AWS_AUTHORIZED_EMAIL]
 
     # If necessary, replace us-west-2 with the AWS Region you're using for Amazon SES.

@@ -1,10 +1,9 @@
 import asyncio
 from datetime import datetime
-from typing import AsyncGenerator, Generator, Iterable
-from fastapi import FastAPI, Response
+from typing import AsyncGenerator, Generator
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
-from pytest import Function
 import httpx
 import pytest_asyncio
 from app.utils.auth.token import create_access_token
@@ -15,13 +14,6 @@ from app.common.config import Config, logging_config
 from app.utils.logger import CustomLogger
 from app.viewmodels.base_models import UserToken
 from app.utils.chatgpt.chatgpt_cache_manager import ChatGptCacheManager, cache
-
-"""
-1. DB 생성
-2. 테이블 생성
-3. 테스트 코드 작동
-4. 테이블 레코드 삭제
-"""
 
 
 @pytest.fixture(scope="session")

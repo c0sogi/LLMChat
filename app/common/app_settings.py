@@ -2,12 +2,7 @@ from fastapi import FastAPI, Depends
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
-from app.common.config import (
-    HOST_MAIN,
-    LocalConfig,
-    ProdConfig,
-    TestConfig,
-)
+from app.common.config import Config
 from app.database.connection import db, cache
 from app.middlewares.token_validator import access_control
 from app.middlewares.trusted_hosts import TrustedHostMiddleware
@@ -19,9 +14,10 @@ from app.dependencies import (
 from app.utils.logger import api_logger
 from app.utils.chatgpt.chatgpt_cache_manager import ChatGptCacheManager
 from app.utils.js_initializer import js_url_initializer
+from app.dependencies import process_pool_executor
 
 
-def create_app(config: LocalConfig | ProdConfig | TestConfig) -> FastAPI:
+def create_app(config: Config) -> FastAPI:
     # Initialize app & db & js
     new_app = FastAPI(
         title=config.app_title,
@@ -83,13 +79,14 @@ def create_app(config: LocalConfig | ProdConfig | TestConfig) -> FastAPI:
         if cache.redis is None:
             raise ConnectionError("Redis is not connected yet!")
         if cache.is_initiated and await cache.redis.ping():
-            await ChatGptCacheManager.delete_user(f"testaccount@{HOST_MAIN}")
+            await ChatGptCacheManager.delete_user(f"testaccount@{config.host_main}")
             api_logger.critical("Redis CACHE connected!")
         else:
             api_logger.critical("Redis CACHE connection failed!")
 
     @new_app.on_event("shutdown")
     async def shutdown():
+        process_pool_executor.shutdown()
         # await ChatGptCacheManager.delete_user(f"testaccount@{HOST_MAIN}")
         await db.close()
         await cache.close()

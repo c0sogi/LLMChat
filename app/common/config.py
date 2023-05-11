@@ -20,6 +20,8 @@ class SingletonMetaClass(type):
 
 
 # API Server Variables
+API_ENV: str = environ.get("API_ENV", "local")
+DOCKER_MODE: bool = environ.get("DOCKER_MODE", "True").lower() == "true"
 
 EXCEPT_PATH_LIST: tuple = (
     "/",
@@ -33,24 +35,20 @@ MAX_API_WHITELIST: int = 10
 BASE_DIR: Path = Path(__file__).parents[2]
 
 # MySQL Variables
-MYSQL_URL_FORMAT: str = "{dialect}+{driver}://{user}:{password}@{host}:{port}/{database}?charset=utf8mb4"
 MYSQL_ROOT_PASSWORD: str = environ["MYSQL_ROOT_PASSWORD"]
 MYSQL_USER: str = environ["MYSQL_USER"]
 MYSQL_PASSWORD: str = environ.get("MYSQL_PASSWORD", "")
 MYSQL_DATABASE: str = environ["MYSQL_DATABASE"]
 MYSQL_TEST_DATABASE: str = environ.get("MYSQL_TEST_DATABASE", MYSQL_DATABASE)
-MYSQL_HOST: str = "db"
 MYSQL_PORT: int = int(environ.get("MYSQL_PORT", 3306))
 
 # Redis Variables
-REDIS_URL_FORMAT: str = "redis://{username}:{password}@{host}:{port}/{db}"
-REDIS_HOST: str = "cache"
 REDIS_PORT: int = int(environ.get("REDIS_PORT", 6379))
 REDIS_DATABASE: int = int(environ.get("REDIS_DATABASE", 0))
 REDIS_PASSWORD: str = environ["REDIS_PASSWORD"]
 
 # Other Required Variables
-HOST_MAIN: str = environ.get("HOST_MAIN", "localhost:8000")
+HOST_MAIN: str = environ.get("HOST_MAIN", "localhost")
 JWT_SECRET: str = environ["JWT_SECRET"]
 JWT_ALGORITHM: str = "HS256"
 
@@ -87,24 +85,26 @@ KAKAO_IMAGE_URL: str | None = (
 """
 
 
-@dataclass(frozen=True)
+@dataclass
 class Config(metaclass=SingletonMetaClass):
-    app_title: str = f"{HOST_MAIN} API service"
+    app_title: str = "FastAPI"
     app_description: str = ""
-    app_version: str = "0.9.0"
+    app_version: str = "1.0.0"
+    host_main: str = HOST_MAIN
+    port: int = 8000
     db_pool_recycle: int = 900
     db_echo: bool = False
     debug: bool = False
     test_mode: bool = False
-    database_url_format: str = MYSQL_URL_FORMAT
+    database_url_format: str = "{dialect}+{driver}://{user}:{password}@{host}:{port}/{database}?charset=utf8mb4"
     mysql_root_password: str = MYSQL_ROOT_PASSWORD
     mysql_user: str = MYSQL_USER
     mysql_password: str = MYSQL_PASSWORD
     mysql_database: str = MYSQL_DATABASE
-    mysql_host: str = MYSQL_HOST
+    mysql_host: str = "db"
     mysql_port: int = MYSQL_PORT
-    redis_url_format: str = REDIS_URL_FORMAT
-    redis_host: str = REDIS_HOST
+    redis_url_format: str = "redis://{username}:{password}@{host}:{port}/{db}"
+    redis_host: str = "cache"
     redis_port: int = REDIS_PORT
     redis_database: int = REDIS_DATABASE
     redis_password: str = REDIS_PASSWORD
@@ -115,17 +115,26 @@ class Config(metaclass=SingletonMetaClass):
     def get(
         option: str | None = None,
     ) -> LocalConfig | ProdConfig | TestConfig:
-        config_key = option if option is not None else environ.get("API_ENV", "local")
+        config_key = option if option is not None else API_ENV
         config_key = "test" if environ.get("PYTEST_RUNNING") is not None else config_key
-        return {"prod": ProdConfig, "local": LocalConfig, "test": TestConfig}[config_key]()
+        _config = {
+            "prod": ProdConfig,
+            "local": LocalConfig,
+            "test": TestConfig,
+        }[config_key]()
+        if not DOCKER_MODE:
+            _config.port = 8001
+            _config.mysql_host = "localhost"
+            _config.redis_host = "localhost"
+        return _config
 
 
-@dataclass(frozen=True)
+@dataclass
 class LocalConfig(Config, metaclass=SingletonMetaClass):
     debug: bool = True
 
 
-@dataclass(frozen=True)
+@dataclass
 class ProdConfig(Config, metaclass=SingletonMetaClass):
     db_echo: bool = False
     trusted_hosts: list = field(
@@ -144,16 +153,17 @@ class ProdConfig(Config, metaclass=SingletonMetaClass):
     )
 
 
-@dataclass(frozen=True)
+@dataclass
 class TestConfig(Config, metaclass=SingletonMetaClass):
     test_mode: bool = True
     debug: bool = False
-    mysql_host: str = "localhost"
     mysql_database: str = MYSQL_TEST_DATABASE
+    mysql_host: str = "localhost"
     redis_host: str = "localhost"
+    port: int = 8001
 
 
-@dataclass(frozen=True)
+@dataclass
 class LoggingConfig:
     logger_level: int = logging.DEBUG
     console_log_level: int = logging.INFO

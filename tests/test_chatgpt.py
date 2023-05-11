@@ -3,8 +3,9 @@ from fastapi.testclient import TestClient
 import pytest
 from starlette.testclient import WebSocketTestSession
 from app.common.config import OPENAI_API_KEY
+from app.models.gpt_llms import LLMModels
+from app.models.gpt_models import GptRoles, MessageHistory, UserGptContext, UserGptProfile
 from app.viewmodels.base_models import MessageFromWebsocket, MessageToWebsocket
-from app.viewmodels.gpt_models import OpenAIModels, GptRoles, MessageHistory, UserGptContext, UserGptProfile
 
 
 # @pytest.mark.skip
@@ -18,7 +19,7 @@ async def test_chatgpt_redis(chatgpt_cache_manager):
     default_context: UserGptContext = UserGptContext.construct_default(user_id=user_id, chat_room_id=test_chat_room_id)
     new_context: UserGptContext = UserGptContext(
         user_gpt_profile=UserGptProfile(user_id=user_id, chat_room_id=test_chat_room_id, user_role="test_user"),
-        gpt_model=OpenAIModels.gpt_4,
+        gpt_model=LLMModels.gpt_4,
     )
 
     # delete test chat room
@@ -33,7 +34,7 @@ async def test_chatgpt_redis(chatgpt_cache_manager):
 
     # add new message to redis
     new_message: MessageHistory = MessageHistory(
-        role=role.value, content=message, is_user=True, tokens=len(new_context.tokenize(message))
+        role=role.value, content=message, is_user=True, tokens=new_context.get_tokens_of(message)
     )
     await chatgpt_cache_manager.append_message_history(
         user_id=user_id, chat_room_id=test_chat_room_id, role=role, message_history=new_message
@@ -61,8 +62,12 @@ def test_chatgpt_connection(websocket_app: TestClient, base_websocket_url: str):
         client_received: MessageToWebsocket = MessageToWebsocket.parse_raw(ws_client.receive_text())
         assert client_received.init
         # send message to websocket
-        ws_client.send_text(
-            MessageFromWebsocket(msg="/ping", translate=False, chat_room_id=client_received.chat_room_id).json()
+        ws_client.send_json(
+            MessageFromWebsocket(
+                msg="/ping",
+                translate=False,
+                chat_room_id=client_received.chat_room_id,
+            ).dict()
         )
         # receive message from websocket
         client_received: MessageToWebsocket = MessageToWebsocket.parse_raw(ws_client.receive_text())
@@ -81,10 +86,10 @@ def test_chatgpt_conversation(websocket_app: TestClient, base_websocket_url: str
         assert client_received.init
 
         # send message to websocket
-        ws_client.send_text(
+        ws_client.send_json(
             MessageFromWebsocket(
                 msg="say this word: TEST", translate=False, chat_room_id=client_received.chat_room_id
-            ).json()
+            ).dict()
         )
 
         # receive messages from websocket, loop until received message with finish=True

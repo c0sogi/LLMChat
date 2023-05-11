@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 
 from fastapi import WebSocket
 
-from app.viewmodels.gpt_models import UserGptContext
+from app.models.gpt_models import UserGptContext
 
 
 @dataclass

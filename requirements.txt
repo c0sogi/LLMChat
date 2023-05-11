@@ -26,6 +26,7 @@ lxml
 orjson
 openai
 packaging
+pdf2image
 pluggy
 premailer
 py
@@ -42,12 +43,14 @@ python-dotenv
 redis
 requests
 s3transfer
+sentencepiece
 six
 SQLAlchemy
 sqlalchemy-utils
 starlette
 tiktoken
 toml
+transformers
 unstructured
 urllib3
 uvicorn

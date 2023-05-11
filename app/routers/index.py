@@ -1,15 +1,7 @@
-from inspect import currentframe as frame
-
 from fastapi import APIRouter
-from fastapi.requests import Request
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import FileResponse
 
-from app.common.config import OPENAI_API_KEY
-from app.utils.logger import api_logger
-
-router = APIRouter(redirect_slashes=True)
-templates = Jinja2Templates(directory="app")
+router = APIRouter()
 
 
 @router.get("/")
@@ -22,25 +14,26 @@ async def favicon():
     return FileResponse("app/contents/favicon.ico")
 
 
-@router.get("/test", status_code=200)
-async def test(request: Request):
-    try:
-        if request.url.scheme == "http":
-            host_address: str = f"ws://{request.url.hostname}:{request.url.port}/ws/chatgpt/{OPENAI_API_KEY}"
-        elif request.url.scheme == "https":
-            host_address: str = f"wss://{request.url.hostname}/ws/chatgpt/{OPENAI_API_KEY}"
-        else:
-            api_logger.error("index error")
-            return JSONResponse({"detail": "Internal server error"}, status_code=500)
-        return templates.TemplateResponse(
-            status_code=200,
-            name="chatgpt.html",
-            context={
-                "request": request,
-                "host_address": host_address,
-            },
-        )
-    except Exception as exception:
-        api_logger.error(exception)
-        request.state.inspect = frame()
-        return JSONResponse({"detail": "Internal server error"}, status_code=500)
+# @router.websocket("/test")
+# async def send_generation(websocket: WebSocket):
+#     try:
+#         await websocket.accept()
+
+#         # Create an asyncio.Queue and a simple queue
+#         manager = mp.Manager()
+#         m_queue, m_done = manager.Queue(), manager.Event()
+
+#         await asyncio.gather(
+#             asyncio.get_event_loop().run_in_executor(
+#                 process_pool_executor,
+#                 llama_cpp_generation,
+#                 LLMModels.wizard_vicuna_13b.value,
+#                 "hello!",
+#                 m_queue,
+#                 m_done,
+#             ),
+#             sending_task(websocket, m_queue, m_done),
+#         )
+
+#     except Exception as exception:
+#         api_logger.error(exception, exc_info=True)

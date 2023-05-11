@@ -1,5 +1,6 @@
+import asyncio
 from app.utils.chatgpt.chatgpt_cache_manager import ChatGptCacheManager
-from app.viewmodels.gpt_models import GptRoles, MessageHistory, UserGptContext
+from app.models.gpt_models import GptRoles, MessageHistory, UserGptContext
 
 
 class MessageManager:
@@ -8,14 +9,20 @@ class MessageManager:
         user_gpt_context: UserGptContext,
         content: str,
         role: GptRoles | str,
+        calculated_tokens_to_use: int | None = None,
+        model_name: str | None = None,
     ) -> None:
         role = GptRoles.get_name(role).lower()
-        tokens: int = len(user_gpt_context.tokenize(content)) + 8
+        if calculated_tokens_to_use is None:
+            tokens: int = user_gpt_context.get_tokens_of(content) + user_gpt_context.gpt_model.value.token_margin
+        else:
+            tokens: int = calculated_tokens_to_use + user_gpt_context.gpt_model.value.token_margin
         message_history: MessageHistory = MessageHistory(
             role=getattr(user_gpt_context.user_gpt_profile, f"{role}_role"),
             content=content,
             tokens=tokens,
             is_user=True if role == GptRoles.USER.name.lower() else False,
+            model_name=model_name,
         )
         getattr(user_gpt_context, f"{role}_message_histories").append(message_history)
         setattr(
@@ -30,19 +37,29 @@ class MessageManager:
             role=role,
             message_history=message_history,
         )
+
         if num_of_deleted_histories > 0:
-            for role in (GptRoles.GPT, GptRoles.USER):
-                await ChatGptCacheManager.lpop_message_history(
+            asyncio.gather(
+                ChatGptCacheManager.lpop_message_history(
                     user_id=user_gpt_context.user_id,
                     chat_room_id=user_gpt_context.chat_room_id,
-                    role=role,
+                    role=GptRoles.GPT,
                     count=num_of_deleted_histories,
-                )
+                ),
+                ChatGptCacheManager.lpop_message_history(
+                    user_id=user_gpt_context.user_id,
+                    chat_room_id=user_gpt_context.chat_room_id,
+                    role=GptRoles.USER,
+                    count=num_of_deleted_histories,
+                ),
+            )
 
     @staticmethod
-    async def rpop_message_history_safely(
+    async def pop_message_history_safely(
         user_gpt_context: UserGptContext,
         role: GptRoles | str,
+        count: int | None = None,
+        rpop: bool = True,  # if False, lpop
     ) -> MessageHistory | None:
         role = GptRoles.get_name(role).lower()
         try:
@@ -54,11 +71,20 @@ class MessageManager:
             f"{role}_message_tokens",
             getattr(user_gpt_context, f"{role}_message_tokens") - message_history.tokens,
         )
-        await ChatGptCacheManager.rpop_message_history(
-            user_id=user_gpt_context.user_id,
-            chat_room_id=user_gpt_context.chat_room_id,
-            role=role,
-        )
+        if rpop:
+            await ChatGptCacheManager.rpop_message_history(
+                user_id=user_gpt_context.user_id,
+                chat_room_id=user_gpt_context.chat_room_id,
+                role=role,
+                count=count,
+            )
+        else:
+            await ChatGptCacheManager.lpop_message_history(
+                user_id=user_gpt_context.user_id,
+                chat_room_id=user_gpt_context.chat_room_id,
+                role=role,
+                count=count,
+            )
         return message_history
 
     @staticmethod
@@ -70,7 +96,7 @@ class MessageManager:
     ) -> None:
         role = GptRoles.get_name(role).lower()
         message_history_to_change: MessageHistory = getattr(user_gpt_context, f"{role}_message_histories")[index]
-        new_tokens: int = len(user_gpt_context.tokenize(new_content)) + 8
+        new_tokens: int = user_gpt_context.get_tokens_of(new_content) + 8
         old_tokens: int = message_history_to_change.tokens
         message_history_to_change.content = new_content
         message_history_to_change.tokens = new_tokens

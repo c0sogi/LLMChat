@@ -13,7 +13,7 @@ from app.utils.chatgpt.chatgpt_message_manager import MessageManager
 from app.utils.chatgpt.chatgpt_vectorstore_manager import Document, VectorStoreManager
 from app.utils.chatgpt.chatgpt_websocket_manager import HandleMessage, SendToWebsocket
 from app.viewmodels.base_models import MessageFromWebsocket
-from app.viewmodels.gpt_models import GptRoles, MessageHistory, OpenAIModels, UserGptContext
+from app.models.gpt_models import GptRoles, MessageHistory, LLMModels, UserGptContext
 
 
 class ResponseType(str, Enum):
@@ -109,7 +109,6 @@ async def command_handler(
     received: MessageFromWebsocket,
     websocket: WebSocket,
     buffer: BufferedUserContext,
-    openai_api_key: str,
 ):
     callback_response, response_type = await ChatGptCommands._get_command_response(
         callback_name=callback_name,
@@ -121,7 +120,6 @@ async def command_handler(
     elif response_type is ResponseType.HANDLE_GPT:
         await HandleMessage.gpt(
             translate=received.translate,
-            openai_api_key=openai_api_key,
             buffer=buffer,
         )
         return
@@ -140,7 +138,6 @@ async def command_handler(
         )
         await HandleMessage.gpt(
             translate=received.translate,
-            openai_api_key=openai_api_key,
             buffer=buffer,
         )
         return
@@ -152,7 +149,6 @@ async def command_handler(
             received=received,
             websocket=websocket,
             buffer=buffer,
-            openai_api_key=openai_api_key,
         )
 
 
@@ -408,7 +404,7 @@ class ChatGptCommands:  # commands for chat gpt
         /poplastmessage <user|system|gpt>"""
         if role.upper() not in GptRoles._member_names_:
             return "Role must be one of user, system, gpt"  # return fail message
-        last_message_history: MessageHistory | None = await MessageManager.rpop_message_history_safely(
+        last_message_history: MessageHistory | None = await MessageManager.pop_message_history_safely(
             user_gpt_context=user_gpt_context, role=role
         )  # pop last message history
         if last_message_history is None:  # if last_message_history is None
@@ -427,7 +423,7 @@ class ChatGptCommands:  # commands for chat gpt
         /retry"""
         if len(user_gpt_context.user_message_histories) < 1 or len(user_gpt_context.gpt_message_histories) < 1:
             return "There is no message to retry.", ResponseType.SEND_MESSAGE_AND_STOP
-        await MessageManager.rpop_message_history_safely(user_gpt_context=user_gpt_context, role=GptRoles.GPT)
+        await MessageManager.pop_message_history_safely(user_gpt_context=user_gpt_context, role=GptRoles.GPT)
         return None, ResponseType.HANDLE_GPT
 
     @staticmethod
@@ -493,14 +489,20 @@ Start a conversation as "CODEX: Hi, what are we coding today?"
         /codeblock <language> <codes>"""
         return f"```{language.lower()}\n" + codes + "\n```"
 
+    @classmethod
+    async def model(cls, model: str, user_gpt_context: UserGptContext) -> str:
+        """Alias for changemodel\n
+        /model <model>"""
+        return await cls.changemodel(model, user_gpt_context)
+
     @staticmethod
     @CommandResponse.send_message_and_stop
     async def changemodel(model: str, user_gpt_context: UserGptContext) -> str:
         """Change GPT model\n
         /changemodel <model>"""
-        if model not in OpenAIModels._member_names_:
-            return f"Model must be one of {', '.join(OpenAIModels._member_names_)}"
-        llm_model: OpenAIModels = OpenAIModels._member_map_[model]  # type: ignore
+        if model not in LLMModels._member_names_:
+            return f"Model must be one of {', '.join(LLMModels._member_names_)}"
+        llm_model: LLMModels = LLMModels._member_map_[model]  # type: ignore
         user_gpt_context.gpt_model = llm_model
         await ChatGptCacheManager.update_profile_and_model(user_gpt_context)
         return f"Model changed to {model}. Actual model: {llm_model.value.name}"

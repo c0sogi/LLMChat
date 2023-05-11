@@ -103,11 +103,12 @@ class CreateChatMessage(BaseModel):  # stub
 
 
 class MessageToWebsocket(BaseModel):
-    msg: str
+    msg: str | None
     finish: bool
     chat_room_id: str
     is_user: bool
     init: bool = False
+    model_name: str | None = None
 
     class Config:
         orm_mode = True
@@ -129,7 +130,7 @@ class CreateChatRoom(BaseModel):  # stub
         orm_mode = True
 
 
-class SendToOpenAI(BaseModel):
+class SendToStream(BaseModel):
     role: str
     content: str
 
@@ -142,6 +143,12 @@ class SendInitToWebsocket(BaseModel):
     tokens: int
     is_user: bool
     timestamp: int
+    model_name: str | None = None
 
     class Config:
         orm_mode = True
+
+
+class InitMessage(BaseModel):
+    previous_chats: list[dict]
+    chat_room_ids: list[str]
