@@ -41,7 +41,7 @@ class LlamaCppModel(LLMModel):
     logprobs: Optional[int] = None  # The number of logprobs to return. If None, no logprobs are returned.
     echo: Optional[bool] = False  # Whether to echo the prompt.
     stop: Optional[list[str]] = field(
-        default_factory=lambda: []
+        default_factory=lambda: ["\u200b"]
     )  # A list of strings to stop generation when encountered.
     repeat_penalty: Optional[float] = 1.1  # The penalty to apply to repeated tokens.
     top_k: Optional[int] = 40  # The top-k value to use for sampling.

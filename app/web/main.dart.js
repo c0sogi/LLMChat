@@ -75347,7 +75347,7 @@ var $async$wK=A.O(function(b,c){if(b===1)return A.K(c,r)
 while(true)switch(s){case 0:p=q.e
 if(p==null)p=q.e=new A.ajm(new A.a_S(q),new A.a_T(q),new A.a_U(q),new A.a_V(q))
 s=2
-return A.I(p.rq("ws://localhost:8001/ws/chatgpt/"+a),$async$wK)
+return A.I(p.rq("ws://localhost:8000/ws/chatgpt/"+a),$async$wK)
 case 2:return A.L(null,r)}})
 return A.M($async$wK,r)},
 jn(){var s=0,r=A.N(t.H),q=this,p
@@ -75634,7 +75634,7 @@ case 3:s=5
 return A.I(p.b.ut(a),$async$n5)
 case 5:case 4:n=J
 s=6
-return A.I(A.mx(A.b([A.mL(a,null,B.o_,"Failed to fetch API Keys",new A.a9v(p),200,"http://localhost:8001/api/user/apikeys"),A.mL(a,null,B.o_,"Failed to fetch user info",new A.a9w(p),200,"http://localhost:8001/api/user/me")],t.GP),!1,t.A),$async$n5)
+return A.I(A.mx(A.b([A.mL(a,null,B.o_,"Failed to fetch API Keys",new A.a9v(p),200,"http://localhost:8000/api/user/apikeys"),A.mL(a,null,B.o_,"Failed to fetch user info",new A.a9w(p),200,"http://localhost:8000/api/user/me")],t.GP),!1,t.A),$async$n5)
 case 6:o=n.au6(c,new A.a9x())
 if(!o.ga6(o).t()){q=null
 s=1
@@ -75645,7 +75645,7 @@ return A.M($async$n5,r)},
 ff(a,b,c){return this.akp(0,b,c)},
 akp(a,b,c){var s=0,r=A.N(t.Fd),q,p=this,o,n,m,l,k
 var $async$ff=A.O(function(d,e){if(d===1)return A.K(e,r)
-while(true)switch(s){case 0:o=A.hf("http://localhost:8001/api/auth/register/email",0,null)
+while(true)switch(s){case 0:o=A.hf("http://localhost:8000/api/auth/register/email",0,null)
 n=t.N
 m=A.i(["Content-Type","application/json","Accept","application/json"],n,n)
 s=3
@@ -75662,7 +75662,7 @@ return A.M($async$ff,r)},
 jH(a,b){return this.aim(a,b)},
 aim(a,b){var s=0,r=A.N(t.Fd),q,p=this,o,n,m,l,k
 var $async$jH=A.O(function(c,d){if(c===1)return A.K(d,r)
-while(true)switch(s){case 0:o=A.hf("http://localhost:8001/api/auth/login/email",0,null)
+while(true)switch(s){case 0:o=A.hf("http://localhost:8000/api/auth/login/email",0,null)
 n=t.N
 m=A.i(["Content-Type","application/json","Accept","application/json"],n,n)
 s=3
@@ -75715,7 +75715,7 @@ aej(a){var s=0,r=A.N(t.Fd),q,p=this,o,n
 var $async$km=A.O(function(b,c){if(b===1)return A.K(c,r)
 while(true)switch(s){case 0:o=t.N
 s=3
-return A.I(A.mL(p.d,A.i(["user_memo",a],o,o),B.D1,"Failed to create API key.",new A.a9t(p),201,"http://localhost:8001/api/user/apikeys"),$async$km)
+return A.I(A.mL(p.d,A.i(["user_memo",a],o,o),B.D1,"Failed to create API key.",new A.a9t(p),201,"http://localhost:8000/api/user/apikeys"),$async$km)
 case 3:n=c
 q=n==null?A.ahQ("API \ud0a4\uac00 \uc131\uacf5\uc801\uc73c\ub85c \uc0dd\uc131\ub418\uc5c8\uc2b5\ub2c8\ub2e4.","Successfully created API key"):A.a4v(n,"Error")
 s=1

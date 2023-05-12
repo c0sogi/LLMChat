@@ -207,14 +207,15 @@ class HandleMessage:
                         ),
                     )
                 except Exception as e:
-                    m_done.set()
                     raise e
+                finally:
+                    m_done.set()
 
             else:
                 raise GptModelNotImplementedException(msg="Model not implemented. Please contact administrator.")
         except Exception:
             raise GptTextGenerationException(
-                msg="An error occurred while generating text. Maybe you didn't set OpenAI API key?"
+                msg="An error occurred while generating text."
             )
         try:
             if translate:  # if user message is translated

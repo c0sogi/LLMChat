@@ -22,6 +22,7 @@ iniconfig
 jinja2
 jmespath
 langchain
+llama-cpp-python
 lxml
 orjson
 openai
@@ -45,7 +46,7 @@ requests
 s3transfer
 sentencepiece
 six
-SQLAlchemy
+sqlalchemy
 sqlalchemy-utils
 starlette
 tiktoken

@@ -198,8 +198,7 @@ async def generate_from_llama_cpp(
     while not m_queue.empty() or not m_done.is_set():
         generation: Any = await loop.run_in_executor(executor, m_queue.get)
         if type(generation) == str:
-            if generation.strip() != "":
-                yield generation
+            yield generation
         elif type(generation) == dict:
             generated_text: str = generation["result"]["generated_text"]
             n_gen_tokens: int = generation["result"]["n_gen_tokens"]

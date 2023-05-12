@@ -4,7 +4,12 @@ from typing import TYPE_CHECKING, Generator
 from langchain import LlamaCpp
 from llama_cpp import Llama
 
-from app.errors.gpt_exceptions import GptBreakException, GptContinueException, GptLengthException
+from app.errors.gpt_exceptions import (
+    GptBreakException,
+    GptContinueException,
+    GptLengthException,
+    GptTextGenerationException,
+)
 from app.utils.chatgpt.chatgpt_config import ChatGPTConfig
 
 if TYPE_CHECKING:
@@ -12,13 +17,22 @@ if TYPE_CHECKING:
     from app.models.gpt_models import UserGptContext
 
 
-def determine_possibility(text_buffer: str, text: str, avoids: list[str]) -> bool:
+def can_avoid_in_buffer(text_buffer: str, text: str, avoids: list[str]) -> bool:
     for avoid in avoids:
         avoid = avoid.upper()
         possible_buffer = (text_buffer + text).upper()
         if avoid in possible_buffer or any([possible_buffer.endswith(avoid[: i + 1]) for i in range(len(avoid))]):
             return True
     return False
+
+
+def get_stops(s: str) -> list[str]:
+    return [
+        s,
+        s.upper(),
+        s.lower(),
+        s.capitalize(),
+    ]
 
 
 def get_fake_response() -> Generator:
@@ -50,11 +64,17 @@ def llama_cpp_generation(
     use_client_only: bool = True,
 ) -> None:
     m_done.clear()
-    while True:
-        llm = load_llama(llama_cpp_model)
-        llm_client: Llama = llm.client
-        llm_client.verbose = bool(llm.echo)
+    blank: str = "\u200b"
+    avoids: list[str] = get_stops(
+        user_gpt_context.user_gpt_profile.user_role + ":",
+    ) + get_stops(user_gpt_context.user_gpt_profile.gpt_role + ":")
+    llm = load_llama(llama_cpp_model)
+    llm_client: Llama = llm.client
+    llm_client.verbose = bool(llm.echo)
+    retry_count: int = 0
 
+    while True:
+        retry_count += 1
         if use_client_only:
             generator = llm_client.create_completion(  # type: ignore
                 prompt=prompt,
@@ -64,7 +84,7 @@ def llama_cpp_generation(
                 top_p=user_gpt_context.user_gpt_profile.top_p,
                 logprobs=llm.logprobs,
                 echo=bool(llm.echo),
-                stop=llm.stop,
+                stop=llm.stop + avoids if llm.stop is not None else avoids,
                 repeat_penalty=user_gpt_context.user_gpt_profile.frequency_penalty,
                 top_k=40,
                 stream=True,
@@ -74,49 +94,43 @@ def llama_cpp_generation(
             llm.temperature = user_gpt_context.user_gpt_profile.temperature
             llm.top_p = user_gpt_context.user_gpt_profile.top_p
             llm.max_tokens = min(user_gpt_context.left_tokens, user_gpt_context.gpt_model.value.max_tokens_per_request)
-            generator = llm.stream(prompt=prompt, stop=llm.stop) if not is_fake else get_fake_response()
+            generator = (
+                llm.stream(prompt=prompt, stop=llm.stop + avoids if llm.stop is not None else avoids)
+                if not is_fake
+                else get_fake_response()
+            )
 
         content_buffer: str = ""
-        text_buffer: str = ""
         deleted_histories: int = 0
-        avoids: list[str] = [
-            f"{user_gpt_context.user_gpt_profile.user_role}:",
-            f"{user_gpt_context.user_gpt_profile.gpt_role}:",
-        ]
+
         try:
             if llm.echo:
                 print("[LLAMA CPP] Creating Response of prompt below:")
                 print(prompt, end="")
             for generation in generator:
-                if m_done.is_set():
+                if m_done.is_set() or retry_count > 10:
+                    m_queue.put_nowait(GptTextGenerationException(msg="Max retry count reached"))
+                    m_done.set()
                     return  # stop generating if main process requests to stop
                 finish_reason: str | None = generation["choices"][0]["finish_reason"]  # type: ignore
                 text: str = generation["choices"][0]["text"]  # type: ignore
+                if text.replace(blank, "") == "":
+                    continue
+                if content_buffer == "":
+                    text = text.lstrip()
+                    if text == "":
+                        continue
                 if llm.echo:
                     print(text, end="")  # type: ignore
                 if finish_reason == "length":
                     raise GptLengthException(
                         msg="Incomplete model output due to max_tokens parameter or token limit"
                     )  # raise exception for token limit
-                if determine_possibility(text_buffer, text, avoids):
-                    text_buffer += text
-                    for avoid in avoids:
-                        if avoid.upper() in text_buffer.upper():
-                            remainder = text_buffer[: text_buffer.upper().index(avoid.upper())].strip()
-                            if remainder != "":
-                                content_buffer += remainder
-                                m_queue.put(remainder)
-                                raise GptBreakException()
-                            elif content_buffer.strip() != "":
-                                raise GptBreakException()
-                            else:
-                                text_buffer = ""
-                                prompt += content_buffer
-                                raise GptContinueException()
-                else:
-                    content_buffer += text_buffer + text
-                    m_queue.put(text_buffer + text)
-                    text_buffer = ""
+                content_buffer += text
+                m_queue.put(text)
+            if content_buffer.replace(blank, "").strip() == "":
+                print("[LLAMA CPP] Empty model output")
+                raise GptContinueException(msg="Empty model output")  # raise exception for empty output
         except GptLengthException:
             deleted_histories += user_gpt_context.ensure_token_not_exceed()
             deleted_histories += user_gpt_context.clear_tokens(tokens_to_remove=ChatGPTConfig.extra_token_margin)
@@ -210,3 +224,19 @@ if __name__ == "__main__":
         m_done=m_done,
         user_gpt_context=UserGptContext.construct_default(user_id="test_user_id", chat_room_id="test_chat_room_id"),
     )
+
+    # if can_avoid_in_buffer(text_buffer, text, avoids):
+    #     text_buffer += text
+    #     for avoid in avoids:
+    #         if avoid in text_buffer:
+    #             remainder = text_buffer[: text_buffer.index(avoid)].strip()
+    #             if remainder != "":
+    #                 content_buffer += remainder
+    #                 m_queue.put(remainder)
+    #                 raise GptBreakException()
+    #             elif content_buffer.strip() != "":
+    #                 raise GptBreakException()
+    #             else:
+    #                 text_buffer = ""
+    #                 prompt += content_buffer
+    #                 raise GptContinueException()

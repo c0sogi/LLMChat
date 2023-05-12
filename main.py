@@ -11,6 +11,7 @@ if __name__ == "__mp_main__":
     pass
 
 elif __name__ == "__main__":
+    # ensure_packages_installed()
     """Option 2: Debug mode
     Running this file directly to debug the app
     Run this section if you don't want to run app in docker"""
@@ -30,11 +31,12 @@ elif __name__ == "__main__":
         port=config.port,
     )
 else:
+    # ensure_packages_installed()
     """Option 3: Non-debug mode
     Docker will run this section as the main entrypoint
-    This section will mostly be used."""
+    This section will mostly be used.
+    Maybe LLaMa won't work in Docker."""
     from app.common.app_settings import create_app
     from app.common.config import config
 
-    ensure_packages_installed()
     app = create_app(config=config)

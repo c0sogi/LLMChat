@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from pydantic import ValidationError
@@ -105,15 +106,32 @@ async def begin_chat(
             )
             continue
         except GptTextGenerationException:
-            await MessageManager.pop_message_history_safely(
-                user_gpt_context=buffer.current_user_gpt_context, role=GptRoles.USER
+            await asyncio.gather(
+                SendToWebsocket.message(
+                    websocket=websocket,
+                    msg="Text generation failure. Please try again.",
+                    chat_room_id=buffer.current_chat_room_id,
+                ),
+                MessageManager.pop_message_history_safely(
+                    user_gpt_context=buffer.current_user_gpt_context,
+                    role=GptRoles.USER,
+                ),
             )
         except GptOtherException:
-            await MessageManager.pop_message_history_safely(
-                user_gpt_context=buffer.current_user_gpt_context, role=GptRoles.USER
-            )
-            await MessageManager.pop_message_history_safely(
-                user_gpt_context=buffer.current_user_gpt_context, role=GptRoles.GPT
+            await asyncio.gather(
+                SendToWebsocket.message(
+                    websocket=websocket,
+                    msg="Something's wrong. Please try again.",
+                    chat_room_id=buffer.current_chat_room_id,
+                ),
+                MessageManager.pop_message_history_safely(
+                    user_gpt_context=buffer.current_user_gpt_context,
+                    role=GptRoles.USER,
+                ),
+                MessageManager.pop_message_history_safely(
+                    user_gpt_context=buffer.current_user_gpt_context,
+                    role=GptRoles.GPT,
+                ),
             )
         except GptTooMuchTokenException as too_much_token_exception:  # if user message is too long
             await SendToWebsocket.message(
