@@ -23,7 +23,7 @@ class UnstructuredFileIOLoader(UnstructuredBaseLoader):
 
 
 def read_bytes_to_documents(file: bytes, filename: str) -> list[Document]:
-    return UnstructuredFileIOLoader(file=io.BytesIO(file), filename=filename).load()
+    return UnstructuredFileIOLoader(file=io.BytesIO(file), strategy="fast", filename=filename).load()
 
 
 def read_bytes_to_text(file: bytes, filename: str) -> str:

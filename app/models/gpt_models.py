@@ -221,9 +221,13 @@ class UserGptContext:  # user gpt context for user and gpt
         for k, v in user_gpt_context.__dict__.items():
             setattr(self, k, v)
 
-    def ensure_token_not_exceed(self) -> int:
+    def ensure_token_not_exceed(self, extra_token_margin: int = 0) -> int:
         deleted_histories: int = 0
-        while len(self.user_message_histories) > 0 and len(self.gpt_message_histories) > 0 and self.left_tokens < 0:
+        while (
+            len(self.user_message_histories) > 0
+            and len(self.gpt_message_histories) > 0
+            and self.left_tokens < extra_token_margin
+        ):
             deleted_histories += 1
             self.user_message_tokens -= self.user_message_histories.pop(0).tokens
             self.gpt_message_tokens -= self.gpt_message_histories.pop(0).tokens

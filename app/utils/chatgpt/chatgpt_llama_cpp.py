@@ -71,7 +71,10 @@ def llama_cpp_generation(
     llm = load_llama(llama_cpp_model)
     llm_client: Llama = llm.client
     llm_client.verbose = bool(llm.echo)
+
     retry_count: int = 0
+    content_buffer: str = ""
+    deleted_histories: int = 0
 
     while True:
         retry_count += 1
@@ -99,9 +102,6 @@ def llama_cpp_generation(
                 if not is_fake
                 else get_fake_response()
             )
-
-        content_buffer: str = ""
-        deleted_histories: int = 0
 
         try:
             if llm.echo:
@@ -132,25 +132,13 @@ def llama_cpp_generation(
                 print("[LLAMA CPP] Empty model output")
                 raise GptContinueException(msg="Empty model output")  # raise exception for empty output
         except GptLengthException:
+            prompt += content_buffer
             deleted_histories += user_gpt_context.ensure_token_not_exceed()
             deleted_histories += user_gpt_context.clear_tokens(tokens_to_remove=ChatGPTConfig.extra_token_margin)
             continue
         except GptBreakException:
             break
         except GptContinueException:
-            generator = llm_client.create_completion(  # type: ignore
-                prompt=prompt,
-                suffix=llm.suffix,
-                max_tokens=min(user_gpt_context.left_tokens, user_gpt_context.gpt_model.value.max_tokens_per_request),
-                temperature=user_gpt_context.user_gpt_profile.temperature,
-                top_p=user_gpt_context.user_gpt_profile.top_p,
-                logprobs=llm.logprobs,
-                echo=bool(llm.echo),
-                stop=llm.stop,
-                repeat_penalty=user_gpt_context.user_gpt_profile.frequency_penalty,
-                top_k=40,
-                stream=True,
-            )
             continue
         except Exception as e:
             m_queue.put_nowait(e)

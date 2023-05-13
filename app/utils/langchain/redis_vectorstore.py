@@ -462,10 +462,6 @@ class Redis(VectorStore):
             )
             for result in results.docs
         ]
-        api_logger.info(f"Total docs: {len(docs)}, and all vectors: {[doc[1] for doc in docs]}")
-        for doc in docs:
-            api_logger.info(f"doc: {doc[0].page_content} score: {doc[1]}")
-
         return docs
 
     @classmethod

@@ -9,3 +9,4 @@ class ChatGPTConfig:
     wait_for_reconnect: float = 3.0  # wait for this time before reconnecting
     api_regex_pattern: re.Pattern = re.compile(r"data:\s*({.+?})\n\n")
     extra_token_margin: int = 100  # number of tokens to remove when tokens exceed token limit
+    continue_message: str = "...[CONTINUED]"  # message to append when tokens exceed token limit

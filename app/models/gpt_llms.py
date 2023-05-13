@@ -116,3 +116,12 @@ class LLMModels(Enum):  # gpt models for openai api
         model_path="./llama_models/ggml/WizardLM-7B-uncensored.ggml.q4_2.bin",
         description="""The following is a conversation between a {user} and an {gpt}. The {gpt} is talkative and provides lots of specific details from its context. If the {gpt} does not know the answer to a question, it truthfully says it does not know:\n""",
     )
+    gpt4x = LlamaCppModel(
+        name="gpt4-x-vicuna-13B-GGML",
+        max_total_tokens=2048,  # context tokens (n_ctx)
+        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
+        token_margin=8,
+        tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
+        model_path="./llama_models/ggml/gpt4-x-vicuna-13B.ggml.q4_0.bin",
+        description="""The following is a conversation between a {user} and an {gpt}. The {gpt} is talkative and provides lots of specific details from its context. If the {gpt} does not know the answer to a question, it truthfully says it does not know:\n""",
+    )

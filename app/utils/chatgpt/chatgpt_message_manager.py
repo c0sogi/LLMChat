@@ -10,7 +10,7 @@ class MessageManager:
         content: str,
         role: GptRoles | str,
         calculated_tokens_to_use: int | None = None,
-        model_name: str | None = None,
+        extra_token_margin: int = 0,
     ) -> None:
         role = GptRoles.get_name(role).lower()
         if calculated_tokens_to_use is None:
@@ -22,7 +22,7 @@ class MessageManager:
             content=content,
             tokens=tokens,
             is_user=True if role == GptRoles.USER.name.lower() else False,
-            model_name=model_name,
+            model_name=user_gpt_context.gpt_model.value.name if GptRoles.get_member(role) is GptRoles.GPT else None,
         )
         getattr(user_gpt_context, f"{role}_message_histories").append(message_history)
         setattr(
@@ -30,7 +30,7 @@ class MessageManager:
             f"{role}_message_tokens",
             getattr(user_gpt_context, f"{role}_message_tokens") + tokens,
         )
-        num_of_deleted_histories: int = user_gpt_context.ensure_token_not_exceed()
+        num_of_deleted_histories: int = user_gpt_context.ensure_token_not_exceed(extra_token_margin=extra_token_margin)
         await ChatGptCacheManager.append_message_history(
             user_id=user_gpt_context.user_id,
             chat_room_id=user_gpt_context.chat_room_id,

@@ -75,16 +75,19 @@ async def delete_chat_room(
     buffer: BufferedUserContext | None = None,
 ) -> None:
     await ChatGptCacheManager.delete_chat_room(user_id=user_id, chat_room_id=chat_room_id)
-    if buffer is not None:
-        index: int | None = buffer.find_index_of_chatroom(chat_room_id=chat_room_id)
-        if index is not None:
-            buffer.delete_context(index=index)
-            if buffer.buffer_size == 0:
-                await create_new_chat_room(
-                    user_id=user_id,
-                    buffer=buffer,
-                )
-            buffer.change_context_to(index=0)
+    if buffer is None:
+        return
+    index: int | None = buffer.find_index_of_chatroom(chat_room_id=chat_room_id)
+    if index is None:
+        return
+    buffer.delete_context(index=index)
+    if buffer.buffer_size == 0:
+        await create_new_chat_room(
+            user_id=user_id,
+            buffer=buffer,
+        )
+    else:
+        buffer.change_context_to(index=0)
 
 
 async def get_contexts_sorted_from_recent_to_past(user_id: str, chat_room_ids: list[str]) -> list[UserGptContext]:

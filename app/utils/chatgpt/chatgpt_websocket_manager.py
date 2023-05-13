@@ -8,7 +8,7 @@ from app.errors.gpt_exceptions import (
     GptTextGenerationException,
     GptTooMuchTokenException,
 )
-from app.models.gpt_llms import LlamaCppModel, OpenAIModel
+from app.models.gpt_llms import LLMModel, LlamaCppModel, OpenAIModel
 from app.utils.api.translate import Translator
 from app.utils.chatgpt.chatgpt_buffer import BufferedUserContext
 from app.utils.chatgpt.chatgpt_generation import (
@@ -52,6 +52,7 @@ class SendToWebsocket:
         finish: bool = True,
         is_user: bool = False,
         init: bool = False,
+        model_name: str | None = None,
     ) -> None:  # send whole message to websocket
         await websocket.send_json(  # send stream message
             MessageToWebsocket(
@@ -60,6 +61,7 @@ class SendToWebsocket:
                 chat_room_id=chat_room_id,
                 is_user=is_user,
                 init=init,
+                model_name=model_name,
             ).dict()
         )
 
@@ -70,7 +72,7 @@ class SendToWebsocket:
         chat_room_id: str,
         finish: bool = True,
         is_user: bool = False,
-        chunk_size: int = 3,
+        chunk_size: int = 2,
         model_name: str | None = None,
     ) -> str:  # send whole stream to websocket
         final_response, stream_buffer = "", ""
@@ -96,7 +98,6 @@ class SendToWebsocket:
                             finish=False,
                             chat_room_id=chat_room_id,
                             is_user=is_user,
-                            model_name=model_name,
                         ).dict()
                     )
                     stream_buffer = ""
@@ -112,7 +113,6 @@ class SendToWebsocket:
                             finish=False,
                             chat_room_id=chat_room_id,
                             is_user=is_user,
-                            model_name=model_name,
                         ).dict()
                     )
                     stream_buffer = ""
@@ -124,7 +124,6 @@ class SendToWebsocket:
                 finish=True if finish else False,
                 chat_room_id=chat_room_id,
                 is_user=is_user,
-                model_name=model_name,
             ).dict()
         )
         return final_response
@@ -148,6 +147,7 @@ class HandleMessage:
                 msg=f"## 번역된 질문\n\n{msg}\n\n## 생성된 답변\n\n",
                 chat_room_id=buffer.current_chat_room_id,
                 finish=False,
+                model_name=buffer.current_user_gpt_context.gpt_model.value.name,
             )
         user_token: int = buffer.current_user_gpt_context.get_tokens_of(msg)
         if user_token > buffer.current_user_gpt_context.token_per_request:  # if user message is too long
@@ -165,14 +165,15 @@ class HandleMessage:
         translate: bool,
         buffer: BufferedUserContext,
     ) -> None:
+        current_model: LLMModel = buffer.current_user_gpt_context.gpt_model.value
         try:
-            if isinstance(buffer.current_user_gpt_context.gpt_model.value, OpenAIModel):
+            if isinstance(current_model, OpenAIModel):
                 msg: str = await SendToWebsocket.stream(
                     websocket=buffer.websocket,
                     chat_room_id=buffer.current_chat_room_id,
                     stream=generate_from_openai(user_gpt_context=buffer.current_user_gpt_context),
                     finish=False if translate else True,
-                    model_name="chatgpt",
+                    model_name=current_model.name,
                 )
             elif isinstance(buffer.current_user_gpt_context.gpt_model.value, LlamaCppModel):
                 m_queue, m_done = process_manager.Queue(), process_manager.Event()
@@ -189,7 +190,7 @@ class HandleMessage:
                             chat_room_id=buffer.current_chat_room_id,
                             finish=False if translate else True,
                             chunk_size=1,
-                            model_name="llama",
+                            model_name=current_model.name,
                             stream=generate_from_llama_cpp(
                                 user_gpt_context=buffer.current_user_gpt_context,
                                 m_queue=m_queue,
@@ -214,9 +215,7 @@ class HandleMessage:
             else:
                 raise GptModelNotImplementedException(msg="Model not implemented. Please contact administrator.")
         except Exception:
-            raise GptTextGenerationException(
-                msg="An error occurred while generating text."
-            )
+            raise GptTextGenerationException(msg="An error occurred while generating text.")
         try:
             if translate:  # if user message is translated
                 translated_msg = await Translator.auto_translate(
@@ -228,6 +227,7 @@ class HandleMessage:
                     websocket=buffer.websocket,
                     msg=f"\n\n## 번역된 답변\n\n{translated_msg}",
                     chat_room_id=buffer.current_chat_room_id,
+                    model_name=buffer.current_user_gpt_context.gpt_model.value.name,
                 )
         except Exception:
             raise GptOtherException(msg="번역하는데 문제가 발생했습니다.")

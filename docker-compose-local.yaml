@@ -64,10 +64,11 @@ services:
       reverse-proxy-public:
         ipv4_address: 172.16.0.12 # static IP
   api:
-    image: cosogi/chatgpt-webapp-server-api
+    image: cosogi/chatgpt-webapp-server-api:latest
     restart: always
     env_file:
       - .env
+    # build: .
     depends_on:
       - proxy
       - db

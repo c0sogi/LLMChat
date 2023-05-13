@@ -1,4 +1,4 @@
-from asyncio import sleep
+from asyncio import Task, sleep
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from itertools import zip_longest
@@ -14,9 +14,42 @@ from app.errors.gpt_exceptions import (
 )
 from app.utils.chatgpt.chatgpt_message_manager import MessageManager
 from app.viewmodels.base_models import SendInitToWebsocket, SendToStream
-from app.models.gpt_models import GptRoles, UserGptContext
+from app.models.gpt_models import GptRoles, MessageHistory, UserGptContext
 from app.utils.chatgpt.chatgpt_config import ChatGPTConfig
 from app.utils.logger import api_logger
+
+
+def get_tasks_when_end_of_text_generation(
+    user_gpt_context: UserGptContext,
+    generated_text: str,
+    deleted_histories: int,
+    calculated_tokens_to_use: int | None = None,
+) -> list[Task]:
+    tasks: list[Task] = [
+        asyncio.create_task(
+            MessageManager.add_message_history_safely(
+                user_gpt_context=user_gpt_context,
+                content=generated_text,
+                role=GptRoles.GPT,
+                calculated_tokens_to_use=calculated_tokens_to_use,
+            )
+        )
+    ]
+    if deleted_histories > 0:
+        tasks.extend(
+            [
+                asyncio.create_task(
+                    MessageManager.pop_message_history_safely(
+                        user_gpt_context=user_gpt_context,
+                        role=role,
+                        rpop=False,
+                        count=deleted_histories,
+                    )
+                )
+                for role in (GptRoles.GPT, GptRoles.USER)
+            ]
+        )
+    return tasks
 
 
 def message_history_organizer(
@@ -42,25 +75,21 @@ def message_history_organizer(
             if send_to_stream
             else SendInitToWebsocket.from_orm(gpt_message_history).dict()
         ) if gpt_message_history is not None else ...  # append gpt message history
-    if user_gpt_context.optional_info.get("is_discontinued", False):
-        for message_history in reversed(message_histories):
-            if message_history["role"] == user_gpt_context.user_gpt_profile.gpt_role:
-                message_history["content"] += "...[CONTINUATION]"
-                break
     if return_as_string:
         user_role: str = user_gpt_context.user_gpt_profile.user_role
         gpt_role: str = user_gpt_context.user_gpt_profile.gpt_role
         system_role: str = user_gpt_context.user_gpt_profile.system_role
-        prefix: str = getattr(user_gpt_context.gpt_model.value, "description", "").format(
-            user=user_role.upper(),
-            USER=user_role.upper(),
-            gpt=gpt_role.upper(),
-            GPT=gpt_role.upper(),
-            system=system_role.upper(),
-            SYSTEM=system_role.upper(),
-        )
-        if prefix is None:
-            prefix = ""
+        prefix: str = ""
+        if hasattr(user_gpt_context.gpt_model.value, "description"):
+            if user_gpt_context.gpt_model.value.description is not None:
+                prefix: str = user_gpt_context.gpt_model.value.description.format(
+                    user=user_role.upper(),
+                    USER=user_role.upper(),
+                    gpt=gpt_role.upper(),
+                    GPT=gpt_role.upper(),
+                    system=system_role.upper(),
+                    SYSTEM=system_role.upper(),
+                )
 
         for message_history in message_histories:
             if message_history["role"] == system_role:
@@ -84,13 +113,15 @@ async def generate_from_openai(
     user_defined_api_key: str | None = user_gpt_context.optional_info.get("api_key")
     default_api_key: str | None = user_gpt_context.gpt_model.value.api_key
     api_key_to_use: Any = user_defined_api_key if user_defined_api_key is not None else default_api_key
+
+    content_buffer: str = ""
+    deleted_histories: int = 0
+    n_length_exception: int = 0
     async with httpx.AsyncClient(timeout=ChatGPTConfig.wait_for_timeout) as client:  # initialize client
-        is_appending_discontinued_message: bool = False
-        content_buffer: str = ""
         while True:  # stream until connection is closed
-            if not user_gpt_context.optional_info.get("is_discontinued", False):
-                content_buffer = ""
             try:
+                messages = message_history_organizer(user_gpt_context=user_gpt_context)
+                assert len(messages) > 0 and isinstance(messages, list)
                 async with client.stream(
                     method="POST",
                     url=user_gpt_context.gpt_model.value.api_url,
@@ -100,7 +131,7 @@ async def generate_from_openai(
                     },  # set headers for openai api request
                     json={
                         "model": user_gpt_context.gpt_model.value.name,
-                        "messages": message_history_organizer(user_gpt_context=user_gpt_context),
+                        "messages": messages,
                         "temperature": user_gpt_context.user_gpt_profile.temperature,
                         "top_p": user_gpt_context.user_gpt_profile.top_p,
                         "n": 1,
@@ -149,22 +180,28 @@ async def generate_from_openai(
                                     yield delta_content
             except GptLengthException:
                 api_logger.error("token limit exceeded")
-                if is_appending_discontinued_message:
-                    await MessageManager.set_message_history_safely(
-                        user_gpt_context=user_gpt_context,
-                        new_content=content_buffer,
-                        role=GptRoles.GPT,
-                        index=-1,
+                if n_length_exception == 0:
+                    user_gpt_context.gpt_message_histories.append(
+                        MessageHistory(
+                            role=user_gpt_context.user_gpt_profile.gpt_role,
+                            content=content_buffer + ChatGPTConfig.continue_message,
+                            tokens=user_gpt_context.get_tokens_of(content_buffer + ChatGPTConfig.continue_message),
+                            is_user=False,
+                        )
                     )
                 else:
-                    await MessageManager.add_message_history_safely(
-                        user_gpt_context=user_gpt_context,
-                        content=content_buffer,
-                        role=GptRoles.GPT,
-                        model_name="chatgpt",
+                    old_message: str = user_gpt_context.gpt_message_histories[-1].content.replace(
+                        ChatGPTConfig.continue_message, ""
                     )
-                    is_appending_discontinued_message = True
-                user_gpt_context.optional_info["is_discontinued"] = True
+                    old_tokens: int = user_gpt_context.gpt_message_histories[-1].tokens
+                    user_gpt_context.gpt_message_histories[-1].content = old_message + "...[CONTINUED]"
+                    user_gpt_context.gpt_message_tokens += (
+                        user_gpt_context.get_tokens_of(user_gpt_context.gpt_message_histories[-1].content) - old_tokens
+                    )
+                deleted_histories += user_gpt_context.ensure_token_not_exceed(
+                    extra_token_margin=ChatGPTConfig.extra_token_margin
+                )
+                n_length_exception += 1
                 continue
             except GptException as gpt_exception:
                 api_logger.error(f"gpt exception: {gpt_exception.msg}")
@@ -181,10 +218,13 @@ async def generate_from_openai(
                 yield "Internal Server Error"
                 break
             else:
-                await MessageManager.add_message_history_safely(
-                    user_gpt_context=user_gpt_context, content=content_buffer, role=GptRoles.GPT, model_name="chatgpt"
+                await asyncio.gather(
+                    *get_tasks_when_end_of_text_generation(
+                        user_gpt_context=user_gpt_context,
+                        generated_text=content_buffer,
+                        deleted_histories=deleted_histories,
+                    )
                 )
-                user_gpt_context.optional_info["is_discontinued"] = False
                 break
 
 
@@ -203,27 +243,13 @@ async def generate_from_llama_cpp(
             generated_text: str = generation["result"]["generated_text"]
             n_gen_tokens: int = generation["result"]["n_gen_tokens"]
             deleted_histories: int = generation["result"]["deleted_histories"]
-            if deleted_histories > 0:
-                asyncio.gather(
-                    MessageManager.pop_message_history_safely(
-                        user_gpt_context=user_gpt_context,
-                        role=GptRoles.USER,
-                        rpop=False,
-                        count=deleted_histories,
-                    ),
-                    MessageManager.pop_message_history_safely(
-                        user_gpt_context=user_gpt_context,
-                        role=GptRoles.GPT,
-                        rpop=False,
-                        count=deleted_histories,
-                    ),
+            await asyncio.gather(
+                *get_tasks_when_end_of_text_generation(
+                    user_gpt_context=user_gpt_context,
+                    generated_text=generated_text,
+                    deleted_histories=deleted_histories,
+                    calculated_tokens_to_use=n_gen_tokens,
                 )
-            await MessageManager.add_message_history_safely(
-                user_gpt_context=user_gpt_context,
-                content=generated_text,
-                role=GptRoles.GPT,
-                calculated_tokens_to_use=n_gen_tokens,
-                model_name="llama",
             )
             break
         else:
