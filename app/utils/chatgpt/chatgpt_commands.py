@@ -70,24 +70,22 @@ async def create_new_chat_room(
 
 
 async def delete_chat_room(
-    user_id: str,
-    chat_room_id: str,
-    buffer: BufferedUserContext | None = None,
-) -> None:
-    await ChatGptCacheManager.delete_chat_room(user_id=user_id, chat_room_id=chat_room_id)
-    if buffer is None:
-        return
-    index: int | None = buffer.find_index_of_chatroom(chat_room_id=chat_room_id)
+    chat_room_id_to_delete: str,
+    buffer: BufferedUserContext,
+) -> bool:
+    await ChatGptCacheManager.delete_chat_room(user_id=buffer.user_id, chat_room_id=chat_room_id_to_delete)
+    index: int | None = buffer.find_index_of_chatroom(chat_room_id=chat_room_id_to_delete)
     if index is None:
-        return
+        return False
     buffer.delete_context(index=index)
     if buffer.buffer_size == 0:
         await create_new_chat_room(
-            user_id=user_id,
+            user_id=buffer.user_id,
             buffer=buffer,
         )
-    else:
+    if buffer.current_chat_room_id == chat_room_id_to_delete:
         buffer.change_context_to(index=0)
+    return True
 
 
 async def get_contexts_sorted_from_recent_to_past(user_id: str, chat_room_ids: list[str]) -> list[UserGptContext]:
@@ -293,13 +291,24 @@ class ChatGptCommands:  # commands for chat gpt
 
     @staticmethod
     @CommandResponse.do_nothing
-    async def deletechatroom(buffer: BufferedUserContext) -> None:
-        await delete_chat_room(
-            user_id=buffer.user_id,
-            chat_room_id=buffer.current_chat_room_id,
+    async def deletechatroom(chat_room_id: str, buffer: BufferedUserContext) -> None:
+        chat_room_id_before: str = buffer.current_chat_room_id
+        delete_result: bool = await delete_chat_room(
+            chat_room_id_to_delete=chat_room_id,
             buffer=buffer,
         )
-        await SendToWebsocket.initiation_of_chat(websocket=buffer.websocket, buffer=buffer)
+        if buffer.current_chat_room_id == chat_room_id_before:
+            await SendToWebsocket.initiation_of_chat(
+                buffer=buffer,
+                send_previous_chats=False,
+                send_chat_room_ids=delete_result,
+            )
+        else:
+            await SendToWebsocket.initiation_of_chat(
+                buffer=buffer,
+                send_previous_chats=True,
+                send_chat_room_ids=delete_result,
+            )
 
     @staticmethod
     @CommandResponse.send_message_and_stop

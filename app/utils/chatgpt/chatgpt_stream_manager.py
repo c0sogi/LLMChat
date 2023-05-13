@@ -33,13 +33,18 @@ async def begin_chat(
         ),
     )
 
-    await SendToWebsocket.initiation_of_chat(websocket=websocket, buffer=buffer)
+    await SendToWebsocket.initiation_of_chat(
+        buffer=buffer,
+        send_chat_room_ids=True,
+        send_previous_chats=True,
+    )
 
     while True:  # loop until connection is closed
         try:
             rcvd: dict = await websocket.receive_json()
             assert isinstance(rcvd, dict)
             if "filename" in rcvd:
+                # if user uploads file, embed it
                 text: str = await run_in_threadpool(
                     read_bytes_to_text, await websocket.receive_bytes(), rcvd["filename"]
                 )
@@ -52,7 +57,8 @@ async def begin_chat(
                 continue
             received: MessageFromWebsocket = MessageFromWebsocket(**rcvd)
 
-            if received.chat_room_id != buffer.current_chat_room_id:  # change chat room
+            if received.chat_room_id != buffer.current_chat_room_id:
+                # This is a message from another chat room, interpreted as change of context, while ignoring message
                 index: int | None = buffer.find_index_of_chatroom(received.chat_room_id)
                 if index is None:
                     # if received chat_room_id is not in chat_room_ids, create new chat room
@@ -61,13 +67,23 @@ async def begin_chat(
                         new_chat_room_id=received.chat_room_id,
                         buffer=buffer,
                     )
-                    buffer.change_context_to(index=0)
+                    await SendToWebsocket.initiation_of_chat(
+                        buffer=buffer,
+                        send_previous_chats=False,
+                        send_chat_room_ids=True,
+                    )
                 else:
                     # if received chat_room_id is in chat_room_ids, get context from memory
                     buffer.change_context_to(index=index)
-                await SendToWebsocket.initiation_of_chat(websocket=websocket, buffer=buffer)
+                    await SendToWebsocket.initiation_of_chat(
+                        buffer=buffer,
+                        send_previous_chats=True,
+                        send_chat_room_ids=False,
+                    )
+                continue
 
-            if received.msg.startswith("/"):  # if user message is command
+            if received.msg.startswith("/"):
+                # if user message is command, handle command
                 splitted: list[str] = received.msg[1:].split(" ")
                 await command_handler(
                     callback_name=splitted[0],

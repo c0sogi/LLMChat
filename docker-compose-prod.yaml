@@ -86,7 +86,7 @@ services:
         ipv4_address: 172.16.0.12 # static IP
 
   api:
-    image: cosogi/chatgpt-webapp-server-api
+    image: cosogi/chatgpt-webapp-server-api:latest
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api.rule=HostRegexp(`${HOST_MAIN}`, `{subdomain:[a-z]+}.${HOST_MAIN}`, `${HOST_IP}`)"

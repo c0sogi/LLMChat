@@ -26,19 +26,21 @@ from app.dependencies import process_pool_executor, process_manager
 class SendToWebsocket:
     @staticmethod
     async def initiation_of_chat(
-        websocket: WebSocket,
         buffer: BufferedUserContext,
+        send_chat_room_ids: bool = True,
+        send_previous_chats: bool = True,
     ) -> None:
+        """Send initial message to websocket, providing current state of user"""
         previous_chats = message_history_organizer(
             user_gpt_context=buffer.current_user_gpt_context,
             send_to_stream=False,
         )
         assert isinstance(previous_chats, list)
         await SendToWebsocket.message(
-            websocket=websocket,
+            websocket=buffer.websocket,
             msg=InitMessage(
-                chat_room_ids=buffer.sorted_chat_room_ids,
-                previous_chats=previous_chats,
+                chat_room_ids=buffer.sorted_chat_room_ids if send_chat_room_ids else None,
+                previous_chats=previous_chats if send_previous_chats else None,
             ).json(),
             chat_room_id=buffer.current_chat_room_id,
             init=True,
@@ -53,7 +55,8 @@ class SendToWebsocket:
         is_user: bool = False,
         init: bool = False,
         model_name: str | None = None,
-    ) -> None:  # send whole message to websocket
+    ) -> None:
+        """Send whole message to websocket"""
         await websocket.send_json(  # send stream message
             MessageToWebsocket(
                 msg=msg,
@@ -74,7 +77,8 @@ class SendToWebsocket:
         is_user: bool = False,
         chunk_size: int = 2,
         model_name: str | None = None,
-    ) -> str:  # send whole stream to websocket
+    ) -> str:
+        """Send SSE stream to websocket"""
         final_response, stream_buffer = "", ""
         iteration: int = 0
         await websocket.send_json(
@@ -136,6 +140,7 @@ class HandleMessage:
         translate: bool,
         buffer: BufferedUserContext,
     ) -> None:
+        """Handle user message, including translation"""
         if translate:  # if user message is translated
             msg = await Translator.auto_translate(
                 text=msg,
@@ -165,6 +170,7 @@ class HandleMessage:
         translate: bool,
         buffer: BufferedUserContext,
     ) -> None:
+        """Handle gpt message, including text generation and translation"""
         current_model: LLMModel = buffer.current_user_gpt_context.gpt_model.value
         try:
             if isinstance(current_model, OpenAIModel):
