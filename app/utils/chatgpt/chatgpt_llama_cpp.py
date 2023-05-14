@@ -2,7 +2,7 @@
 from typing import TYPE_CHECKING, Generator
 
 from langchain import LlamaCpp
-from llama_cpp import Llama
+from llama_cpp import Llama, LlamaCache
 
 from app.errors.gpt_exceptions import (
     GptBreakException,
@@ -50,7 +50,13 @@ def get_fake_response() -> Generator:
 def load_llama(llama_cpp_model: "LlamaCppModel") -> LlamaCpp:
     model_name: str = llama_cpp_model.name
     if model_name not in globals():
-        globals()[model_name] = get_llama(llama_cpp_model)
+        llama_cpp = get_llama(llama_cpp_model)
+        assert isinstance(llama_cpp.client, Llama)
+        if llama_cpp_model.cache and llama_cpp_model.cache_size is not None:
+            llama_cpp.client.set_cache(
+                LlamaCache(capacity_bytes=llama_cpp_model.cache_size),
+            )
+        globals()[model_name] = llama_cpp
     return globals()[model_name]
 
 

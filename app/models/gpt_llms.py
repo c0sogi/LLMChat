@@ -32,6 +32,9 @@ class LlamaCppModel(LLMModel):
     last_n_tokens_size: int = 64  # The number of tokens to look back when applying the repeat_penalty.
     use_mmap: bool = True  # Whether to use memory mapping for the model.
     streaming: bool = True  # Whether to stream the results, token by token.
+    cache: bool = True  # The size of the cache in bytes. Only used if cache is True.
+    echo: bool = True  # Whether to echo the prompt.
+    cache_size: Optional[int] = 2 << 30  # The size of the cache in bytes. Only used if cache is True.
     n_threads: Optional[
         int
     ] = None  # Number of threads to use. If None, the number of threads is automatically determined.
@@ -39,7 +42,6 @@ class LlamaCppModel(LLMModel):
     temperature: Optional[float] = 0.8  # The temperature to use for sampling.
     top_p: Optional[float] = 0.95  # The top-p value to use for sampling.
     logprobs: Optional[int] = None  # The number of logprobs to return. If None, no logprobs are returned.
-    echo: Optional[bool] = False  # Whether to echo the prompt.
     stop: Optional[list[str]] = field(
         default_factory=lambda: ["\u200b"]
     )  # A list of strings to stop generation when encountered.

@@ -1,12 +1,14 @@
 import bcrypt
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Response, Security, status
 from fastapi.requests import Request
+
 from app.common.config import TOKEN_EXPIRE_HOURS
 from app.database.crud.users import is_email_exist, register_new_user
 from app.database.schemas.auth import Users
+from app.dependencies import user_dependency
 from app.errors.api_exceptions import Responses_400, Responses_404
+from app.utils.auth.token import create_access_token, token_decode
 from app.viewmodels.base_models import SnsType, Token, UserRegister, UserToken
-from app.utils.auth.token import create_access_token
 
 router = APIRouter(prefix="/auth")
 
@@ -60,6 +62,14 @@ async def register(
     raise Responses_400.not_supported_feature
 
 
+@router.delete("/register", status_code=status.HTTP_204_NO_CONTENT)
+async def unregister(
+    authorization: str = Security(user_dependency),
+):
+    registered_user: UserToken = UserToken(**token_decode(authorization))
+    await Users.delete_filtered(Users.email == registered_user.email, autocommit=True)
+
+
 @router.post("/login/{sns_type}", status_code=200, response_model=Token)
 async def login(
     response: Response,
@@ -70,6 +80,7 @@ async def login(
         if not (user_info.email and user_info.password):
             raise Responses_400.no_email_or_password
         matched_user: Users = await Users.first_filtered_by(email=user_info.email)  # type: ignore
+        print("mached_user:", matched_user)
         if matched_user is None or matched_user.password is None:
             raise Responses_404.not_found_user
         if not bcrypt.checkpw(

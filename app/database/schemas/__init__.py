@@ -1,10 +1,11 @@
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import Column, Select, String, func, select, update
+from sqlalchemy import Column, Select, String, func, select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql._typing import _ColumnExpressionArgument
+from sqlalchemy.sql.roles import ExpressionElementRole
 
 from .. import DeclarativeMeta
 from ..connection import db
@@ -68,15 +69,31 @@ class Mixin:
         )
 
     @classmethod
-    async def update_where(
+    async def update_filtered(
         cls,
-        filter_by: dict,
+        *criteria: ExpressionElementRole[bool],
         updated: dict,
         autocommit: bool = False,
         refresh: bool = False,
         session: AsyncSession | None = None,
     ) -> DeclarativeMeta:
-        stmt = update(cls).filter_by(**filter_by).values(**updated)
+        stmt = update(cls).filter(*criteria).values(**updated)
+        return await db.run_in_session(db._execute)(
+            session,
+            autocommit=autocommit,
+            refresh=refresh,
+            stmt=stmt,
+        )
+
+    @classmethod
+    async def delete_filtered(
+        cls,
+        *criteria: ExpressionElementRole[bool],
+        autocommit: bool = False,
+        refresh: bool = False,
+        session: AsyncSession | None = None,
+    ) -> DeclarativeMeta:
+        stmt = delete(cls).filter(*criteria)
         return await db.run_in_session(db._execute)(
             session,
             autocommit=autocommit,

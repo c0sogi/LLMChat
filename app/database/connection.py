@@ -193,6 +193,7 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
                 )
             Base.metadata.drop_all(conn) if self.is_test_mode else ...
             Base.metadata.create_all(conn)
+            Base.metadata.reflect(conn)
             conn.commit()
         self.root_engine.dispose()
         self.engine = create_async_engine(
@@ -340,9 +341,12 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         self,
         instance: DeclarativeMeta,
         autocommit: bool = False,
+        refresh: bool = False,
         session: AsyncSession | None = None,
     ) -> DeclarativeMeta:
-        return await self.run_in_session(self._delete)(session, autocommit=autocommit, instance=instance)
+        return await self.run_in_session(self._delete)(
+            session, autocommit=autocommit, refresh=refresh, instance=instance
+        )
 
     async def scalars__fetchall(self, stmt: Select, session: AsyncSession | None = None) -> list[DeclarativeMeta]:
         return (await self.run_in_session(self._scalars)(session, stmt=stmt)).fetchall()

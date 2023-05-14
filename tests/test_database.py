@@ -50,25 +50,26 @@ async def test_crud():
     # C/U
     await Users.add_all(user_1, user_2, autocommit=True, refresh=True)
     await Users.add_one(autocommit=True, refresh=True, **user_3)
-    await Users.update_where(
-        user_2,
-        {"email": "UPDATED", "password": "updated"},
+    await Users.update_filtered(
+        Users.email == user_1["email"],
+        Users.password == user_1["password"],
+        updated={"email": "UPDATED", "password": "updated"},
         autocommit=True,
     )
 
     # R
     result_1_stmt = select(Users).filter(Users.email.in_([user_1["email"], "UPDATED", user_3["email"]]))
     result_1 = await db.scalars__fetchall(result_1_stmt)
-    assert len(result_1) == 3
-    for user_idx, fetched_user in enumerate(result_1):
-        assert fetched_user.email == users[user_idx]["email"] if user_idx != 1 else fetched_user.email == "UPDATED"  # type: ignore
-    result_2 = await Users.one_filtered_by(**user_3)
-    assert result_2.email == user_3["email"]  # type: ignore
+    assert len(result_1) == 2
+    assert result_1[0].email == "UPDATED"  # type: ignore
+    assert result_1[1].email == user_3["email"]  # type: ignore
+    result_2 = await Users.one_filtered_by(**user_2)
+    assert result_2.email == user_2["email"]  # type: ignore
     result_3 = await Users.fetchall_filtered_by(**user_4)
     assert len(result_3) == 0
 
     # D
     await db.delete(result_2, autocommit=True)
-    result_4_stmt = select(Users).filter_by(**user_3)
+    result_4_stmt = select(Users).filter_by(**user_2)
     result_4 = (await db.scalars(stmt=result_4_stmt)).first()
     assert result_4 is None

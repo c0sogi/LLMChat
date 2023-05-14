@@ -93,7 +93,7 @@ class Config(metaclass=SingletonMetaClass):
     host_main: str = HOST_MAIN
     port: int = 8000
     db_pool_recycle: int = 900
-    db_echo: bool = False
+    db_echo: bool = True
     debug: bool = False
     test_mode: bool = False
     database_url_format: str = "{dialect}+{driver}://{user}:{password}@{host}:{port}/{database}?charset=utf8mb4"

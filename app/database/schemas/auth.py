@@ -42,14 +42,14 @@ class ApiKeys(Base, Mixin):
     secret_key: Mapped[str] = mapped_column(String(length=64))
     user_memo: Mapped[str | None] = mapped_column(String(length=40))
     is_whitelisted: Mapped[bool] = mapped_column(default=False)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     users: Mapped["Users"] = relationship(back_populates="api_keys")
     whitelists: Mapped["ApiWhiteLists"] = relationship(backref="api_keys", cascade="all, delete-orphan")
 
 
 class ApiWhiteLists(Base, Mixin):
     __tablename__ = "api_whitelists"
-    api_key_id: Mapped[int] = mapped_column(Integer, ForeignKey("api_keys.id"))
+    api_key_id: Mapped[int] = mapped_column(Integer, ForeignKey("api_keys.id", ondelete="CASCADE"))
     ip_address: Mapped[str] = mapped_column(String(length=64))
 
 
@@ -60,7 +60,7 @@ class ChatRooms(Base, Mixin):
     chat_room_type: Mapped[str] = mapped_column(String(length=20), index=True)
     name: Mapped[str] = mapped_column(String(length=20))
     description: Mapped[str | None] = mapped_column(String(length=100))
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     users: Mapped["Users"] = relationship(back_populates="chat_rooms")
     chat_messages: Mapped["ChatMessages"] = relationship(back_populates="chat_rooms", cascade="all, delete-orphan")
 
@@ -71,9 +71,9 @@ class ChatMessages(Base, Mixin):
     status: Mapped[str] = mapped_column(Enum("active", "deleted", "blocked"), default="active")
     role: Mapped[str] = mapped_column(String(length=20), default="user")
     message: Mapped[str] = mapped_column(Text)
-    chat_room_id: Mapped[int] = mapped_column(ForeignKey("chat_rooms.id"))
+    chat_room_id: Mapped[int] = mapped_column(ForeignKey("chat_rooms.id", ondelete="CASCADE"))
     chat_rooms: Mapped["ChatRooms"] = relationship(back_populates="chat_messages")
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     users: Mapped["Users"] = relationship(back_populates="chat_messages")
 
 
@@ -83,5 +83,5 @@ class GptPresets(Base, Mixin):
     top_p: Mapped[float] = mapped_column(Float, default=1.0)
     presence_penalty: Mapped[float] = mapped_column(Float, default=0)
     frequency_penalty: Mapped[float] = mapped_column(Float, default=0)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
     users: Mapped["Users"] = relationship(back_populates="gpt_presets")

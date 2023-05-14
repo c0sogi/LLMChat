@@ -102,6 +102,12 @@ class Responses_400:
         msg="해당 기능은 아직 사용할 수 없습니다.",
         detail="Not supported feature.",
     )
+    unregister_failure: APIException = APIException(
+        status_code=400,
+        internal_code=4,
+        msg="회원 탈퇴에 실패했습니다.",
+        detail="Failed to unregister.",
+    )
     max_key_count_exceed: APIException = APIException(
         status_code=400,
         internal_code=8,

@@ -14,6 +14,8 @@ def create_access_token(*, data: dict, expires_delta: int | None = None) -> str:
 
 
 def token_decode(authorization: str) -> dict:
+    if authorization is None:
+        raise Responses_401.token_decode_failure
     try:
         authorization = authorization.replace("Bearer ", "")
         payload = jwt_decode(authorization, key=JWT_SECRET, algorithms=[JWT_ALGORITHM])
