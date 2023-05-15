@@ -433,9 +433,10 @@ class ChatGptCommands:  # commands for chat gpt
     async def retry(user_gpt_context: UserGptContext) -> Tuple[str | None, ResponseType]:
         """Retry last message\n
         /retry"""
-        if len(user_gpt_context.user_message_histories) < 1 or len(user_gpt_context.gpt_message_histories) < 1:
+        if len(user_gpt_context.user_message_histories) < 1:
             return "There is no message to retry.", ResponseType.SEND_MESSAGE_AND_STOP
-        await MessageManager.pop_message_history_safely(user_gpt_context=user_gpt_context, role=GptRoles.GPT)
+        if len(user_gpt_context.user_message_histories) == len(user_gpt_context.gpt_message_histories):
+            await MessageManager.pop_message_history_safely(user_gpt_context=user_gpt_context, role=GptRoles.GPT)
         return None, ResponseType.HANDLE_GPT
 
     @staticmethod

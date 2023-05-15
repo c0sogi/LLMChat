@@ -13,11 +13,15 @@
 ---
 + ### Switching Chatrooms And Load Chat Histories
     All chat histories will be stored on Redis cache. You can load chat histories by clicking the chatroom name on the left side.
-> ![Switching Chat](app/contents/demo.gif)
+> ![Switching Chat](app/contents/chat_demo.gif)
 ---
 + ### Switching Model Between Vicuna(LLaMA) And ChatGPT
-    OpenAI's `gpt-3.5-turbo` model will be used as default. You can switch between `LlamaCpp` and `ChatGPT` by entering command `/model <model>` on the chat input. You must download `.bin` file to any folder and define the path in `LLMModels` class in `app\models\gpt_llms.py`
-> ![Switching Model](app/contents/conversation_demo.png)
+    OpenAI's `gpt-3.5-turbo` model will be used as default. You can switch between `LlamaCpp` and `ChatGPT` by entering command `/model <model>` on the chat input. If you want to use Local LLM, You must download `.bin` file to any folder and define the path in `LLMModels` class in `app\models\gpt_llms.py`. Also, Each chat has its own Gpt model. By default, the newly created chat will use the model defined in `construct_default`. and entering '/model' will overwrite the default, and will permanently change model of the chat room. You can check model by entering `/test` in chat. If you want to make it default, just create new chat, and this chat will use default model, which is independent from other chats.
+> ![Switching Model](app/contents/llama_demo.gif)
+
++ ### Embedding PDF file
+    You can embed PDF file by clicking `Embed document` on the bottom left. In a few seconds, text contents of PDF will be converted to vectors and embedded to Redis cache. You can search in  similar documents by entering command `/search <query>` on the chat.
+> ![Switching Chat](app/contents/embed_demo.png)
 ---
 
 ## Key Features
