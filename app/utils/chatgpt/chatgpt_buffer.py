@@ -1,5 +1,5 @@
+import asyncio
 from dataclasses import dataclass, field
-
 from fastapi import WebSocket
 
 from app.models.gpt_models import UserGptContext
@@ -10,6 +10,8 @@ class BufferedUserContext:
     user_id: str
     websocket: WebSocket
     sorted_ctxts: list[UserGptContext]
+    queue: asyncio.Queue = field(default_factory=asyncio.Queue)
+    done: asyncio.Event = field(default_factory=asyncio.Event)
     _current_ctxt: UserGptContext = field(init=False)
 
     def __post_init__(self) -> None:
@@ -45,6 +47,17 @@ class BufferedUserContext:
     @property
     def sorted_chat_room_ids(self) -> list[str]:
         return [context.chat_room_id for context in self.sorted_ctxts]
+
+    @property
+    def sorted_chat_room_names(self) -> list[str]:
+        return [context.chat_room_name for context in self.sorted_ctxts]
+
+    @property
+    def sorted_chat_rooms(self) -> list[dict[str, str]]:
+        return [
+            {"chat_room_id": context.chat_room_id, "chat_room_name": context.chat_room_name}
+            for context in self.sorted_ctxts
+        ]
 
     @property
     def current_user_gpt_context(self) -> UserGptContext:

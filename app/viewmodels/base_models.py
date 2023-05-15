@@ -151,4 +151,5 @@ class SendInitToWebsocket(BaseModel):
 
 class InitMessage(BaseModel):
     previous_chats: list[dict] | None = None
-    chat_room_ids: list[str] | None = None
+    chat_rooms: list[dict[str, str]] | None = None
+    init_callback: bool = True

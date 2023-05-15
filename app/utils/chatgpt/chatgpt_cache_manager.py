@@ -185,6 +185,29 @@ class ChatGptCacheManager:
         return success
 
     @classmethod
+    async def update_profile(
+        cls,
+        user_gpt_context: UserGptContext,
+        only_if_exists: bool = True,
+    ) -> bool:
+        json_data = user_gpt_context.json()
+
+        field: str = "user_gpt_profile"
+        key: str = cls._generate_key(
+            user_id=user_gpt_context.user_id,
+            chat_room_id=user_gpt_context.chat_room_id,
+            field=field,
+        )
+
+        return (
+            await cache.redis.set(
+                key,
+                orjson_dumps(json_data[field]),
+                xx=only_if_exists,
+            )
+        ) is True
+
+    @classmethod
     async def update_message_histories(
         cls,
         user_id: str,

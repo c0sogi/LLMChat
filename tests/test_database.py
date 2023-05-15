@@ -28,7 +28,7 @@ async def test_api_key_validation(random_user: dict[str, str]):
     user: Users = await Users.add_one(autocommit=True, refresh=True, **random_user)  # type: ignore
     additional_key_info: AddApiKey = AddApiKey(user_memo="[Testing] test_apikey_query")
     new_api_key: ApiKeys = await create_api_key(user_id=user.id, additional_key_info=additional_key_info)
-    timestamp: str = str(UTC.timestamp(hour_diff=9))
+    timestamp: str = str(UTC.timestamp())
     parsed_qs: str = parse_params(params={"key": new_api_key.access_key, "timestamp": timestamp})
     user_token: UserToken = await Validator.api_key(
         api_access_key=new_api_key.access_key,

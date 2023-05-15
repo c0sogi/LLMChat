@@ -54,6 +54,7 @@ JWT_ALGORITHM: str = "HS256"
 
 
 # Optional Service Variables
+DEFAULT_LLM_MODEL: str = environ.get("DEFAULT_LLM_MODEL", "gpt_3_5_turbo")
 OPENAI_API_KEY: str | None = environ.get("OPENAI_API_KEY")
 RAPID_API_KEY: str | None = environ.get("RAPID_API_KEY")
 GOOGLE_TRANSLATE_API_KEY: str | None = environ.get("GOOGLE_TRANSLATE_API_KEY")
@@ -93,7 +94,7 @@ class Config(metaclass=SingletonMetaClass):
     host_main: str = HOST_MAIN
     port: int = 8000
     db_pool_recycle: int = 900
-    db_echo: bool = True
+    db_echo: bool = False
     debug: bool = False
     test_mode: bool = False
     database_url_format: str = "{dialect}+{driver}://{user}:{password}@{host}:{port}/{database}?charset=utf8mb4"

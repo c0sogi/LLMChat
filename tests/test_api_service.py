@@ -20,7 +20,7 @@ async def request_service(
     all_query_params: str = parse_params(
         params={
             "key": access_key,
-            "timestamp": UTC.timestamp(hour_diff=9),
+            "timestamp": UTC.timestamp(),
         }
         | required_query_params
     )

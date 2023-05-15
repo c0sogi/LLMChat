@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from orjson import dumps as orjson_dumps
 from orjson import loads as orjson_loads
+from app.common.config import DEFAULT_LLM_MODEL
 
 from app.models.gpt_llms import LLMModels
 from app.utils.date_utils import UTC
@@ -62,7 +63,7 @@ class MessageHistory:  # message history for user and gpt
     content: str
     tokens: int
     is_user: bool
-    timestamp: int = field(default_factory=lambda: UTC.timestamp(hour_diff=9))
+    timestamp: int = field(default_factory=UTC.timestamp)
     uuid: str = field(default_factory=lambda: uuid4().hex)
     model_name: str | None = None
 
@@ -81,6 +82,7 @@ class MessageHistory:  # message history for user and gpt
 class UserGptProfile:  # user gpt profile for user and gpt
     user_id: str
     chat_room_id: str = field(default_factory=lambda: uuid4().hex)
+    chat_room_name: str = field(default_factory=lambda: UTC.now_isoformat())
     created_at: int = field(default_factory=lambda: UTC.timestamp(hour_diff=9))
     user_role: str = field(default=GptRoles.USER.value)
     gpt_role: str = field(default=GptRoles.GPT.value)
@@ -162,6 +164,10 @@ class UserGptContext:  # user gpt context for user and gpt
     def chat_room_id(self) -> str:
         return self.user_gpt_profile.chat_room_id
 
+    @property
+    def chat_room_name(self) -> str:
+        return self.user_gpt_profile.chat_room_name
+
     def __repr__(self) -> str:
         gpt_model: LLMModels = self.gpt_model
         time_string: str = datetime.strptime(
@@ -202,7 +208,11 @@ class UserGptContext:  # user gpt context for user and gpt
         cls,
         user_id: str,
         chat_room_id: str,
-        gpt_model: LLMModels = LLMModels.gpt_3_5_turbo,
+        gpt_model: LLMModels = getattr(
+            LLMModels,
+            DEFAULT_LLM_MODEL,
+            LLMModels.gpt_3_5_turbo,
+        ),
     ):
         return cls(
             user_gpt_profile=UserGptProfile(user_id=user_id, chat_room_id=chat_room_id),

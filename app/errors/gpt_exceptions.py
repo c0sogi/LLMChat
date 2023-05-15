@@ -56,3 +56,9 @@ class GptContinueException(GptException):
     def __init__(self, *, msg: str | None = None) -> None:
         self.msg = msg
         super().__init__(msg=msg)
+
+
+class GptInterruptedException(GptException):
+    def __init__(self, *, msg: str | None = None) -> None:
+        self.msg = msg
+        super().__init__(msg=msg)

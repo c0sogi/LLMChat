@@ -11,17 +11,17 @@
     Note that the API keys doesn't play any role at this moment. OpenAI key in `.env` file will be used for all the requests. I just added this feature for who wants to use this project as a template for build production-ready chat app.
 > ![Overall UI](app/contents/ui_demo.png)
 ---
-+ ### Switching Chatrooms And Load Chat Histories
-    All chat histories will be stored on Redis cache. You can load chat histories by clicking the chatroom name on the left side.
-> ![Switching Chat](app/contents/chat_demo.gif)
----
-+ ### Switching Model Between Vicuna(LLaMA) And ChatGPT
-    OpenAI's `gpt-3.5-turbo` model will be used as default. You can switch between `LlamaCpp` and `ChatGPT` by entering command `/model <model>` on the chat input. If you want to use Local LLM, You must download `.bin` file to any folder and define the path in `LLMModels` class in `app\models\gpt_llms.py`. Also, Each chat has its own Gpt model. By default, the newly created chat will use the model defined in `construct_default`. and entering '/model' will overwrite the default, and will permanently change model of the chat room. You can check model by entering `/test` in chat. If you want to make it default, just create new chat, and this chat will use default model, which is independent from other chats.
-> ![Switching Model](app/contents/llama_demo.gif)
-
 + ### Embedding PDF file
     You can embed PDF file by clicking `Embed document` on the bottom left. In a few seconds, text contents of PDF will be converted to vectors and embedded to Redis cache. You can search in  similar documents by entering command `/search <query>` on the chat.
 > ![Switching Chat](app/contents/embed_demo.png)
+---
++ ### Change your chat title
+    You can change your chat title by clicking the title of the chat. This will be stored until you change or delete it!
+> ![Switching Chat](app/contents/edit_title_demo.png)
+---
++ ### Stop generation
+    You can just stop generating text by clicking the stop button at bottom right corner.
+> ![Switching Chat](app/contents/stop_generation_demo.gif)
 ---
 
 ## Key Features
@@ -94,6 +94,10 @@ This project is licensed under the [MIT License](LICENSE), which allows for free
 
 You can access `ChatGPT` or `LlamaCpp` through `WebSocket` connection using two modules: `app/routers/websocket` and `app/utils/chatgpt/chatgpt_stream_manager`. These modules facilitate the communication between the `Flutter` client and the ChatGPT model through a WebSocket. With the WebSocket, you can establish a real-time, two-way communication channel to interact with the LLM.
 
+## Usage
+
+To start a ChatGPT conversation, connect to the WebSocket route `/ws/chatgpt/{api_key}` with a valid API key registered in the database. Note that this API key is not the same as OpenAI API key, but only available for your server to validate the user. Once connected, you can send messages and commands to interact with the ChatGPT model. The WebSocket will send back GPT's responses in real-time. This websocket connection is established via Flutter app, which can accessed with endpoint `/chatgpt`.
+
 ## websocket.py
 
 `websocket.py` is responsible for setting up a WebSocket connection and handling user authentication. It defines the WebSocket route `/chatgpt/{api_key}` that accepts a WebSocket and an API key as parameters.
@@ -117,10 +121,9 @@ The function first initializes the user's GPT context from the cache manager. Th
 The conversation continues in a loop until the connection is closed. During the conversation, the user's messages are processed and GPT's responses are generated accordingly.
 
 ```python
-async def begin_chat(
-    websocket: WebSocket,
-    user_id: str,
-) -> None:
+class ChatGptStreamManager:
+    @classmethod
+    async def begin_chat(cls, websocket: WebSocket, user_id: str) -> None:
     ...
 ```
 
@@ -142,10 +145,10 @@ class SendToWebsocket:
 
 ### Handling GPT Responses
 
-The `HandleMessage` class also handles GPT responses. The `gpt()` method sends the GPT response to the WebSocket. If translation is enabled, the response is translated using the Google Translate API before sending it to the client.
+The `MessageHandler` class also handles GPT responses. The `gpt()` method sends the GPT response to the WebSocket. If translation is enabled, the response is translated using the Google Translate API before sending it to the client.
 
 ```python
-class HandleMessage:
+class MessageHandler:
     ...
     @staticmethod
     async def gpt(...):
@@ -159,10 +162,6 @@ User messages are processed using the `HandleMessage` class. If the message star
 
 Commands are handled using the `ChatGptCommands` class. It executes the corresponding callback function depending on the command. You can add new commands by simply adding callback in `ChatGptCommands` class from `app.utils.chatgpt.chatgpt_commands`.
 
-
-## Usage
-
-To start a ChatGPT conversation, connect to the WebSocket route `/ws/chatgpt/{api_key}` with a valid API key registered in the database. Note that this API key is not the same as OpenAI API key, but only available for your server to validate the user. Once connected, you can send messages and commands to interact with the ChatGPT model. The WebSocket will send back GPT's responses in real-time. This websocket connection is established via Flutter app, which can accessed with endpoint `/chatgpt`.
 
 # 🌟Vector Embedding
  Using Redis for storing vector embeddings of conversations 🗨️ can aid the ChatGPT model 🤖 in several ways, such as efficient and fast retrieval of conversation context 🕵️‍♀️, handling large amounts of data 📊, and providing more relevant responses through vector similarity search 🔎.
@@ -209,21 +208,15 @@ async def query(query: str, /, buffer: BufferedUserContext) -> None:
 When running the `begin_chat` function, if a user uploads a file containing text (e.g., a PDF or TXT file), the text is automatically extracted from the file, and its vector embedding is saved to Redis.
 
 ```python
-async def begin_chat(
-    websocket: WebSocket,
-    user_id: str,
-) -> None:
-   ...
-    while True:  # loop until connection is closed
-        try:
-            rcvd: dict = await websocket.receive_json()  # receive message from client
-            ...
-            if "filename" in rcvd:
-                text: str = await run_in_threadpool(
-                    read_bytes_to_text, await websocket.receive_bytes(), rcvd["filename"]
-                )
-                docs: list[str] = await VectorStoreManager.create_documents(text)
-                ...
+@classmethod
+async def embed_file_to_vectorstore(cls, file: bytes, filename: str) -> str:
+    # if user uploads file, embed it
+    try:
+        text: str = await run_in_threadpool(read_bytes_to_text, file, filename)
+        docs: list[str] = await VectorStoreManager.create_documents(text)
+        return f"Successfully embedded documents. You uploaded file begins with...\n\n```{docs[0][:50]}```..."
+    except Exception:
+        return "Can't embed this type of file. Try another file."
 ```
 
 ### 4. `chatgpt_commands.py` functionality

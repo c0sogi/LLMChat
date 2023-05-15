@@ -85,7 +85,7 @@ class Validator:
             secret_key=matched_api_key.secret_key,
         ):
             raise Responses_401.invalid_api_header
-        now_timestamp: int = UTC.timestamp(hour_diff=9)
+        now_timestamp: int = UTC.timestamp()
         if not (now_timestamp - 60 < int(timestamp) < now_timestamp + 60):
             raise Responses_401.invalid_timestamp
         return UserToken(**matched_user.to_dict())

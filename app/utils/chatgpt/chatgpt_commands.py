@@ -11,8 +11,8 @@ from app.utils.chatgpt.chatgpt_buffer import BufferedUserContext
 from app.utils.chatgpt.chatgpt_cache_manager import ChatGptCacheManager
 from app.utils.chatgpt.chatgpt_message_manager import MessageManager
 from app.utils.chatgpt.chatgpt_vectorstore_manager import Document, VectorStoreManager
-from app.utils.chatgpt.chatgpt_websocket_manager import HandleMessage, SendToWebsocket
-from app.viewmodels.base_models import MessageFromWebsocket
+from app.utils.chatgpt.chatgpt_websocket_manager import SendToWebsocket
+from app.utils.chatgpt.chatgpt_message_handler import MessageHandler
 from app.models.gpt_models import GptRoles, MessageHistory, LLMModels, UserGptContext
 
 
@@ -107,8 +107,7 @@ async def get_contexts_sorted_from_recent_to_past(user_id: str, chat_room_ids: l
 async def command_handler(
     callback_name: str,
     callback_args: list[str],
-    received: MessageFromWebsocket,
-    websocket: WebSocket,
+    translate: bool,
     buffer: BufferedUserContext,
 ):
     callback_response, response_type = await ChatGptCommands._get_command_response(
@@ -119,26 +118,26 @@ async def command_handler(
     if response_type is ResponseType.DO_NOTHING:
         return
     elif response_type is ResponseType.HANDLE_GPT:
-        await HandleMessage.gpt(
-            translate=received.translate,
+        await MessageHandler.gpt(
+            translate=translate,
             buffer=buffer,
         )
         return
     elif response_type is ResponseType.HANDLE_USER:
-        await HandleMessage.user(
+        await MessageHandler.user(
             msg=callback_response,
-            translate=received.translate,
+            translate=translate,
             buffer=buffer,
         )
         return
     elif response_type is ResponseType.HANDLE_BOTH:
-        await HandleMessage.user(
+        await MessageHandler.user(
             msg=callback_response,
-            translate=received.translate,
+            translate=translate,
             buffer=buffer,
         )
-        await HandleMessage.gpt(
-            translate=received.translate,
+        await MessageHandler.gpt(
+            translate=translate,
             buffer=buffer,
         )
         return
@@ -147,8 +146,7 @@ async def command_handler(
         await command_handler(
             callback_name=splitted[0][1:] if splitted[0].startswith("/") else splitted[0],
             callback_args=splitted[1:],
-            received=received,
-            websocket=websocket,
+            translate=translate,
             buffer=buffer,
         )
 
@@ -298,16 +296,16 @@ class ChatGptCommands:  # commands for chat gpt
             buffer=buffer,
         )
         if buffer.current_chat_room_id == chat_room_id_before:
-            await SendToWebsocket.initiation_of_chat(
+            await SendToWebsocket.init(
                 buffer=buffer,
                 send_previous_chats=False,
-                send_chat_room_ids=delete_result,
+                send_chat_rooms=delete_result,
             )
         else:
-            await SendToWebsocket.initiation_of_chat(
+            await SendToWebsocket.init(
                 buffer=buffer,
                 send_previous_chats=True,
-                send_chat_room_ids=delete_result,
+                send_chat_rooms=delete_result,
             )
 
     @staticmethod

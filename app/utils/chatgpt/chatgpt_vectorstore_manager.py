@@ -1,7 +1,11 @@
 from asyncio import gather
+
+from fastapi.concurrency import run_in_threadpool
 from langchain.text_splitter import TokenTextSplitter
-from app.utils.langchain.redis_vectorstore import Document
+
 from app.database.connection import cache
+from app.utils.chatgpt.chatgpt_fileloader import read_bytes_to_text
+from app.utils.langchain.redis_vectorstore import Document
 
 
 class VectorStoreManager:
@@ -24,9 +28,20 @@ class VectorStoreManager:
     async def asimilarity_search(queries: list[str], k: int = 1) -> list[list[Document]]:
         return await gather(*[cache.vectorstore.asimilarity_search(query, k=k) for query in queries])
 
+    @classmethod
+    async def embed_file_to_vectorstore(cls, file: bytes, filename: str) -> str:
+        # if user uploads file, embed it
+        try:
+            text: str = await run_in_threadpool(read_bytes_to_text, file, filename)
+            docs: list[str] = await VectorStoreManager.create_documents(text)
+            return f"Successfully embedded documents. You uploaded file begins with...\n\n```{docs[0][:50]}```..."
+        except Exception:
+            return "Can't embed this type of file. Try another file."
+
 
 if __name__ == "__main__":
     import asyncio
+
     from app.common.config import Config
 
     sample_texts = """Neural network models can be quite powerful, effectively helping to identify patterns and uncover structure in a variety of different tasks, from language translation to pathology to playing games. At the same time, neural models (as well as other kinds of machine learning models) can contain problematic biases in many forms. For example, classifiers trained to detect rude, disrespectful, or unreasonable comments may be more likely to flag the sentence "I am gay" than "I am straight"; face classification models may not perform as well for women of color; speech transcription may have higher error rates for African Americans than White Americans.

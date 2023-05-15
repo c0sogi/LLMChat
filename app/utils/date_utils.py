@@ -10,6 +10,10 @@ class UTC:
         return cls().utc_now + timedelta(hours=hour_diff)
 
     @classmethod
+    def now_isoformat(cls, hour_diff: int = 0) -> str:
+        return (cls().utc_now + timedelta(hours=hour_diff)).isoformat() + "Z"
+
+    @classmethod
     def date(cls, hour_diff: int = 0) -> date:
         return cls.now(hour_diff=hour_diff).date()
 
