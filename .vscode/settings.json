@@ -19,5 +19,4 @@
         "**/deprecated_api_request_in_flutter.dart": true,
     },
     "python.analysis.typeCheckingMode": "basic",
-    "cmake.sourceDirectory": "D:/Projects/chatgpt-webapp-server/frontend/linux",
 }

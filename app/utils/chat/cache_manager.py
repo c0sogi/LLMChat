@@ -2,20 +2,20 @@ from orjson import dumps as orjson_dumps
 from orjson import loads as orjson_loads
 import re
 from app.database.connection import cache
-from app.models.gpt_llms import LLMModels
-from app.models.gpt_models import GptRoles, MessageHistory, UserGptContext, UserGptProfile
+from app.models.llms import LLMModels
+from app.models.chat_models import ChatRoles, MessageHistory, UserChatContext, UserChatProfile
 
 
-class ChatGptCacheManager:
+class CacheManager:
     _string_fields: tuple = (
-        "user_gpt_profile",
-        "gpt_model",
+        "user_chat_profile",
+        "llm_model",
     )
-    _list_fields: tuple[str] = tuple(f"{role.name.lower()}_message_histories" for role in GptRoles)
+    _list_fields: tuple[str] = tuple(f"{role.name.lower()}_message_histories" for role in ChatRoles)
 
     @staticmethod
     def _generate_key(user_id: str, chat_room_id: str, field: str) -> str:
-        return f"chatgpt:{user_id}:{chat_room_id}:{field}"
+        return f"chat:{user_id}:{chat_room_id}:{field}"
 
     @classmethod
     def _get_string_fields(cls, user_id: str, chat_room_id: str) -> dict[str, str]:
@@ -27,17 +27,17 @@ class ChatGptCacheManager:
 
     @classmethod
     async def get_all_chat_rooms(cls, user_id: str) -> list[str]:
-        # Get chatroom id from regex pattern of "chatgpt:{user_id}:{chat_room_id}:*" where chat_room_id is any string
+        # Get chatroom id from regex pattern of "chat:{user_id}:{chat_room_id}:*" where chat_room_id is any string
         found_chat_rooms: list[str] = []
-        pattern = re.compile(rf"^chatgpt:{user_id}:(.*):.*$")
-        async for match in cache.redis.scan_iter(f"chatgpt:{user_id}:*:user_gpt_profile"):
+        pattern = re.compile(rf"^chat:{user_id}:(.*):.*$")
+        async for match in cache.redis.scan_iter(f"chat:{user_id}:*:user_chat_profile"):
             match_found = pattern.search(match.decode("utf-8"))
             if match_found is not None:
                 found_chat_rooms.append(match_found.group(1))
         return found_chat_rooms
 
     @classmethod
-    async def read_context(cls, user_id: str, chat_room_id: str) -> UserGptContext:
+    async def read_context(cls, user_id: str, chat_room_id: str) -> UserChatContext:
         stored_string: dict[str, str | None] = {
             field: await cache.redis.get(key) for field, key in cls._get_string_fields(user_id, chat_room_id).items()
         }
@@ -48,7 +48,7 @@ class ChatGptCacheManager:
 
         # if any of stored strings are None, create new context
         if any([value is None for value in stored_string.values()]):
-            default: UserGptContext = UserGptContext.construct_default(
+            default: UserChatContext = UserChatContext.construct_default(
                 user_id=user_id,
                 chat_room_id=chat_room_id,
             )
@@ -62,14 +62,14 @@ class ChatGptCacheManager:
             if value is not None:
                 stored_list[field] = [orjson_loads(v) for v in value]
 
-        return UserGptContext(
-            user_gpt_profile=UserGptProfile(**stored_string["user_gpt_profile"]),  # type: ignore
-            gpt_model=LLMModels._member_map_[stored_string["gpt_model"]],  # type: ignore
+        return UserChatContext(
+            user_chat_profile=UserChatProfile(**stored_string["user_chat_profile"]),  # type: ignore
+            llm_model=LLMModels._member_map_[stored_string["llm_model"]],  # type: ignore
             user_message_histories=[MessageHistory(**m) for m in stored_list["user_message_histories"]]
             if stored_list["user_message_histories"] is not None
             else [],
-            gpt_message_histories=[MessageHistory(**m) for m in stored_list["gpt_message_histories"]]
-            if stored_list["gpt_message_histories"] is not None
+            ai_message_histories=[MessageHistory(**m) for m in stored_list["ai_message_histories"]]
+            if stored_list["ai_message_histories"] is not None
             else [],
             system_message_histories=[MessageHistory(**m) for m in stored_list["system_message_histories"]]
             if stored_list["system_message_histories"] is not None
@@ -79,13 +79,13 @@ class ChatGptCacheManager:
     @classmethod
     async def create_context(
         cls,
-        user_gpt_context: UserGptContext,
+        user_chat_context: UserChatContext,
         only_if_exists: bool = False,
         only_if_not_exists: bool = True,
     ) -> bool:
-        json_data = user_gpt_context.json()
+        json_data = user_chat_context.json()
         success: bool = True
-        for field, key in cls._get_string_fields(user_gpt_context.user_id, user_gpt_context.chat_room_id).items():
+        for field, key in cls._get_string_fields(user_chat_context.user_id, user_chat_context.chat_room_id).items():
             result = await cache.redis.set(
                 key,
                 orjson_dumps(json_data[field]),
@@ -93,7 +93,7 @@ class ChatGptCacheManager:
                 nx=only_if_not_exists,
             )
             success &= bool(result)
-        for field, key in cls._get_list_fields(user_gpt_context.user_id, user_gpt_context.chat_room_id).items():
+        for field, key in cls._get_list_fields(user_chat_context.user_id, user_chat_context.chat_room_id).items():
             result = await cache.redis.delete(key)
             for item in json_data[field]:
                 result = await cache.redis.rpush(key, orjson_dumps(item))
@@ -110,7 +110,7 @@ class ChatGptCacheManager:
         only_if_not_exists: bool = False,
     ) -> bool:
         return await cls.create_context(
-            UserGptContext.construct_default(
+            UserChatContext.construct_default(
                 user_id=user_id,
                 chat_room_id=chat_room_id,
             ),
@@ -121,14 +121,14 @@ class ChatGptCacheManager:
     @classmethod
     async def update_context(
         cls,
-        user_gpt_context: UserGptContext,
+        user_chat_context: UserChatContext,
         only_if_exists: bool = True,
     ) -> bool:
-        json_data = user_gpt_context.json()
+        json_data = user_chat_context.json()
         success = True
         for field, key in cls._get_string_fields(
-            user_gpt_context.user_id,
-            user_gpt_context.chat_room_id,
+            user_chat_context.user_id,
+            user_chat_context.chat_room_id,
         ).items():
             result = await cache.redis.set(
                 key,
@@ -137,8 +137,8 @@ class ChatGptCacheManager:
             )
             success &= bool(result)
         for field, key in cls._get_list_fields(
-            user_gpt_context.user_id,
-            user_gpt_context.chat_room_id,
+            user_chat_context.user_id,
+            user_chat_context.chat_room_id,
         ).items():
             result = await cache.redis.delete(key)
             success &= bool(result)
@@ -149,16 +149,16 @@ class ChatGptCacheManager:
 
     @classmethod
     async def delete_chat_room(cls, user_id: str, chat_room_id: str) -> int:
-        # delete all keys starting with "chatgpt:{user_id}:{chat_room_id}:"
-        keys = [key async for key in cache.redis.scan_iter(f"chatgpt:{user_id}:{chat_room_id}:*")]
+        # delete all keys starting with "chat:{user_id}:{chat_room_id}:"
+        keys = [key async for key in cache.redis.scan_iter(f"chat:{user_id}:{chat_room_id}:*")]
         if not keys:
             return 0
         return await cache.redis.delete(*keys)
 
     @classmethod
     async def delete_user(cls, user_id: str) -> int:
-        # delete all keys starting with "chatgpt:{user_id}:"
-        keys = [key async for key in cache.redis.scan_iter(f"chatgpt:{user_id}:*")]
+        # delete all keys starting with "chat:{user_id}:"
+        keys = [key async for key in cache.redis.scan_iter(f"chat:{user_id}:*")]
         if not keys:
             return 0
         return await cache.redis.delete(*keys)
@@ -166,15 +166,15 @@ class ChatGptCacheManager:
     @classmethod
     async def update_profile_and_model(
         cls,
-        user_gpt_context: UserGptContext,
+        user_chat_context: UserChatContext,
         only_if_exists: bool = True,
     ) -> bool:
-        json_data = user_gpt_context.json()
+        json_data = user_chat_context.json()
         success = True
 
         for field, key in cls._get_string_fields(
-            user_gpt_context.user_id,
-            user_gpt_context.chat_room_id,
+            user_chat_context.user_id,
+            user_chat_context.chat_room_id,
         ).items():
             result = await cache.redis.set(
                 key,
@@ -187,15 +187,15 @@ class ChatGptCacheManager:
     @classmethod
     async def update_profile(
         cls,
-        user_gpt_context: UserGptContext,
+        user_chat_context: UserChatContext,
         only_if_exists: bool = True,
     ) -> bool:
-        json_data = user_gpt_context.json()
+        json_data = user_chat_context.json()
 
-        field: str = "user_gpt_profile"
+        field: str = "user_chat_profile"
         key: str = cls._generate_key(
-            user_id=user_gpt_context.user_id,
-            chat_room_id=user_gpt_context.chat_room_id,
+            user_id=user_chat_context.user_id,
+            chat_room_id=user_chat_context.chat_room_id,
             field=field,
         )
 
@@ -212,11 +212,11 @@ class ChatGptCacheManager:
         cls,
         user_id: str,
         chat_room_id: str,
-        role: GptRoles | str,
+        role: ChatRoles,
         message_histories: list[MessageHistory],
     ) -> bool:
-        role = GptRoles.get_name(role).lower()
-        key = cls._generate_key(user_id, chat_room_id, f"{role}_message_histories")
+        field = f"{ChatRoles.get_name(role).lower()}_message_histories"
+        key = cls._generate_key(user_id, chat_room_id, field)
         message_histories_json = [orjson_dumps(message_history.__dict__) for message_history in message_histories]
         result = await cache.redis.delete(key)
         result &= await cache.redis.rpush(key, *message_histories_json)
@@ -227,13 +227,13 @@ class ChatGptCacheManager:
         cls,
         user_id: str,
         chat_room_id: str,
-        role: GptRoles | str,
+        role: ChatRoles,
         count: int | None = None,
     ) -> MessageHistory | list[MessageHistory] | None:
-        role = GptRoles.get_name(role).lower()
         assert count is None or count > 0
+        field = f"{ChatRoles.get_name(role).lower()}_message_histories"
         message_history_json: str | list | None = await cache.redis.lpop(
-            cls._generate_key(user_id, chat_room_id, f"{role}_message_histories"), count=count
+            cls._generate_key(user_id, chat_room_id, field), count=count
         )
         if message_history_json is None:
             return None
@@ -248,14 +248,12 @@ class ChatGptCacheManager:
         cls,
         user_id: str,
         chat_room_id: str,
-        role: GptRoles | str,
+        role: ChatRoles,
         count: int | None = None,
     ) -> MessageHistory | list[MessageHistory] | None:
-        role = GptRoles.get_name(role).lower()
+        field = f"{ChatRoles.get_name(role).lower()}_message_histories"
         assert count is None or count > 0
-        message_history_json = await cache.redis.rpop(
-            cls._generate_key(user_id, chat_room_id, f"{role}_message_histories"), count=count
-        )
+        message_history_json = await cache.redis.rpop(cls._generate_key(user_id, chat_room_id, field), count=count)
         if message_history_json is None:
             return None
         # if message_history_json is instance of list, then it is a list of message histories
@@ -269,12 +267,12 @@ class ChatGptCacheManager:
         cls,
         user_id: str,
         chat_room_id: str,
-        role: GptRoles | str,
+        role: ChatRoles,
         message_history: MessageHistory,
         if_exists: bool = False,
     ) -> bool:
-        role = GptRoles.get_name(role).lower()
-        message_history_key = cls._generate_key(user_id, chat_room_id, f"{role}_message_histories")
+        field = f"{ChatRoles.get_name(role).lower()}_message_histories"
+        message_history_key = cls._generate_key(user_id, chat_room_id, field)
         message_history_json = orjson_dumps(message_history.__dict__)
         result = (
             await cache.redis.rpush(message_history_key, message_history_json)
@@ -288,10 +286,10 @@ class ChatGptCacheManager:
         cls,
         user_id: str,
         chat_room_id: str,
-        role: GptRoles | str,
+        role: ChatRoles,
     ) -> list[MessageHistory]:
-        role = GptRoles.get_name(role).lower()
-        key = cls._generate_key(user_id, chat_room_id, f"{role}_message_histories")
+        field = f"{ChatRoles.get_name(role).lower()}_message_histories"
+        key = cls._generate_key(user_id, chat_room_id, field)
         raw_message_histories = await cache.redis.lrange(key, 0, -1)
         if raw_message_histories is None:
             return []
@@ -302,12 +300,32 @@ class ChatGptCacheManager:
         cls,
         user_id: str,
         chat_room_id: str,
-        role: GptRoles | str,
+        role: ChatRoles,
     ) -> bool:
-        role = GptRoles.get_name(role).lower()
-        key = cls._generate_key(user_id, chat_room_id, f"{role}_message_histories")
-        result = await cache.redis.delete(key)
-        return bool(result)
+        field = f"{ChatRoles.get_name(role).lower()}_message_histories"
+        key: str = cls._generate_key(
+            user_id=user_id,
+            chat_room_id=chat_room_id,
+            field=field,
+        )
+        return bool(await cache.redis.delete(key))
+
+    @classmethod
+    async def delete_message_histories(
+        cls,
+        user_id: str,
+        chat_room_id: str,
+        roles: list[ChatRoles] | list[str],
+    ) -> bool:
+        keys: list[str] = [
+            cls._generate_key(
+                user_id=user_id,
+                chat_room_id=chat_room_id,
+                field=f"{ChatRoles.get_name(role).lower()}_message_histories",
+            )
+            for role in roles
+        ]
+        return bool(await cache.redis.delete(*keys))
 
     @classmethod
     async def set_message_history(
@@ -316,10 +334,10 @@ class ChatGptCacheManager:
         chat_room_id: str,
         message_history: MessageHistory,
         index: int,
-        role: GptRoles | str,
+        role: ChatRoles,
     ) -> bool:
-        role = GptRoles.get_name(role).lower()
-        key = cls._generate_key(user_id, chat_room_id, f"{role}_message_histories")
+        field = f"{ChatRoles.get_name(role).lower()}_message_histories"
+        key = cls._generate_key(user_id, chat_room_id, field)
         # value in redis is a list of message histories
         # set the last element of the list to the new message history
         result = await cache.redis.lset(key, index, orjson_dumps(message_history.__dict__))

@@ -3,76 +3,78 @@ from fastapi.testclient import TestClient
 import pytest
 from starlette.testclient import WebSocketTestSession
 from app.common.config import OPENAI_API_KEY
-from app.models.gpt_llms import LLMModels
-from app.models.gpt_models import GptRoles, MessageHistory, UserGptContext, UserGptProfile
+from app.models.llms import LLMModels
+from app.models.chat_models import ChatRoles, MessageHistory, UserChatContext, UserChatProfile
 from app.viewmodels.base_models import MessageFromWebsocket, MessageToWebsocket
 
 
 # @pytest.mark.skip
 @pytest.mark.asyncio
-async def test_chatgpt_redis(chatgpt_cache_manager):
+async def test_chat_redis(cache_manager):
     # set random context
     user_id: str = "test_user"
     test_chat_room_id: str = "test_chat_room"
-    role: GptRoles = GptRoles.USER
+    role: ChatRoles = ChatRoles.USER
     message: str = "test message"
-    default_context: UserGptContext = UserGptContext.construct_default(user_id=user_id, chat_room_id=test_chat_room_id)
-    new_context: UserGptContext = UserGptContext(
-        user_gpt_profile=UserGptProfile(user_id=user_id, chat_room_id=test_chat_room_id, user_role="test_user"),
-        gpt_model=LLMModels.gpt_4,
+    default_context: UserChatContext = UserChatContext.construct_default(
+        user_id=user_id, chat_room_id=test_chat_room_id
+    )
+    new_context: UserChatContext = UserChatContext(
+        user_chat_profile=UserChatProfile(user_id=user_id, chat_room_id=test_chat_room_id, user_role="test_user"),
+        llm_model=LLMModels.gpt_4,
     )
 
     # delete test chat room
-    await chatgpt_cache_manager.delete_chat_room(user_id=user_id, chat_room_id=test_chat_room_id)
+    await cache_manager.delete_chat_room(user_id=user_id, chat_room_id=test_chat_room_id)
 
     # create new context
-    await chatgpt_cache_manager.create_context(
-        user_gpt_context=new_context,
+    await cache_manager.create_context(
+        user_chat_context=new_context,
     )
     # read new context
     assert (
-        new_context.user_gpt_profile.chat_room_id
+        new_context.user_chat_profile.chat_room_id
         == (
-            await chatgpt_cache_manager.read_context(
+            await cache_manager.read_context(
                 user_id=user_id,
                 chat_room_id=test_chat_room_id,
             )
-        ).user_gpt_profile.chat_room_id
+        ).user_chat_profile.chat_room_id
     )
 
     # add new message to redis
     new_message: MessageHistory = MessageHistory(
         role=role.value, content=message, is_user=True, tokens=new_context.get_tokens_of(message)
     )
-    await chatgpt_cache_manager.append_message_history(
+    await cache_manager.append_message_history(
         user_id=user_id, chat_room_id=test_chat_room_id, role=role, message_history=new_message
     )
 
     # read message from redis
-    message_histories: list[MessageHistory] = await chatgpt_cache_manager.get_message_history(
+    message_histories: list[MessageHistory] = await cache_manager.get_message_history(
         user_id=user_id, chat_room_id=test_chat_room_id, role=role
     )
     assert message_histories == [new_message]
 
     # reset context and read context
-    await chatgpt_cache_manager.reset_context(user_id=user_id, chat_room_id=test_chat_room_id)
+    await cache_manager.reset_context(user_id=user_id, chat_room_id=test_chat_room_id)
     assert (
-        default_context.user_gpt_profile.chat_room_id
+        default_context.user_chat_profile.chat_room_id
         == (
-            await chatgpt_cache_manager.read_context(
+            await cache_manager.read_context(
                 user_id=user_id,
                 chat_room_id=test_chat_room_id,
             )
-        ).user_gpt_profile.chat_room_id
+        ).user_chat_profile.chat_room_id
     )
 
     # delete test chat room
-    await chatgpt_cache_manager.delete_chat_room(user_id=user_id, chat_room_id=test_chat_room_id)
+    await cache_manager.delete_chat_room(user_id=user_id, chat_room_id=test_chat_room_id)
 
 
 @pytest.mark.skipif(OPENAI_API_KEY is None, reason="OpenAI API Key is not set")
-def test_chatgpt_connection(websocket_app: TestClient, base_websocket_url: str):
-    with websocket_app.websocket_connect(f"{base_websocket_url}/ws/chatgpt/{OPENAI_API_KEY}") as ws_client:
+def test_chat_connection(websocket_app: TestClient, base_websocket_url: str):
+    with websocket_app.websocket_connect(f"{base_websocket_url}/ws/chat/{OPENAI_API_KEY}") as ws_client:
         assert isinstance(ws_client, WebSocketTestSession)
 
         client_received: MessageToWebsocket = MessageToWebsocket.parse_raw(ws_client.receive_text())
@@ -93,10 +95,10 @@ def test_chatgpt_connection(websocket_app: TestClient, base_websocket_url: str):
 
 
 @pytest.mark.skipif(OPENAI_API_KEY is None, reason="OpenAI API Key is not set")
-def test_chatgpt_conversation(websocket_app: TestClient, base_websocket_url: str, test_logger):
+def test_chat_conversation(websocket_app: TestClient, base_websocket_url: str, test_logger):
     # parameters
     timeout: int = 10
-    with websocket_app.websocket_connect(f"{base_websocket_url}/ws/chatgpt/{OPENAI_API_KEY}") as ws_client:
+    with websocket_app.websocket_connect(f"{base_websocket_url}/ws/chat/{OPENAI_API_KEY}") as ws_client:
         assert isinstance(ws_client, WebSocketTestSession)
         client_received: MessageToWebsocket = MessageToWebsocket.parse_raw(ws_client.receive_text())
         assert client_received.init

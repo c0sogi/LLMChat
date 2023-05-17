@@ -75730,7 +75730,7 @@ i.um()
 A.avu(n,i,t.QZ)}}
 A.Mj.prototype={
 J(a){var s=A.Ck(B.L,null)
-return new A.yI(B.oi,A.j(["/home",new A.ab0()],t.N,t.Ab),"Chat with GPT",s,B.y1,!1,new A.Zt(),null)}}
+return new A.yI(B.oi,A.j(["/home",new A.ab0()],t.N,t.Ab),"LLMChat",s,B.y1,!1,new A.Zt(),null)}}
 A.ab0.prototype={
 $1(a){return B.oi},
 $S:460}
@@ -75747,7 +75747,7 @@ var $async$wS=A.N(function(b,c){if(b===1)return A.J(c,r)
 while(true)switch(s){case 0:p=q.d
 if(p==null)p=q.d=new A.ajH(new A.a_Z(q),new A.a0_(q),new A.a00(q),new A.a01(q))
 s=2
-return A.I(p.rw("ws://localhost:8001/ws/chatgpt/"+a),$async$wS)
+return A.I(p.rw("ws://localhost:8001/ws/chat/"+a),$async$wS)
 case 2:return A.K(null,r)}})
 return A.L($async$wS,r)},
 js(){var s=0,r=A.M(t.H),q=this,p
@@ -76665,7 +76665,7 @@ A.a16.prototype={
 $0(){var s=0,r=A.M(t.H),q,p=this
 var $async$$0=A.N(function(a,b){if(a===1)return A.J(b,r)
 while(true)switch(s){case 0:s=3
-return A.I(p.a.ko("ChatGPT API Key"),$async$$0)
+return A.I(p.a.ko("API Key"),$async$$0)
 case 3:q=b
 s=1
 break
@@ -84823,7 +84823,7 @@ B.mt=new A.Hl(!1,127)
 B.mu=new A.Hm(127)
 B.mv=new A.r7(1,"assertive")
 B.yN=new A.kF("assets/images/ai_profile.png",null,null)
-B.yO=new A.kF("assets/images/gpt_profile.png",null,null)
+B.yO=new A.kF("assets/images/openai_profile.png",null,null)
 B.yP=new A.kF("assets/images/vicuna_profile.jpg",null,null)
 B.cg=A.b(s([]),t.s)
 B.j=new A.v_(1,"downstream")

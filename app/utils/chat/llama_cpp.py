@@ -4,17 +4,17 @@ from typing import TYPE_CHECKING, Generator
 from langchain import LlamaCpp
 from llama_cpp import Llama, LlamaCache
 
-from app.errors.gpt_exceptions import (
-    GptBreakException,
-    GptContinueException,
-    GptLengthException,
-    GptTextGenerationException,
+from app.errors.chat_exceptions import (
+    ChatBreakException,
+    ChatContinueException,
+    ChatLengthException,
+    ChatTextGenerationException,
 )
-from app.utils.chatgpt.chatgpt_config import ChatGPTConfig
+from app.utils.chat.chat_config import ChatConfig
 
 if TYPE_CHECKING:
-    from app.models.gpt_llms import LlamaCppModel
-    from app.models.gpt_models import UserGptContext
+    from app.models.llms import LlamaCppModel
+    from app.models.chat_models import UserChatContext
 
 
 def can_avoid_in_buffer(text_buffer: str, text: str, avoids: list[str]) -> bool:
@@ -65,15 +65,15 @@ def llama_cpp_generation(
     prompt: str,
     m_queue,  # multiprocessing.managers.AutoProxy[Queue]
     m_done,  # multiprocessing.managers.EventProxy
-    user_gpt_context: "UserGptContext",
+    user_chat_context: "UserChatContext",
     is_fake: bool = False,
     use_client_only: bool = True,
 ) -> None:
     m_done.clear()
     blank: str = "\u200b"
     avoids: list[str] = get_stops(
-        user_gpt_context.user_gpt_profile.user_role + ":",
-    ) + get_stops(user_gpt_context.user_gpt_profile.gpt_role + ":")
+        user_chat_context.user_chat_profile.user_role + ":",
+    ) + get_stops(user_chat_context.user_chat_profile.ai_role + ":")
     llm = load_llama(llama_cpp_model)
     llm_client: Llama = llm.client
     llm_client.verbose = bool(llm.echo)
@@ -88,21 +88,23 @@ def llama_cpp_generation(
             generator = llm_client.create_completion(  # type: ignore
                 prompt=prompt,
                 suffix=llm.suffix,
-                max_tokens=min(user_gpt_context.left_tokens, user_gpt_context.gpt_model.value.max_tokens_per_request),
-                temperature=user_gpt_context.user_gpt_profile.temperature,
-                top_p=user_gpt_context.user_gpt_profile.top_p,
+                max_tokens=min(user_chat_context.left_tokens, user_chat_context.llm_model.value.max_tokens_per_request),
+                temperature=user_chat_context.user_chat_profile.temperature,
+                top_p=user_chat_context.user_chat_profile.top_p,
                 logprobs=llm.logprobs,
                 echo=bool(llm.echo),
                 stop=llm.stop + avoids if llm.stop is not None else avoids,
-                repeat_penalty=user_gpt_context.user_gpt_profile.frequency_penalty,
+                repeat_penalty=user_chat_context.user_chat_profile.frequency_penalty,
                 top_k=40,
                 stream=True,
             )
 
         else:
-            llm.temperature = user_gpt_context.user_gpt_profile.temperature
-            llm.top_p = user_gpt_context.user_gpt_profile.top_p
-            llm.max_tokens = min(user_gpt_context.left_tokens, user_gpt_context.gpt_model.value.max_tokens_per_request)
+            llm.temperature = user_chat_context.user_chat_profile.temperature
+            llm.top_p = user_chat_context.user_chat_profile.top_p
+            llm.max_tokens = min(
+                user_chat_context.left_tokens, user_chat_context.llm_model.value.max_tokens_per_request
+            )
             generator = (
                 llm.stream(prompt=prompt, stop=llm.stop + avoids if llm.stop is not None else avoids)
                 if not is_fake
@@ -115,7 +117,7 @@ def llama_cpp_generation(
                 print(prompt, end="")
             for generation in generator:
                 if m_done.is_set() or retry_count > 10:
-                    m_queue.put_nowait(GptTextGenerationException(msg="Max retry count reached"))
+                    m_queue.put_nowait(ChatTextGenerationException(msg="Max retry count reached"))
                     m_done.set()
                     return  # stop generating if main process requests to stop
                 finish_reason: str | None = generation["choices"][0]["finish_reason"]  # type: ignore
@@ -129,22 +131,22 @@ def llama_cpp_generation(
                 if llm.echo:
                     print(text, end="")  # type: ignore
                 if finish_reason == "length":
-                    raise GptLengthException(
+                    raise ChatLengthException(
                         msg="Incomplete model output due to max_tokens parameter or token limit"
                     )  # raise exception for token limit
                 content_buffer += text
                 m_queue.put(text)
             if content_buffer.replace(blank, "").strip() == "":
                 print("[LLAMA CPP] Empty model output")
-                raise GptContinueException(msg="Empty model output")  # raise exception for empty output
-        except GptLengthException:
+                raise ChatContinueException(msg="Empty model output")  # raise exception for empty output
+        except ChatLengthException:
             prompt += content_buffer
-            deleted_histories += user_gpt_context.ensure_token_not_exceed()
-            deleted_histories += user_gpt_context.clear_tokens(tokens_to_remove=ChatGPTConfig.extra_token_margin)
+            deleted_histories += user_chat_context.ensure_token_not_exceed()
+            deleted_histories += user_chat_context.clear_tokens(tokens_to_remove=ChatConfig.extra_token_margin)
             continue
-        except GptBreakException:
+        except ChatBreakException:
             break
-        except GptContinueException:
+        except ChatContinueException:
             continue
         except Exception as e:
             m_queue.put_nowait(e)
@@ -153,8 +155,8 @@ def llama_cpp_generation(
         else:
             break
 
-    # if content_buffer starts with "user_gpt_context.gpt_profile.gpt_role: " then remove it
-    prefix_to_remove: str = f"{user_gpt_context.user_gpt_profile.gpt_role}: "
+    # if content_buffer starts with "user_chat_context.chat_profile.ai_role: " then remove it
+    prefix_to_remove: str = f"{user_chat_context.user_chat_profile.ai_role}: "
     if content_buffer.startswith(prefix_to_remove):
         content_buffer = content_buffer[len(prefix_to_remove) :]  # noqa: E203
     m_queue.put(
@@ -203,20 +205,20 @@ def get_llama(llama_cpp_model: "LlamaCppModel") -> LlamaCpp:
 
 
 if __name__ == "__main__":
-    from app.models.gpt_llms import LLMModels
-    from app.models.gpt_models import UserGptContext  # noqa: F811
+    from app.models.llms import LLMModels
+    from app.models.chat_models import UserChatContext  # noqa: F811
     from app.dependencies import process_manager
 
     m_queue = process_manager.Queue()
     m_done = process_manager.Event()
-    llama_cpp_model: "LlamaCppModel" = LLMModels.vicuna_uncensored.value
+    llama_cpp_model: "LlamaCppModel" = LLMModels.vicunaunc.value
     llm = get_llama(llama_cpp_model)
     llama_cpp_generation(
         llama_cpp_model=llama_cpp_model,
         prompt="test",
         m_queue=m_queue,
         m_done=m_done,
-        user_gpt_context=UserGptContext.construct_default(user_id="test_user_id", chat_room_id="test_chat_room_id"),
+        user_chat_context=UserChatContext.construct_default(user_id="test_user_id", chat_room_id="test_chat_room_id"),
     )
 
     # if can_avoid_in_buffer(text_buffer, text, avoids):

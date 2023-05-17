@@ -1,11 +1,11 @@
 {
-    "name": "ChatGPT App",
-    "short_name": "ChatGPT",
+    "name": "LLMChat",
+    "short_name": "LLMChat",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "Chat With GPT.",
+    "description": "Seamless chat experience",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

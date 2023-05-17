@@ -12,7 +12,7 @@ from app.dependencies import (
     user_dependency,
 )
 from app.utils.logger import api_logger
-from app.utils.chatgpt.chatgpt_cache_manager import ChatGptCacheManager
+from app.utils.chat.cache_manager import CacheManager
 from app.utils.js_initializer import js_url_initializer
 from app.dependencies import process_pool_executor
 
@@ -49,7 +49,7 @@ def create_app(config: Config) -> FastAPI:
     )
 
     # Routers
-    new_app.mount("/chatgpt", StaticFiles(directory="./app/web", html=True))
+    new_app.mount("/chat", StaticFiles(directory="./app/web", html=True))
     new_app.include_router(index.router, tags=["index"])
     new_app.include_router(websocket.router, prefix="/ws", tags=["websocket"])
     new_app.include_router(
@@ -79,15 +79,15 @@ def create_app(config: Config) -> FastAPI:
         if cache.redis is None:
             raise ConnectionError("Redis is not connected yet!")
         if cache.is_initiated and await cache.redis.ping():
-            await ChatGptCacheManager.delete_user(f"testaccount@{config.host_main}")
+            await CacheManager.delete_user(f"testaccount@{config.host_main}")
             api_logger.critical("Redis CACHE connected!")
         else:
             api_logger.critical("Redis CACHE connection failed!")
 
     @new_app.on_event("shutdown")
     async def shutdown():
-        process_pool_executor.shutdown()
-        # await ChatGptCacheManager.delete_user(f"testaccount@{HOST_MAIN}")
+        process_pool_executor.shutdown(cancel_futures=True, wait=True)
+        # await CacheManager.delete_user(f"testaccount@{HOST_MAIN}")
         await db.close()
         await cache.close()
         api_logger.critical("DB & CACHE connection closed!")

@@ -4,14 +4,14 @@ from app.database.crud import api_keys
 from app.database.schemas.auth import Users
 from app.errors.api_exceptions import Responses_400
 from app.utils.logger import api_logger
-from app.utils.chatgpt.chatgpt_stream_manager import ChatGptStreamManager
+from app.utils.chat.stream_manager import ChatStreamManager
 from app.common.config import API_ENV
 
 router = APIRouter()
 
 
-@router.websocket("/chatgpt/{api_key}")
-async def ws_chatgpt(websocket: WebSocket, api_key: str):
+@router.websocket("/chat/{api_key}")
+async def ws_chat(websocket: WebSocket, api_key: str):
     if OPENAI_API_KEY is None:
         raise Responses_400.not_supported_feature
     try:
@@ -24,7 +24,7 @@ async def ws_chatgpt(websocket: WebSocket, api_key: str):
         except Exception as exception:
             api_logger.error(exception, exc_info=True)
             return
-        await ChatGptStreamManager.begin_chat(
+        await ChatStreamManager.begin_chat(
             websocket=websocket,
             user_id=user.email,
         )

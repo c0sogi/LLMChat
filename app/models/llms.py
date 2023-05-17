@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Optional
 from app.common.config import OPENAI_API_KEY
 
-from app.models.gpt_tokenizers import BaseTokenizer, LlamaTokenizer, OpenAITokenizer
+from app.models.llm_tokenizers import BaseTokenizer, LlamaTokenizer, OpenAITokenizer
 
 
 @dataclass
@@ -23,12 +23,13 @@ class LlamaCppModel(LLMModel):
     n_parts: int = (
         -1
     )  # Number of parts to split the model into. If -1, the number of parts is automatically determined.
+    n_gpu_layers: int = 32  # Number of layers to keep on the GPU. If 0, all layers are kept on the GPU.
     seed: int = -1  # Seed. If -1, a random seed is used.
     f16_kv: bool = True  # Use half-precision for key/value cache.
     logits_all: bool = False  # Return logits for all tokens, not just the last token.
     vocab_only: bool = False  # Only load the vocabulary, no weights.
     use_mlock: bool = False  # Force system to keep model in RAM.
-    n_batch: int = 8  # Number of tokens to process in parallel. Should be a number between 1 and n_ctx.
+    n_batch: int = 512  # Number of tokens to process in parallel. Should be a number between 1 and n_ctx.
     last_n_tokens_size: int = 64  # The number of tokens to look back when applying the repeat_penalty.
     use_mmap: bool = True  # Whether to use memory mapping for the model.
     streaming: bool = True  # Whether to stream the results, token by token.
@@ -107,16 +108,16 @@ class LLMModels(Enum):  # gpt models for openai api
         token_margin=8,
         tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
         model_path="./llama_models/ggml/wizard-vicuna-13B.ggml.q5_1.bin",
-        description="""The following is a friendly conversation between a {user} and an {gpt}. The {gpt} is talkative and provides lots of specific details from its context. If the {gpt} does not know the answer to a question, it truthfully says it does not know:\n""",
+        description="""The following is a friendly conversation between a {user} and an {ai}. The {ai} is talkative and provides lots of specific details from its context. If the {ai} does not know the answer to a question, it truthfully says it does not know:\n""",
     )
-    vicuna_uncensored = LlamaCppModel(
-        name="wizard-vicuna-7B-uncensored-ggml-q4-2",
+    vicunaunc = LlamaCppModel(
+        name="Wizard-Vicuna-13B-Uncensored-GGML",
         max_total_tokens=2048,  # context tokens (n_ctx)
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
         tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
-        model_path="./llama_models/ggml/WizardLM-7B-uncensored.ggml.q4_2.bin",
-        description="""The following is a conversation between a {user} and an {gpt}. The {gpt} is talkative and provides lots of specific details from its context. If the {gpt} does not know the answer to a question, it truthfully says it does not know:\n""",
+        model_path="./llama_models/ggml/ggml-model-q4_1.bin",
+        description="""The following is a conversation between a {user} and an {ai}. The {ai} is talkative and provides lots of specific details from its context. If the {ai} does not know the answer to a question, it truthfully says it does not know:\n""",
     )
     gpt4x = LlamaCppModel(
         name="gpt4-x-vicuna-13B-GGML",
@@ -125,5 +126,24 @@ class LLMModels(Enum):  # gpt models for openai api
         token_margin=8,
         tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
         model_path="./llama_models/ggml/gpt4-x-vicuna-13B.ggml.q4_0.bin",
-        description="""The following is a conversation between a {user} and an {gpt}. The {gpt} is talkative and provides lots of specific details from its context. If the {gpt} does not know the answer to a question, it truthfully says it does not know:\n""",
+        description="""The following is a conversation between a {user} and an {ai}. The {ai} is talkative and provides lots of specific details from its context. If the {ai} does not know the answer to a question, it truthfully says it does not know:\n""",
+    )
+    wizardlmunc = LlamaCppModel(
+        name="WizardLM-13B-Uncensored-Q5_1-GGML",
+        max_total_tokens=2048,  # context tokens (n_ctx)
+        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
+        token_margin=8,
+        tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
+        model_path="./llama_models/ggml/WizardML-Unc-13b-Q5_1.bin",
+        description="""The following is a conversation between a {user} and an {ai}. The {ai} is talkative and provides lots of specific details from its context. If the {ai} does not know the answer to a question, it truthfully says it does not know:\n""",
+    )
+    wizardmega = LlamaCppModel(
+        name="wizard-mega-13B-GGML",
+        max_total_tokens=2048,  # context tokens (n_ctx)
+        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
+        token_margin=8,
+        tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
+        model_path="./llama_models/ggml/wizard-mega-13B.ggml.q4_0.bin",
+        stop=field(default_factory=lambda: ["\u200b", "</s>"]),
+        description="""The following is a conversation between a {user} and an {ai}. The {ai} is talkative and provides lots of specific details from its context. If the {ai} does not know the answer to a question, it truthfully says it does not know:\n""",
     )

@@ -1,8 +1,8 @@
 from typing import AsyncGenerator, AsyncIterator, Generator, Iterator
 from fastapi import WebSocket
 
-from app.utils.chatgpt.chatgpt_buffer import BufferedUserContext
-from app.utils.chatgpt.chatgpt_generation import (
+from app.utils.chat.buffer import BufferedUserContext
+from app.utils.chat.text_generation import (
     message_history_organizer,
 )
 from app.viewmodels.base_models import InitMessage, MessageToWebsocket
@@ -18,7 +18,7 @@ class SendToWebsocket:
     ) -> None:
         """Send initial message to websocket, providing current state of user"""
         previous_chats = message_history_organizer(
-            user_gpt_context=buffer.current_user_gpt_context,
+            user_chat_context=buffer.current_user_chat_context,
             send_to_stream=False,
         )
         assert isinstance(previous_chats, list)
@@ -55,8 +55,9 @@ class SendToWebsocket:
             ).dict()
         )
 
-    @staticmethod
+    @classmethod
     async def stream(
+        cls,
         buffer: BufferedUserContext,
         stream: AsyncGenerator | Generator | AsyncIterator | Iterator,
         finish: bool = True,
@@ -81,7 +82,7 @@ class SendToWebsocket:
                 for delta in stream:  # stream from local
                     if buffer.done.is_set():
                         buffer.done.clear()
-                        raise InterruptedError("Stream was interrupted by user.")
+                        raise InterruptedError(final_response + stream_buffer + delta)
                     stream_buffer += delta
                     iteration += 1
                     if iteration % chunk_size == 0:
@@ -99,7 +100,7 @@ class SendToWebsocket:
                 async for delta in stream:  # stream from api
                     if buffer.done.is_set():
                         buffer.done.clear()
-                        raise InterruptedError("Stream was interrupted by user.")
+                        raise InterruptedError(final_response + stream_buffer)
                     stream_buffer += delta
                     iteration += 1
                     if iteration % chunk_size == 0:
@@ -116,21 +117,21 @@ class SendToWebsocket:
             else:
                 raise TypeError("Stream type is not AsyncGenerator or Generator.")
         except InterruptedError as e:
-            await buffer.websocket.send_json(
-                MessageToWebsocket(
-                    msg=stream_buffer,
-                    finish=True,
-                    chat_room_id=buffer.current_chat_room_id,
-                    is_user=is_user,
-                ).dict()
+            await cls.message(
+                websocket=buffer.websocket,
+                msg=stream_buffer,
+                chat_room_id=buffer.current_chat_room_id,
+                finish=True,
+                is_user=is_user,
+                model_name=model_name,
             )
             raise e
-        await buffer.websocket.send_json(
-            MessageToWebsocket(
-                msg=stream_buffer,
-                finish=True if finish else False,
-                chat_room_id=buffer.current_chat_room_id,
-                is_user=is_user,
-            ).dict()
+        await cls.message(
+            websocket=buffer.websocket,
+            msg=stream_buffer,
+            chat_room_id=buffer.current_chat_room_id,
+            finish=True if finish else False,
+            is_user=is_user,
+            model_name=model_name,
         )
         return final_response

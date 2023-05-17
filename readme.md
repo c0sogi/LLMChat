@@ -1,7 +1,7 @@
-# ChatGPT Web App Server 🎉
+# LLMChat 🎉
 
-👋 Welcome to the ChatGPT Web App Server repository, a full-stack implementation of an API server built with Python FastAPI, and a beautiful frontend powered by Flutter. 
-💬 This project is designed to deliver a seamless chat experience with the advanced GPT-3 model. 
+👋 Welcome to the LLMChat repository, a full-stack implementation of an API server built with Python FastAPI, and a beautiful frontend powered by Flutter. 
+💬 This project is designed to deliver a seamless chat experience with the advanced ChatGPT and other LLM models.
 🔝 Offering a modern infrastructure that can be easily extended when GPT-4's Multimodal and Plugin features become available. 
 🚀 Enjoy your stay!
 
@@ -12,7 +12,7 @@
 > ![Overall UI](app/contents/ui_demo.png)
 ---
 + ### Embedding PDF file
-    You can embed PDF file by clicking `Embed document` on the bottom left. In a few seconds, text contents of PDF will be converted to vectors and embedded to Redis cache. You can search in  similar documents by entering command `/search <query>` on the chat.
+    You can embed PDF file by clicking `Embed document` on the bottom left. In a few seconds, text contents of PDF will be converted to vectors and embedded to Redis cache. You can search in  similar documents by entering command `/query <query>` on the chat.
 > ![Switching Chat](app/contents/embed_demo.png)
 ---
 + ### Change your chat title
@@ -29,8 +29,8 @@
 - **Flutter** - `Webapp` frontend with beautiful UI and rich set of customizable widgets.
 - **ChatGPT** - Seamless integration with the `OpenAI API` for text generation and message management.
 - **LLAMA** - Suporting LocalLLM, `LlamaCpp`, with multiprocessing. 
-- **WebSocket Connection** - `Real-time`, two-way communication with the ChatGPT model, with Flutter frontend webapp.
-- **Vectorstore** - Using `Redis` and `Langchain`, store and retrieve vector embeddings for similarity search. It will help ChatGPT to generate more relevant responses.
+- **WebSocket Connection** - `Real-time`, two-way communication with the ChatGPT, and other LLM models, with Flutter frontend webapp.
+- **Vectorstore** - Using `Redis` and `Langchain`, store and retrieve vector embeddings for similarity search. It will help AI to generate more relevant responses.
 - **Concurrency** - Asynchronous programming with `async`/`await` syntax for concurrency and parallelism.
 - **Security** - Token validation and authentication to keep API secure.
 - **Database** - Manage database connections and execute `MySQL` queries. Easily perform Create, Read, Update, and Delete actions, with `sqlalchemy.asyncio`
@@ -38,18 +38,18 @@
 
 ## Getting Started / Installation
 
-To set up the ChatGPT Web App Server on your local machine, follow these simple steps:
+To set up the on your local machine, follow these simple steps:
 
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/c0sogi/chatgpt-webapp-server.git
+git clone https://github.com/c0sogi/LLMChat.git
 ```
 
 2. Change to the project directory:
 
 ```bash
-cd chatgpt-webapp-server
+cd LLMChat
 ```
 
 3. Create `.env` file and setup for fastapi server, referring to `.env-sample` file. Enter Database connection to create, OpenAI API Key, and other necessary configurations. Optionals are not required, just leave them blank.
@@ -66,10 +66,10 @@ docker-compose -f docker-compose-local.yaml up -d
 docker-compose -f docker-compose-local.yaml down
 ```
 
-6. Now you can access the server at `http://localhost:8000/docs` and the database at `db:3306` or `cache:6379`. You can also access the ChatGPT Web App at `http://localhost:8000/chatgpt`.
+6. Now you can access the server at `http://localhost:8000/docs` and the database at `db:3306` or `cache:6379`. You can also access the app at `http://localhost:8000/chat`.
 
 
-Your ChatGPT Web App Server should now be up and running, ready to provide an engaging chat experience!
+Your Server should now be up and running, ready to provide an engaging chat experience!
 
 # License
 
@@ -90,38 +90,38 @@ This project is licensed under the [MIT License](LICENSE), which allows for free
 👨‍💻 It uses `Dart`, a modern object-oriented programming language, and provides a rich set of customizable widgets that can adapt to any design.
 
 
-# ChatGPT WebSocket Connection
+# WebSocket Connection
 
-You can access `ChatGPT` or `LlamaCpp` through `WebSocket` connection using two modules: `app/routers/websocket` and `app/utils/chatgpt/chatgpt_stream_manager`. These modules facilitate the communication between the `Flutter` client and the ChatGPT model through a WebSocket. With the WebSocket, you can establish a real-time, two-way communication channel to interact with the LLM.
+You can access `ChatGPT` or `LlamaCpp` through `WebSocket` connection using two modules: `app/routers/websocket` and `app/utils/chat/chat_stream_manager`. These modules facilitate the communication between the `Flutter` client and the Chat model through a WebSocket. With the WebSocket, you can establish a real-time, two-way communication channel to interact with the LLM.
 
 ## Usage
 
-To start a ChatGPT conversation, connect to the WebSocket route `/ws/chatgpt/{api_key}` with a valid API key registered in the database. Note that this API key is not the same as OpenAI API key, but only available for your server to validate the user. Once connected, you can send messages and commands to interact with the ChatGPT model. The WebSocket will send back GPT's responses in real-time. This websocket connection is established via Flutter app, which can accessed with endpoint `/chatgpt`.
+To start a conversation, connect to the WebSocket route `/ws/chat/{api_key}` with a valid API key registered in the database. Note that this API key is not the same as OpenAI API key, but only available for your server to validate the user. Once connected, you can send messages and commands to interact with the LLM model. The WebSocket will send back chat responses in real-time. This websocket connection is established via Flutter app, which can accessed with endpoint `/chat`.
 
 ## websocket.py
 
-`websocket.py` is responsible for setting up a WebSocket connection and handling user authentication. It defines the WebSocket route `/chatgpt/{api_key}` that accepts a WebSocket and an API key as parameters.
+`websocket.py` is responsible for setting up a WebSocket connection and handling user authentication. It defines the WebSocket route `/chat/{api_key}` that accepts a WebSocket and an API key as parameters.
 
-When a client connects to the WebSocket, it first checks the API key to authenticate the user. If the API key is valid, the `begin_chat()` function is called from the `chatgpt_stream_manager.py` module to start the ChatGPT conversation.
+When a client connects to the WebSocket, it first checks the API key to authenticate the user. If the API key is valid, the `begin_chat()` function is called from the `stream_manager.py` module to start the conversation.
 
 In case of an unregistered API key or an unexpected error, an appropriate message is sent to the client and the connection is closed.
 
 ```python
-@router.websocket("/chatgpt/{api_key}")
-async def ws_chatgpt(websocket: WebSocket, api_key: str):
+@router.websocket("/chat/{api_key}")
+async def ws_chat(websocket: WebSocket, api_key: str):
     ...
 ```
 
-## chatgpt_stream_manager.py
+## stream_manager.py
 
-`chatgpt_stream_manager.py` is responsible for managing the conversation and handling user messages. It defines the `begin_chat()` function, which takes a WebSocket, a user ID as parameters.
+`stream_manager.py` is responsible for managing the conversation and handling user messages. It defines the `begin_chat()` function, which takes a WebSocket, a user ID as parameters.
 
-The function first initializes the user's GPT context from the cache manager. Then, it sends the initial message history to the client through the WebSocket.
+The function first initializes the user's chat context from the cache manager. Then, it sends the initial message history to the client through the WebSocket.
 
 The conversation continues in a loop until the connection is closed. During the conversation, the user's messages are processed and GPT's responses are generated accordingly.
 
 ```python
-class ChatGptStreamManager:
+class ChatStreamManager:
     @classmethod
     async def begin_chat(cls, websocket: WebSocket, user_id: str) -> None:
     ...
@@ -143,24 +143,24 @@ class SendToWebsocket:
         ...
 ```
 
-### Handling GPT Responses
+### Handling AI Responses
 
-The `MessageHandler` class also handles GPT responses. The `gpt()` method sends the GPT response to the WebSocket. If translation is enabled, the response is translated using the Google Translate API before sending it to the client.
+The `MessageHandler` class also handles AI responses. The `ai()` method sends the AI response to the WebSocket. If translation is enabled, the response is translated using the Google Translate API before sending it to the client.
 
 ```python
 class MessageHandler:
     ...
     @staticmethod
-    async def gpt(...):
+    async def ai(...):
         ...
 ```
 
 ### Handling Custom Commands
 
-User messages are processed using the `HandleMessage` class. If the message starts with `/`, such as `/YOUR_CALLBACK_NAME`. it is treated as a command and the appropriate command response is generated. Otherwise, the user's message is processed and sent to the GPT model for generating a response.
+User messages are processed using the `HandleMessage` class. If the message starts with `/`, such as `/YOUR_CALLBACK_NAME`. it is treated as a command and the appropriate command response is generated. Otherwise, the user's message is processed and sent to the LLM model for generating a response.
 
 
-Commands are handled using the `ChatGptCommands` class. It executes the corresponding callback function depending on the command. You can add new commands by simply adding callback in `ChatGptCommands` class from `app.utils.chatgpt.chatgpt_commands`.
+Commands are handled using the `ChatCommands` class. It executes the corresponding callback function depending on the command. You can add new commands by simply adding callback in `ChatCommands` class from `app.utils.chat.chat_commands`.
 
 
 # 🌟Vector Embedding
@@ -190,11 +190,11 @@ async def embed(text_to_embed: str, /) -> str:
 
 ### 2. Querying embedded data using the `/query` command
 
-When the user enters the `/query <query>` command, the `asimilarity_search` function is used to find up to three results with the highest vector similarity to the embedded data in the Redis vectorstore. These results are then stored in the context of the chatlist, which helps ChatGPT answer the query by referring to this data in the future.
+When the user enters the `/query <query>` command, the `asimilarity_search` function is used to find up to three results with the highest vector similarity to the embedded data in the Redis vectorstore. These results are then stored in the context of the chatlist, which helps AI answer the query by referring to this data in the future.
 
 ```python
 @staticmethod
-@CommandResponse.handle_gpt
+@CommandResponse.handle_ai
 async def query(query: str, /, buffer: BufferedUserContext) -> None:
     """Query from redis vectorstore\n
     /query <query>"""
@@ -219,20 +219,20 @@ async def embed_file_to_vectorstore(cls, file: bytes, filename: str) -> str:
         return "Can't embed this type of file. Try another file."
 ```
 
-### 4. `chatgpt_commands.py` functionality
+### 4. `commands.py` functionality
 
-In the `chatgpt_commands.py` file, there are several important components:
+In the `commands.py` file, there are several important components:
 
-- `CommandResponse`: This class is used to set a decorator on the command method to specify the next action. It helps to define various response types, such as sending a message and stopping, sending a message and continuing, handling user input, handling GPT responses, and more.
+- `CommandResponse`: This class is used to set a decorator on the command method to specify the next action. It helps to define various response types, such as sending a message and stopping, sending a message and continuing, handling user input, handling AI responses, and more.
 - `command_handler`: This function is responsible for performing a command callback method based on the text entered by the user.
 - `arguments_provider`: This function automatically supplies the arguments required by the command method based on the annotation type of the command method.
 
 
 # 📚 LLM Models
 
-This repository contains different GPT LLM models, defined in `gpt_llms.py`. There are two main models: `LlamaCppModel` and `OpenAIModel`, inheriting from the base class `LLMModel`. Both models are designed for text generation. The `LLMModels` enum is a collection of these LLMs.
+This repository contains different GPT LLM models, defined in `llms.py`. There are two main models: `LlamaCppModel` and `OpenAIModel`, inheriting from the base class `LLMModel`. Both models are designed for text generation. The `LLMModels` enum is a collection of these LLMs.
 
-There also exists module `chatgpt_generation.py` that provides the functionality needed to integrate the OpenAI API with the ChatGPT chatbot service. It handles the process of organizing message history, generating text from the OpenAI API, and managing the asynchronous streaming of generated text.
+There also exists module `text_generation.py` that provides the functionality needed to integrate the OpenAI API with the chat. It handles the process of organizing message history, generating text from the OpenAI API, and managing the asynchronous streaming of generated text.
 
 
 All operations are handled asynchronously🚀 and can be used by multiple users at the same time. In particular, the `LlamaCppModel` allows for parallel processing using multiprocessing and queues.
@@ -240,7 +240,7 @@ All operations are handled asynchronously🚀 and can be used by multiple users 
 
 ## 📌 Usage
 
-The default LLM model used by the user via `UserGptContext.construct_default` is `gpt-3.5-turbo`. You can change the default for that function. To change the LLM model via command, type `/changemodel <model>` in the chat. The `<model>` defined here should correspond to the member defined in `LLMModels`.
+The default LLM model used by the user via `UserChatContext.construct_default` is `gpt-3.5-turbo`. You can change the default for that function. To change the LLM model via command, type `/changemodel <model>` in the chat. The `<model>` defined here should correspond to the member defined in `LLMModels`.
 
 ## 📖 Model Descriptions
 
@@ -250,7 +250,7 @@ The default LLM model used by the user via `UserGptContext.construct_default` is
 
 ### 2️⃣ LlamaCppModel
 
-`LlamaCppModel` reads a locally stored LlamaCpp-compatible model and generates text in a new process. For example, it looks like `./llama_models/ggml/wizard-vicuna-13B.ggml.q5_1.bin`. You can download the required model from Huggingface. When generating text with this model, a processpool is created, and the Llama model is immediately cached in RAM. This allocation remains in memory until the processpool is forcibly terminated, such as by shutting down the server. By creating a new processpool and working in a different process, existing server processes are not blocked, and other users can generate text with the model simultaneously! More details are defined in `chatgpt_llama_cpp.py`.
+`LlamaCppModel` reads a locally stored LlamaCpp-compatible model and generates text in a new process. For example, it looks like `./llama_models/ggml/wizard-vicuna-13B.ggml.q5_1.bin`. You can download the required model from Huggingface. When generating text with this model, a processpool is created, and the Llama model is immediately cached in RAM. This allocation remains in memory until the processpool is forcibly terminated, such as by shutting down the server. By creating a new processpool and working in a different process, existing server processes are not blocked, and other users can generate text with the model simultaneously! More details are defined in `llama_cpp.py`.
 
 ## 📝 Handling Exceptions
 Handle exceptions that may occur during text generation:
@@ -258,11 +258,11 @@ For OpenAI API, the following handlers are defined as follows:
 ```python
 try:
     # Generate text from OpenAI API
-except GptLengthException:
+except ChatLengthException:
     # Handle token limit exceeded
-except GptContentFilterException:
+except ChatContentFilterException:
     # Handle content filter exception
-except GptConnectionException:
+except ChatConnectionException:
     # Handle connection error
 except httpx.TimeoutException:
     # Handle timeout exception
@@ -270,18 +270,18 @@ except Exception as exception:
     # Handle unexpected exceptions
 ```
 
-# Behind the ChatGPT WebSocket Connection...
+# Behind the WebSocket Connection...
 
-This project aims to create an API backend to enable the ChatGPT chatbot service. It utilizes a cache manager to store messages and user profiles in Redis, and a message manager to safely cache messages so that the number of tokens does not exceed an acceptable limit.
+This project aims to create an API backend to enable the large language model chatbot service. It utilizes a cache manager to store messages and user profiles in Redis, and a message manager to safely cache messages so that the number of tokens does not exceed an acceptable limit.
 
 ## Cache Manager
 
-The Cache Manager (`ChatGptCacheManager`) is responsible for handling user context information and message histories. It stores these data in Redis, allowing for easy retrieval and modification. The manager provides several methods to interact with the cache, such as:
+The Cache Manager (`CacheManager`) is responsible for handling user context information and message histories. It stores these data in Redis, allowing for easy retrieval and modification. The manager provides several methods to interact with the cache, such as:
 
-- `read_context`: Reads the user's GPT context from Redis.
-- `create_context`: Creates a new user GPT context in Redis.
-- `reset_context`: Resets the user's GPT context to default values.
-- `update_message_histories`: Updates the message histories for a specific role (user, GPT, or system).
+- `read_context`: Reads the user's chat context from Redis.
+- `create_context`: Creates a new user chat context in Redis.
+- `reset_context`: Resets the user's chat context to default values.
+- `update_message_histories`: Updates the message histories for a specific role (user, ai, or system).
 - `lpop_message_history` / `rpop_message_history`: Removes and returns the message history from the left or right end of the list.
 - `append_message_history`: Appends a message history to the end of the list.
 - `get_message_history`: Retrieves the message history for a specific role.
@@ -291,39 +291,39 @@ The Cache Manager (`ChatGptCacheManager`) is responsible for handling user conte
 
 ## Message Manager
 
-The Message Manager (`MessageManager`) ensures that the number of tokens in message histories does not exceed the specified limit. It safely handles adding, removing, and setting message histories in the user's GPT context while maintaining token limits. The manager provides several methods to interact with message histories, such as:
+The Message Manager (`MessageManager`) ensures that the number of tokens in message histories does not exceed the specified limit. It safely handles adding, removing, and setting message histories in the user's chat context while maintaining token limits. The manager provides several methods to interact with message histories, such as:
 
-- `add_message_history_safely`: Adds a message history to the user's GPT context, ensuring that the token limit is not exceeded.
+- `add_message_history_safely`: Adds a message history to the user's chat context, ensuring that the token limit is not exceeded.
 - `pop_message_history_safely`: Removes and returns the message history from the right end of the list while updating the token count.
-- `set_message_history_safely`: Sets a specific message history in the user's GPT context, updating the token count and ensuring that the token limit is not exceeded.
+- `set_message_history_safely`: Sets a specific message history in the user's chat context, updating the token count and ensuring that the token limit is not exceeded.
 
 ## Usage
 
 To use the cache manager and message manager in your project, import them as follows:
 
 ```python
-from app.utils.chatgpt.chatgpt_cache_manager import ChatGptCacheManager
-from app.utils.chatgpt.chatgpt_message_manager import MessageManager
+from app.utils.chat.cache_manager import CacheManager
+from app.utils.chat.message_manager import MessageManager
 ```
 
 Then, you can use their methods to interact with the Redis cache and manage message histories according to your requirements.
 
-For example, to create a new user GPT context:
+For example, to create a new user chat context:
 
 ```python
 user_id = "example@user.com"  # email format
 chat_room_id = "example_chat_room_id"  # usually the 32 characters from `uuid.uuid4().hex`
-default_context = UserGptContext.construct_default(user_id=user_id, chat_room_id=chat_room_id)
-await ChatGptCacheManager.create_context(user_gpt_context=default_context)
+default_context = UserChatContext.construct_default(user_id=user_id, chat_room_id=chat_room_id)
+await CacheManager.create_context(user_chat_context=default_context)
 ```
 
-To safely add a message history to the user's GPT context:
+To safely add a message history to the user's chat context:
 
 ```python
-user_gpt_context = await ChatGptCacheManager.read_context(user_id=user_id, chat_room_id=chat_room_id)
+user_chat_context = await CacheManager.read_context(user_id=user_id, chat_room_id=chat_room_id)
 content = "This is a sample message."
-role = "user"  # can be "user", "gpt", or "system", or use enum such as GptRoles.USER, GptRoles.GPT, GptRoles.SYSTEM
-await MessageManager.add_message_history_safely(user_gpt_context, content, role)
+role = ChatRoles.USER  # can be enum such as ChatRoles.USER, ChatRoles.AI, ChatRoles.SYSTEM
+await MessageManager.add_message_history_safely(user_chat_context, content, role)
 ```
 
 
@@ -562,7 +562,7 @@ from app.database.crud.api_keys import create_api_key, get_api_keys, update_api_
 
 async def main():
     # `user_id` is an integer index in the MySQL database, and `email` is user's actual name
-    # the email will be used as `user_id` in ChatGpt. Don't confuse with `user_id` in MySQL
+    # the email will be used as `user_id` in chat. Don't confuse with `user_id` in MySQL
 
     # Register a new user
     new_user = await register_new_user(email="test@test.com", hashed_password="...")

@@ -1,64 +1,64 @@
-class GptException(Exception):  # Base exception for gpt
+class ChatException(Exception):  # Base exception for chat
     def __init__(self, *, msg: str | None = None) -> None:
         self.msg = msg
         super().__init__()
 
 
-class GptConnectionException(GptException):
+class ChatConnectionException(ChatException):
     def __init__(self, *, msg: str | None = None) -> None:
         self.msg = msg
         super().__init__(msg=msg)
 
 
-class GptLengthException(GptException):
+class ChatLengthException(ChatException):
     def __init__(self, *, msg: str | None = None) -> None:
         self.msg = msg
         super().__init__(msg=msg)
 
 
-class GptContentFilterException(GptException):
+class ChatContentFilterException(ChatException):
     def __init__(self, *, msg: str | None = None) -> None:
         self.msg = msg
         super().__init__(msg=msg)
 
 
-class GptTooMuchTokenException(GptException):
+class ChatTooMuchTokenException(ChatException):
     def __init__(self, *, msg: str | None = None) -> None:
         self.msg = msg
         super().__init__(msg=msg)
 
 
-class GptTextGenerationException(GptException):
+class ChatTextGenerationException(ChatException):
     def __init__(self, *, msg: str | None = None) -> None:
         self.msg = msg
         super().__init__(msg=msg)
 
 
-class GptOtherException(GptException):
+class ChatOtherException(ChatException):
     def __init__(self, *, msg: str | None = None) -> None:
         self.msg = msg
         super().__init__(msg=msg)
 
 
-class GptModelNotImplementedException(GptException):
+class ChatModelNotImplementedException(ChatException):
     def __init__(self, *, msg: str | None = None) -> None:
         self.msg = msg
         super().__init__(msg=msg)
 
 
-class GptBreakException(GptException):
+class ChatBreakException(ChatException):
     def __init__(self, *, msg: str | None = None) -> None:
         self.msg = msg
         super().__init__(msg=msg)
 
 
-class GptContinueException(GptException):
+class ChatContinueException(ChatException):
     def __init__(self, *, msg: str | None = None) -> None:
         self.msg = msg
         super().__init__(msg=msg)
 
 
-class GptInterruptedException(GptException):
+class ChatInterruptedException(ChatException):
     def __init__(self, *, msg: str | None = None) -> None:
         self.msg = msg
         super().__init__(msg=msg)

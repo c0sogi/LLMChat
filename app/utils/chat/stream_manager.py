@@ -5,30 +5,30 @@ from orjson import JSONDecodeError
 from orjson import loads as orjson_loads
 from pydantic import ValidationError
 
-from app.errors.gpt_exceptions import (
-    GptException,
-    GptInterruptedException,
-    GptOtherException,
-    GptTextGenerationException,
-    GptTooMuchTokenException,
+from app.errors.chat_exceptions import (
+    ChatException,
+    ChatInterruptedException,
+    ChatOtherException,
+    ChatTextGenerationException,
+    ChatTooMuchTokenException,
 )
-from app.models.gpt_models import GptRoles
-from app.utils.chatgpt.chatgpt_buffer import BufferedUserContext
-from app.utils.chatgpt.chatgpt_cache_manager import ChatGptCacheManager
-from app.utils.chatgpt.chatgpt_commands import (
+from app.models.chat_models import ChatRoles
+from app.utils.chat.buffer import BufferedUserContext
+from app.utils.chat.cache_manager import CacheManager
+from app.utils.chat.chat_commands import (
     command_handler,
     create_new_chat_room,
     get_contexts_sorted_from_recent_to_past,
 )
-from app.utils.chatgpt.chatgpt_message_handler import MessageHandler
-from app.utils.chatgpt.chatgpt_message_manager import MessageManager
-from app.utils.chatgpt.chatgpt_vectorstore_manager import VectorStoreManager
-from app.utils.chatgpt.chatgpt_websocket_manager import SendToWebsocket
+from app.utils.chat.message_handler import MessageHandler
+from app.utils.chat.message_manager import MessageManager
+from app.utils.chat.vectorstore_manager import VectorStoreManager
+from app.utils.chat.websocket_manager import SendToWebsocket
 from app.utils.logger import api_logger
 from app.viewmodels.base_models import MessageFromWebsocket
 
 
-class ChatGptStreamManager:
+class ChatStreamManager:
     @classmethod
     async def begin_chat(cls, websocket: WebSocket, user_id: str) -> None:
         # initialize variables
@@ -37,7 +37,7 @@ class ChatGptStreamManager:
             websocket=websocket,
             sorted_ctxts=await get_contexts_sorted_from_recent_to_past(
                 user_id=user_id,
-                chat_room_ids=await ChatGptCacheManager.get_all_chat_rooms(user_id=user_id),
+                chat_room_ids=await CacheManager.get_all_chat_rooms(user_id=user_id),
             ),
         )
         await SendToWebsocket.init(
@@ -48,7 +48,7 @@ class ChatGptStreamManager:
                 cls._websocket_receiver(buffer=buffer),
                 cls._websocket_sender(buffer=buffer),
             )
-        except (GptOtherException, GptTextGenerationException, GptTooMuchTokenException) as e:
+        except (ChatOtherException, ChatTextGenerationException, ChatTooMuchTokenException) as e:
             api_logger.error(e)
             await SendToWebsocket.message(
                 websocket=buffer.websocket,
@@ -90,10 +90,10 @@ class ChatGptStreamManager:
                             # if received json has filename, it is a file
                             filename = received_json["filename"]
                         elif "chat_room_name" in received_json:
-                            buffer.current_user_gpt_context.user_gpt_profile.chat_room_name = received_json[
+                            buffer.current_user_chat_context.user_chat_profile.chat_room_name = received_json[
                                 "chat_room_name"
                             ][:20]
-                            await ChatGptCacheManager.update_profile(user_gpt_context=buffer.current_user_gpt_context)
+                            await CacheManager.update_profile(user_chat_context=buffer.current_user_chat_context)
                             await SendToWebsocket.init(
                                 buffer=buffer,
                                 send_previous_chats=False,
@@ -138,12 +138,12 @@ class ChatGptStreamManager:
                             translate=item.translate,
                             buffer=buffer,
                         )
-                        await MessageHandler.gpt(
+                        await MessageHandler.ai(
                             translate=item.translate,
                             buffer=buffer,
                         )
-            except GptException as gpt_exception:
-                await cls._gpt_exception_handler(buffer=buffer, gpt_exception=gpt_exception)
+            except ChatException as chat_exception:
+                await cls._chat_exception_handler(buffer=buffer, chat_exception=chat_exception)
 
     @staticmethod
     async def _change_context(buffer: BufferedUserContext, changed_chat_room_id: str) -> None:
@@ -168,43 +168,36 @@ class ChatGptStreamManager:
             )
 
     @staticmethod
-    async def _gpt_exception_handler(buffer: BufferedUserContext, gpt_exception: GptException):
-        if isinstance(gpt_exception, GptTextGenerationException):
+    async def _chat_exception_handler(buffer: BufferedUserContext, chat_exception: ChatException):
+        if isinstance(chat_exception, ChatTextGenerationException):
             await asyncio.gather(
                 SendToWebsocket.message(
                     websocket=buffer.websocket,
-                    msg="Text generation failure. Please try again.",
+                    msg=f"\n\nAn error occurred while generating text: **{chat_exception.msg}**",
                     chat_room_id=buffer.current_chat_room_id,
+                    finish=True,
+                    model_name=buffer.current_user_chat_context.llm_model.value.name,
                 ),
                 MessageManager.pop_message_history_safely(
-                    user_gpt_context=buffer.current_user_gpt_context,
-                    role=GptRoles.USER,
+                    user_chat_context=buffer.current_user_chat_context,
+                    role=ChatRoles.USER,
                 ),
             )
-        elif isinstance(gpt_exception, GptInterruptedException):
-            await MessageManager.pop_message_history_safely(
-                user_gpt_context=buffer.current_user_gpt_context,
-                role=GptRoles.USER,
+        elif isinstance(chat_exception, ChatInterruptedException):
+            await MessageManager.add_message_history_safely(
+                user_chat_context=buffer.current_user_chat_context,
+                role=ChatRoles.AI,
+                content=str(chat_exception.msg),
             )
-        elif isinstance(gpt_exception, GptOtherException):
-            await asyncio.gather(
-                SendToWebsocket.message(
-                    websocket=buffer.websocket,
-                    msg="Something's wrong. Please try again.",
-                    chat_room_id=buffer.current_chat_room_id,
-                ),
-                MessageManager.pop_message_history_safely(
-                    user_gpt_context=buffer.current_user_gpt_context,
-                    role=GptRoles.USER,
-                ),
-                MessageManager.pop_message_history_safely(
-                    user_gpt_context=buffer.current_user_gpt_context,
-                    role=GptRoles.GPT,
-                ),
-            )
-        elif isinstance(gpt_exception, GptTooMuchTokenException):
+        elif isinstance(chat_exception, ChatOtherException):
             await SendToWebsocket.message(
                 websocket=buffer.websocket,
-                msg=gpt_exception.msg if gpt_exception.msg is not None else "",
-                chat_room_id=buffer.current_user_gpt_context.chat_room_id,
+                msg=str(chat_exception.msg),
+                chat_room_id=buffer.current_chat_room_id,
+            )
+        elif isinstance(chat_exception, ChatTooMuchTokenException):
+            await SendToWebsocket.message(
+                websocket=buffer.websocket,
+                msg=str(chat_exception.msg),
+                chat_room_id=buffer.current_user_chat_context.chat_room_id,
             )  # send too much token exception message to websocket

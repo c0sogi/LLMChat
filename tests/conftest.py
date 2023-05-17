@@ -13,7 +13,7 @@ from app.common.app_settings import create_app
 from app.common.config import Config, logging_config
 from app.utils.logger import CustomLogger
 from app.viewmodels.base_models import UserToken
-from app.utils.chatgpt.chatgpt_cache_manager import ChatGptCacheManager, cache
+from app.utils.chat.cache_manager import CacheManager, cache
 
 
 @pytest.fixture(scope="session")
@@ -22,9 +22,9 @@ def config():
 
 
 @pytest.fixture(scope="session")
-def chatgpt_cache_manager():
+def cache_manager():
     cache.start(config=Config.get(option="test"))
-    return ChatGptCacheManager
+    return CacheManager
 
 
 @pytest.fixture(scope="session")

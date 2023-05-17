@@ -28,7 +28,7 @@ EXCEPT_PATH_LIST: tuple = (
     "/openapi.json",
     "/test",
 )
-EXCEPT_PATH_REGEX: Pattern = compile("^(/docs|/redoc|/api/auth|/favicon.ico|/chatgpt|/flutter_service_worker.js)")
+EXCEPT_PATH_REGEX: Pattern = compile("^(/docs|/redoc|/api/auth|/favicon.ico|/chat|/flutter_service_worker.js)")
 TOKEN_EXPIRE_HOURS: int = 168
 MAX_API_KEY: int = 3
 MAX_API_WHITELIST: int = 10

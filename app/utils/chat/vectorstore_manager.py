@@ -4,7 +4,7 @@ from fastapi.concurrency import run_in_threadpool
 from langchain.text_splitter import TokenTextSplitter
 
 from app.database.connection import cache
-from app.utils.chatgpt.chatgpt_fileloader import read_bytes_to_text
+from app.utils.chat.file_loader import read_bytes_to_text
 from app.utils.langchain.redis_vectorstore import Document
 
 
