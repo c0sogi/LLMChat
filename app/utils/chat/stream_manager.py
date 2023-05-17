@@ -13,6 +13,7 @@ from app.errors.chat_exceptions import (
     ChatTooMuchTokenException,
 )
 from app.models.chat_models import ChatRoles
+from app.models.llms import LLMModels
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.cache_manager import CacheManager
 from app.utils.chat.chat_commands import (
@@ -42,6 +43,10 @@ class ChatStreamManager:
         )
         await SendToWebsocket.init(
             buffer=buffer,
+            send_chat_rooms=True,
+            send_previous_chats=True,
+            send_models=True,
+            send_selected_model=True,
         )
         try:
             await asyncio.gather(
@@ -96,9 +101,14 @@ class ChatStreamManager:
                             await CacheManager.update_profile(user_chat_context=buffer.current_user_chat_context)
                             await SendToWebsocket.init(
                                 buffer=buffer,
-                                send_previous_chats=False,
-                                init_callback=False,
+                                send_previous_chats=True,
                             )
+                        elif "model" in received_json:
+                            found_model = LLMModels._member_map_.get(received_json["model"])
+                            if found_model is not None:
+                                buffer.current_user_chat_context.llm_model = found_model  # type: ignore
+                                await SendToWebsocket.init(buffer=buffer, send_selected_model=True)
+                                await CacheManager.update_model(user_chat_context=buffer.current_user_chat_context)
             elif received_bytes is not None:
                 await buffer.queue.put(
                     await VectorStoreManager.embed_file_to_vectorstore(file=received_bytes, filename=filename)
@@ -157,14 +167,15 @@ class ChatStreamManager:
             )
             await SendToWebsocket.init(
                 buffer=buffer,
-                send_previous_chats=False,
+                send_chat_rooms=True,
+                send_previous_chats=True,
             )
         else:
             # if received chat_room_id is in chat_room_ids, get context from memory
             buffer.change_context_to(index=index)
             await SendToWebsocket.init(
                 buffer=buffer,
-                send_chat_rooms=False,
+                send_previous_chats=True,
             )
 
     @staticmethod

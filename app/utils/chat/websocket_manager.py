@@ -1,5 +1,6 @@
 from typing import AsyncGenerator, AsyncIterator, Generator, Iterator
 from fastapi import WebSocket
+from app.models.llms import LLMModels
 
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.text_generation import (
@@ -12,9 +13,11 @@ class SendToWebsocket:
     @staticmethod
     async def init(
         buffer: BufferedUserContext,
-        send_chat_rooms: bool = True,
-        send_previous_chats: bool = True,
-        init_callback: bool = True,
+        send_chat_rooms: bool = False,
+        send_previous_chats: bool = False,
+        send_models: bool = False,
+        send_selected_model: bool = False,
+        wait_next_query: bool = False,
     ) -> None:
         """Send initial message to websocket, providing current state of user"""
         previous_chats = message_history_organizer(
@@ -27,7 +30,11 @@ class SendToWebsocket:
             msg=InitMessage(
                 chat_rooms=buffer.sorted_chat_rooms if send_chat_rooms else None,
                 previous_chats=previous_chats if send_previous_chats else None,
-                init_callback=init_callback,
+                models=LLMModels._member_names_ if send_models else None,
+                selected_model=buffer.current_user_chat_context.llm_model.name
+                if send_selected_model or send_previous_chats or send_models
+                else None,
+                wait_next_query=wait_next_query,
             ).json(),
             chat_room_id=buffer.current_chat_room_id,
             init=True,

@@ -15,6 +15,10 @@
     You can embed PDF file by clicking `Embed document` on the bottom left. In a few seconds, text contents of PDF will be converted to vectors and embedded to Redis cache. You can search in  similar documents by entering command `/query <query>` on the chat.
 > ![Switching Chat](app/contents/embed_demo.png)
 ---
++ ### Change your chat model
+    You can change your chat model by dropdown menu. You can define whatever model you want to use in `LLMModels` which is located in `app/models/llms.py`. 
+> ![Switching Chat](app/contents/model_selection_demo.png)
+---
 + ### Change your chat title
     You can change your chat title by clicking the title of the chat. This will be stored until you change or delete it!
 > ![Switching Chat](app/contents/edit_title_demo.png)

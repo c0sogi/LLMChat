@@ -39,8 +39,8 @@ class MessageHandler:
             await CacheManager.update_profile(user_chat_context=buffer.current_user_chat_context)
             await SendToWebsocket.init(
                 buffer=buffer,
-                send_previous_chats=False,
-                init_callback=False,
+                send_chat_rooms=True,
+                wait_next_query=True,
             )
         if translate:  # if user message is translated
             msg = await Translator.auto_translate(

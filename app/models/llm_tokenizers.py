@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from tiktoken import encoding_for_model
-import transformers
+from transformers import LlamaTokenizer as _LlamaTokenizer
 
 
 class BaseTokenizer(ABC):
@@ -26,7 +26,7 @@ class OpenAITokenizer(BaseTokenizer):
 
 class LlamaTokenizer(BaseTokenizer):
     def __init__(self, model_name: str):
-        self._tokenizer = transformers.LlamaTokenizer.from_pretrained(model_name)
+        self._tokenizer = _LlamaTokenizer.from_pretrained(model_name)
 
     def encode(self, message: str, /) -> list[int]:
         return self._tokenizer.encode(message)

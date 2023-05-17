@@ -113,15 +113,18 @@ class MessageManager:
         index: int,
         extra_token_margin: int = 0,
         update_cache: bool = True,
-    ) -> int:
-        if role is ChatRoles.AI:
-            histories_to_change: MessageHistory = user_chat_context.ai_message_histories[index]
-        elif role is ChatRoles.USER:
-            histories_to_change: MessageHistory = user_chat_context.user_message_histories[index]
-        elif role is ChatRoles.SYSTEM:
-            histories_to_change: MessageHistory = user_chat_context.system_message_histories[index]
-        else:
-            raise ValueError(f"Invalid role: {role}")
+    ) -> int | None:
+        try:
+            if role is ChatRoles.AI:
+                histories_to_change: MessageHistory = user_chat_context.ai_message_histories[index]
+            elif role is ChatRoles.USER:
+                histories_to_change: MessageHistory = user_chat_context.user_message_histories[index]
+            elif role is ChatRoles.SYSTEM:
+                histories_to_change: MessageHistory = user_chat_context.system_message_histories[index]
+            else:
+                raise ValueError(f"Invalid role: {role}")
+        except IndexError:
+            return None
         histories_to_change.content = new_content
         histories_to_change.tokens = user_chat_context.get_tokens_of(new_content)
         num_of_deleted_histories: int = user_chat_context.ensure_token_not_exceed(extra_token_margin=extra_token_margin)

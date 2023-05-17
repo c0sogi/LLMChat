@@ -71,7 +71,7 @@ class MessageHistory:
         self.role = ChatRoles.get_value(self.role)
 
     def __repr__(self) -> str:
-        return f'<{self.role} uuid="{self.uuid}" date="{self.datetime}" tokens="{self.tokens}">{self.content}</>'
+        return f'<{self.role} uuid="{self.uuid}" date="{self.datetime}Z" tokens="{self.tokens}">{self.content}</>'
 
     @property
     def datetime(self) -> datetime:
@@ -83,7 +83,7 @@ class UserChatProfile:
     user_id: str
     chat_room_id: str = field(default_factory=lambda: uuid4().hex)
     chat_room_name: str = field(default_factory=lambda: UTC.now_isoformat())
-    created_at: int = field(default_factory=lambda: UTC.timestamp(hour_diff=9))
+    created_at: int = field(default_factory=lambda: UTC.timestamp())
     user_role: str = field(default=ChatRoles.USER.value)
     ai_role: str = field(default=ChatRoles.AI.value)
     system_role: str = field(default=ChatRoles.SYSTEM.value)

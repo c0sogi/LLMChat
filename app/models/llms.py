@@ -147,3 +147,10 @@ class LLMModels(Enum):  # gpt models for openai api
         stop=field(default_factory=lambda: ["\u200b", "</s>"]),
         description="""The following is a conversation between a {user} and an {ai}. The {ai} is talkative and provides lots of specific details from its context. If the {ai} does not know the answer to a question, it truthfully says it does not know:\n""",
     )
+
+    @classmethod
+    def find_model_by_name(cls, name) -> LLMModel | None:
+        for model in cls:
+            if model.value.name == name:
+                return model.value
+        return None

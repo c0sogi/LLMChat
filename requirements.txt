@@ -54,7 +54,7 @@ toml
 transformers
 unstructured
 urllib3
-uvicorn
+uvicorn[standard]
 websockets
 yagmail
 cryptography

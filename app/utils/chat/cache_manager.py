@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from orjson import dumps as orjson_dumps
 from orjson import loads as orjson_loads
 import re
@@ -54,27 +55,34 @@ class CacheManager:
             )
             await cls.create_context(default)
             return default
-
-        for field, value in stored_string.items():
-            if value is not None:
-                stored_string[field] = orjson_loads(value)
-        for field, value in stored_list.items():
-            if value is not None:
-                stored_list[field] = [orjson_loads(v) for v in value]
-
-        return UserChatContext(
-            user_chat_profile=UserChatProfile(**stored_string["user_chat_profile"]),  # type: ignore
-            llm_model=LLMModels._member_map_[stored_string["llm_model"]],  # type: ignore
-            user_message_histories=[MessageHistory(**m) for m in stored_list["user_message_histories"]]
-            if stored_list["user_message_histories"] is not None
-            else [],
-            ai_message_histories=[MessageHistory(**m) for m in stored_list["ai_message_histories"]]
-            if stored_list["ai_message_histories"] is not None
-            else [],
-            system_message_histories=[MessageHistory(**m) for m in stored_list["system_message_histories"]]
-            if stored_list["system_message_histories"] is not None
-            else [],
-        )
+        try:
+            for field, value in stored_string.items():
+                if value is not None:
+                    stored_string[field] = orjson_loads(value)
+            for field, value in stored_list.items():
+                if value is not None:
+                    stored_list[field] = [orjson_loads(v) for v in value]
+        except Exception:
+            default: UserChatContext = UserChatContext.construct_default(
+                user_id=user_id,
+                chat_room_id=chat_room_id,
+            )
+            await cls.create_context(default)
+            return default
+        else:
+            return UserChatContext(
+                user_chat_profile=UserChatProfile(**stored_string["user_chat_profile"]),  # type: ignore
+                llm_model=LLMModels._member_map_[stored_string["llm_model"]],  # type: ignore
+                user_message_histories=[MessageHistory(**m) for m in stored_list["user_message_histories"]]
+                if stored_list["user_message_histories"] is not None
+                else [],
+                ai_message_histories=[MessageHistory(**m) for m in stored_list["ai_message_histories"]]
+                if stored_list["ai_message_histories"] is not None
+                else [],
+                system_message_histories=[MessageHistory(**m) for m in stored_list["system_message_histories"]]
+                if stored_list["system_message_histories"] is not None
+                else [],
+            )
 
     @classmethod
     async def create_context(
@@ -190,19 +198,36 @@ class CacheManager:
         user_chat_context: UserChatContext,
         only_if_exists: bool = True,
     ) -> bool:
-        json_data = user_chat_context.json()
-
-        field: str = "user_chat_profile"
         key: str = cls._generate_key(
             user_id=user_chat_context.user_id,
             chat_room_id=user_chat_context.chat_room_id,
-            field=field,
+            field="user_chat_profile",
         )
 
         return (
             await cache.redis.set(
                 key,
-                orjson_dumps(json_data[field]),
+                orjson_dumps(asdict(user_chat_context.user_chat_profile)),
+                xx=only_if_exists,
+            )
+        ) is True
+
+    @classmethod
+    async def update_model(
+        cls,
+        user_chat_context: UserChatContext,
+        only_if_exists: bool = True,
+    ) -> bool:
+        key: str = cls._generate_key(
+            user_id=user_chat_context.user_id,
+            chat_room_id=user_chat_context.chat_room_id,
+            field="llm_model",
+        )
+
+        return (
+            await cache.redis.set(
+                key,
+                orjson_dumps(user_chat_context.llm_model.name),
                 xx=only_if_exists,
             )
         ) is True

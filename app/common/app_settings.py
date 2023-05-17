@@ -83,6 +83,14 @@ def create_app(config: Config) -> FastAPI:
             api_logger.critical("Redis CACHE connected!")
         else:
             api_logger.critical("Redis CACHE connection failed!")
+        try:
+            import uvloop  # type: ignore
+            import asyncio
+
+            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+            api_logger.critical("uvloop installed!")
+        except ImportError:
+            api_logger.critical("uvloop not installed!")
 
     @new_app.on_event("shutdown")
     async def shutdown():

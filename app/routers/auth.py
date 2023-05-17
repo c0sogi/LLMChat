@@ -80,7 +80,6 @@ async def login(
         if not (user_info.email and user_info.password):
             raise Responses_400.no_email_or_password
         matched_user: Users = await Users.first_filtered_by(email=user_info.email)  # type: ignore
-        print("mached_user:", matched_user)
         if matched_user is None or matched_user.password is None:
             raise Responses_404.not_found_user
         if not bcrypt.checkpw(

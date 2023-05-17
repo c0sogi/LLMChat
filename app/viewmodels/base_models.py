@@ -152,4 +152,6 @@ class SendInitToWebsocket(BaseModel):
 class InitMessage(BaseModel):
     previous_chats: list[dict] | None = None
     chat_rooms: list[dict[str, str]] | None = None
-    init_callback: bool = True
+    models: list[str] | None = None
+    selected_model: str | None = None
+    wait_next_query: bool

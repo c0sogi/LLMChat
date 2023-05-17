@@ -362,9 +362,7 @@ class ChatCommands:
 
     @staticmethod
     @CommandResponse.send_message_and_stop
-    async def settemperature(
-        temp_to_change: float, user_chat_context: UserChatContext
-    ) -> str:  # set temperature of ai
+    async def settemperature(temp_to_change: float, user_chat_context: UserChatContext) -> str:  # set temperature of ai
         """Set temperature of ai\n
         /settemperature <temp_to_change>"""
         try:
@@ -423,11 +421,38 @@ class ChatCommands:
             return f"There is no {role} message to pop."  # return fail message
         return f"Pop {role} message: {last_message_history.content}"  # return success message
 
+    @staticmethod
+    @CommandResponse.send_message_and_stop
+    async def setlastmessage(role, new_message: str, /, user_chat_context: UserChatContext) -> str:
+        """Set last message (user or system or ai)\n
+        /setlastmessage <user|system|ai> <new_message>"""
+        try:
+            actual_role: ChatRoles = ChatRoles.get_member(role)
+        except ValueError:
+            return "Role must be one of user, system, ai"  # return fail message
+        if (
+            await MessageManager.set_message_history_safely(
+                user_chat_context=user_chat_context,
+                new_content=new_message,
+                role=actual_role,
+                index=-1,
+            )
+            is None
+        ):  # if set message history failed
+            return f"There is no {role} message to set."
+        return f"Set {role} message: {new_message}"  # return success message
+
     @classmethod
     async def pop(cls, role: str, user_chat_context: UserChatContext) -> str:
         """Alias for poplastmessage\n
-        /pop"""
+        /pop <user|system|ai>"""
         return await cls.poplastmessage(role, user_chat_context)
+
+    @classmethod
+    async def set(cls, role, new_message: str, /, user_chat_context: UserChatContext) -> str:
+        """Alias for setlastmessage\n
+        /set <user|system|ai> <new_message>"""
+        return await cls.setlastmessage(role, new_message, user_chat_context)
 
     @staticmethod
     async def retry(user_chat_context: UserChatContext) -> Tuple[str | None, ResponseType]:
