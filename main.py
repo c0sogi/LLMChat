@@ -31,7 +31,7 @@ elif __name__ == "__main__":
         port=config.port,
     )
 else:
-    # ensure_packages_installed()
+    ensure_packages_installed()
     """Option 3: Non-debug mode
     Docker will run this section as the main entrypoint
     This section will mostly be used.

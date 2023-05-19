@@ -10,6 +10,7 @@ from app.errors.api_exceptions import InternalServerError
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.cache_manager import CacheManager
 from app.utils.chat.message_manager import MessageManager
+from app.utils.chat.prompts import CONTEXT_QUESTION_TMPL_QUERY1
 from app.utils.chat.vectorstore_manager import Document, VectorStoreManager
 from app.utils.chat.websocket_manager import SendToWebsocket
 from app.utils.chat.message_handler import MessageHandler
@@ -577,37 +578,31 @@ Start a conversation as "CODEX: Hi, what are we coding today?"
         return f"/testchaining {chain_size-1}", ResponseType.REPEAT_COMMAND
 
     @staticmethod
-    @CommandResponse.handle_ai
-    async def query(query: str, /, buffer: BufferedUserContext) -> None:
+    @CommandResponse.handle_both
+    async def query(query: str, /, buffer: BufferedUserContext) -> str:
         """Query from redis vectorstore\n
         /query <query>"""
         k: int = 3
-        found_document: list[Document] = (await VectorStoreManager.asimilarity_search(queries=[query], k=k))[0]
-        found_text: str = "\n\n".join([f"...{document.page_content}..." for document in found_document])
-        if len(found_document) > 0:
-            query = f"""Please answer my question: `{query}`\n
-And below text, enclosed in triple backticked, is everything I could find in my vectorstore:
-```
-{found_text}
-```"""
+        found: list[list[Document]] | None = await VectorStoreManager.asimilarity_search(
+            queries=[query], index_name=buffer.user_id, k=k
+        )
+        if found is not None and len(found[0]) > 0:
+            found_text: str = "\n\n".join([f"...{document.page_content}..." for document in found[0]])
+            query = CONTEXT_QUESTION_TMPL_QUERY1.format(question=query, context=found_text)
         else:
             await SendToWebsocket.message(
                 websocket=buffer.websocket,
-                msg="No results found from vectorstore. Just sending your query...",
+                msg="**No results found from vectorstore. Just sending your query...**\n\n",
                 chat_room_id=buffer.current_chat_room_id,
+                finish=False,
+                model_name=buffer.current_user_chat_context.llm_model.value.name,
             )
-        await MessageManager.add_message_history_safely(
-            user_chat_context=buffer.current_user_chat_context,
-            content=query,
-            role=ChatRoles.USER,
-        )
+        return query
 
     @staticmethod
     @CommandResponse.send_message_and_stop
-    async def embed(text_to_embed: str, /) -> str:
+    async def embed(text_to_embed: str, /, buffer: BufferedUserContext) -> str:
         """Embed the text and save its vectors in the redis vectorstore.\n
         /embed <text_to_embed>"""
-        await VectorStoreManager.create_documents(
-            text=text_to_embed,
-        )
+        await VectorStoreManager.create_documents(text=text_to_embed, index_name=buffer.user_id)
         return "Embedding successful!"

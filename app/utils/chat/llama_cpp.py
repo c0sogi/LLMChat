@@ -211,7 +211,7 @@ if __name__ == "__main__":
 
     m_queue = process_manager.Queue()
     m_done = process_manager.Event()
-    llama_cpp_model: "LlamaCppModel" = LLMModels.vicunaunc.value
+    llama_cpp_model: "LlamaCppModel" = LLMModels.wizard_vicuna_7b_uncensored.value
     llm = get_llama(llama_cpp_model)
     llama_cpp_generation(
         llama_cpp_model=llama_cpp_model,

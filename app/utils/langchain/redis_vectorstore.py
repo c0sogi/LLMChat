@@ -245,7 +245,6 @@ class Redis(VectorStore):
     def __init__(
         self,
         redis_url: str,
-        index_name: str,
         embedding_function: Callable,
         content_key: str = "content",
         metadata_key: str = "metadata",
@@ -255,7 +254,6 @@ class Redis(VectorStore):
     ):
         """Initialize with necessary components."""
         self.embedding_function = embedding_function
-        self.index_name = index_name
         # We need to first remove redis_url from kwargs,
         # otherwise passing it to Redis will result in an error.
         if "redis_url" in kwargs:
@@ -273,10 +271,11 @@ class Redis(VectorStore):
     def _add_texts(
         self,
         texts: Iterable[str],
+        index_name: str,
         metadatas: Optional[List[dict]] = None,
         **kwargs: Any,
     ) -> Tuple[List[str], Union[PipelineType, AsyncPipelineType]]:
-        prefix = _redis_prefix(self.index_name)
+        prefix = _redis_prefix(index_name)
         keys = kwargs.get("keys")
         ids = []
         # Write data to redis
@@ -299,26 +298,28 @@ class Redis(VectorStore):
     def add_texts(
         self,
         texts: Iterable[str],
+        index_name: str,
         metadatas: Optional[List[dict]] = None,
         **kwargs: Any,
     ) -> List[str]:
         """Add texts data to an existing index."""
-        ids, pipeline = self._add_texts(texts, metadatas, **kwargs)
+        ids, pipeline = self._add_texts(texts, index_name=index_name, metadatas=metadatas, **kwargs)
         pipeline.execute()
         return ids
 
     async def aadd_texts(
         self,
         texts: Iterable[str],
+        index_name: str,
         metadatas: Optional[List[dict]] = None,
         **kwargs: Any,
     ) -> List[str]:
         """Add texts data to an existing index."""
-        ids, pipeline = await run_in_threadpool(self._add_texts, texts, metadatas, **kwargs)
+        ids, pipeline = await run_in_threadpool(self._add_texts, texts, index_name, metadatas, **kwargs)
         await pipeline.execute()  # type: ignore
         return ids
 
-    def similarity_search(self, query: str, k: int = 4, **kwargs: Any) -> List[Document]:
+    def similarity_search(self, query: str, index_name: str, k: int = 4, **kwargs: Any) -> List[Document]:
         """
         Returns the most similar indexed documents to the query text.
 
@@ -329,10 +330,10 @@ class Redis(VectorStore):
         Returns:
             List[Document]: A list of documents that are most similar to the query text.
         """
-        docs_and_scores = self.similarity_search_with_score(query, k=k)
+        docs_and_scores = self.similarity_search_with_score(query, index_name=index_name, k=k)
         return [doc for doc, _ in docs_and_scores]
 
-    async def asimilarity_search(self, query: str, k: int = 4, **kwargs: Any) -> List[Document]:
+    async def asimilarity_search(self, query: str, index_name: str, k: int = 4, **kwargs: Any) -> List[Document]:
         """
         Returns the most similar indexed documents to the query text, asynchronously.
 
@@ -343,11 +344,11 @@ class Redis(VectorStore):
         Returns:
             List[Document]: A list of documents that are most similar to the query text.
         """
-        docs_and_scores = await self.asimilarity_search_with_score(query, k=k)
+        docs_and_scores = await self.asimilarity_search_with_score(query, index_name=index_name, k=k)
         return [doc for doc, _ in docs_and_scores]
 
     def similarity_search_limit_score(
-        self, query: str, k: int = 4, score_threshold: float = 0.2, **kwargs: Any
+        self, query: str, index_name: str, k: int = 4, score_threshold: float = 0.2, **kwargs: Any
     ) -> List[Document]:
         """
         Returns the most similar indexed documents to the query text within the
@@ -370,11 +371,11 @@ class Redis(VectorStore):
             an empty list is returned.
 
         """
-        docs_and_scores = self.similarity_search_with_score(query, k=k)
+        docs_and_scores = self.similarity_search_with_score(query, index_name=index_name, k=k)
         return [doc for doc, score in docs_and_scores if score < score_threshold]
 
     async def asimilarity_search_limit_score(
-        self, query: str, k: int = 4, score_threshold: float = 0.2, **kwargs: Any
+        self, query: str, index_name: str, k: int = 4, score_threshold: float = 0.2, **kwargs: Any
     ) -> List[Document]:
         """
         Returns the most similar indexed documents to the query text within the
@@ -397,7 +398,7 @@ class Redis(VectorStore):
             an empty list is returned.
 
         """
-        docs_and_scores = await self.asimilarity_search_with_score(query, k=k)
+        docs_and_scores = await self.asimilarity_search_with_score(query, index_name=index_name, k=k)
         return [doc for doc, score in docs_and_scores if score < score_threshold]
 
     def _similarity_search_with_score(self, query: str, k: int = 4) -> Tuple[Query, Mapping[str, str]]:
@@ -415,7 +416,7 @@ class Redis(VectorStore):
         }
         return redis_query, params_dict
 
-    def similarity_search_with_score(self, query: str, k: int = 4) -> List[Tuple[Document, float]]:
+    def similarity_search_with_score(self, query: str, index_name: str, k: int = 4) -> List[Tuple[Document, float]]:
         """Return docs most similar to query.
 
         Args:
@@ -428,7 +429,7 @@ class Redis(VectorStore):
         redis_query, params_dict = self._similarity_search_with_score(query, k=k)
 
         # perform vector search
-        results = self.client.ft(self.index_name).search(redis_query, params_dict)
+        results = self.client.ft(index_name).search(redis_query, params_dict)
 
         docs = [
             (
@@ -440,7 +441,9 @@ class Redis(VectorStore):
 
         return docs
 
-    async def asimilarity_search_with_score(self, query: str, k: int = 4) -> List[Tuple[Document, float]]:
+    async def asimilarity_search_with_score(
+        self, query: str, index_name: str, k: int = 4
+    ) -> List[Tuple[Document, float]]:
         """Return docs most similar to query, asynchronously.
 
         Args:
@@ -453,7 +456,7 @@ class Redis(VectorStore):
         redis_query, params_dict = await run_in_threadpool(self._similarity_search_with_score, query, k)
 
         # perform vector search
-        results = await self.client.ft(self.index_name).search(redis_query, params_dict)  # type: ignore
+        results = await self.client.ft(index_name).search(redis_query, params_dict)  # type: ignore
 
         docs = [
             (
@@ -534,8 +537,8 @@ class Redis(VectorStore):
         pipeline.execute()
         return cls(
             redis_url,
-            index_name,
             embedding.embed_query,
+            index_name=index_name,
             content_key=content_key,
             metadata_key=metadata_key,
             vector_key=vector_key,
@@ -548,8 +551,8 @@ class Redis(VectorStore):
         cls: Type[Redis],
         texts: List[str],
         embedding: Embeddings,
+        index_name: str,
         metadatas: Optional[List[dict]] = None,
-        index_name: Optional[str] = None,
         content_key: str = "content",
         metadata_key: str = "metadata",
         vector_key: str = "content_vector",
@@ -581,10 +584,6 @@ class Redis(VectorStore):
 
         # Create embeddings over documents
         embeddings = embedding.embed_documents(texts)
-
-        # Name of the search index if not given
-        if not index_name:
-            index_name = uuid4().hex
         prefix = _redis_prefix(index_name)  # prefix for the document keys
 
         # Check if index exists
@@ -613,8 +612,8 @@ class Redis(VectorStore):
         await pipeline.execute()
         return cls(
             redis_url,
-            index_name,
             embedding.embed_query,
+            index_name=index_name,
             content_key=content_key,
             metadata_key=metadata_key,
             vector_key=vector_key,
@@ -710,8 +709,8 @@ class Redis(VectorStore):
 
         return cls(
             redis_url,
-            index_name,
             embedding.embed_query,
+            index_name=index_name,
             content_key=content_key,
             metadata_key=metadata_key,
             vector_key=vector_key,
@@ -742,8 +741,8 @@ class Redis(VectorStore):
 
         return cls(
             redis_url,
-            index_name,
             embedding.embed_query,
+            index_name=index_name,
             content_key=content_key,
             metadata_key=metadata_key,
             vector_key=vector_key,
@@ -775,21 +774,23 @@ class RedisVectorStoreRetriever(BaseRetriever, BaseModel):
                 raise ValueError(f"search_type of {search_type} not allowed.")
         return values
 
-    def get_relevant_documents(self, query: str) -> List[Document]:
+    def get_relevant_documents(self, query: str, index_name: str) -> List[Document]:
         if self.search_type == "similarity":
-            docs = self.vectorstore.similarity_search(query, k=self.k)
+            docs = self.vectorstore.similarity_search(query, index_name=index_name, k=self.k)
         elif self.search_type == "similarity_limit":
-            docs = self.vectorstore.similarity_search_limit_score(query, k=self.k, score_threshold=self.score_threshold)
+            docs = self.vectorstore.similarity_search_limit_score(
+                query, index_name=index_name, k=self.k, score_threshold=self.score_threshold
+            )
         else:
             raise ValueError(f"search_type of {self.search_type} not allowed.")
         return docs
 
-    async def aget_relevant_documents(self, query: str) -> List[Document]:
+    async def aget_relevant_documents(self, query: str, index_name: str) -> List[Document]:
         if self.search_type == "similarity":
-            docs = await self.vectorstore.asimilarity_search(query, k=self.k)
+            docs = await self.vectorstore.asimilarity_search(query, index_name=index_name, k=self.k)
         elif self.search_type == "similarity_limit":
             docs = await self.vectorstore.asimilarity_search_limit_score(
-                query, k=self.k, score_threshold=self.score_threshold
+                query, index_name=index_name, k=self.k, score_threshold=self.score_threshold
             )
         else:
             raise ValueError(f"search_type of {self.search_type} not allowed.")

@@ -6,3 +6,4 @@ venv/
 *.log
 *.txt
 *.bin
+deprecated_*

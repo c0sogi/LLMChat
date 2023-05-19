@@ -1,9 +1,13 @@
 from fastapi import FastAPI, Depends
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware import Middleware
+from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
-from app.common.config import Config
+from app.auth.admin import MyAuthProvider
+from app.common.config import JWT_SECRET, Config
 from app.database.connection import db, cache
+from app.database.schemas.auth import ApiKeys, ApiWhiteLists, Users
 from app.middlewares.token_validator import access_control
 from app.middlewares.trusted_hosts import TrustedHostMiddleware
 from app.routers import index, auth, services, users, websocket
@@ -15,6 +19,11 @@ from app.utils.logger import api_logger
 from app.utils.chat.cache_manager import CacheManager
 from app.utils.js_initializer import js_url_initializer
 from app.dependencies import process_pool_executor
+from starlette_admin.contrib.sqla.admin import Admin
+from starlette_admin.contrib.sqla.view import ModelView
+from starlette_admin.views import DropDown, Link
+
+from app.viewmodels.admin import ApiKeyAdminView, UserAdminView
 
 
 def create_app(config: Config) -> FastAPI:
@@ -28,12 +37,37 @@ def create_app(config: Config) -> FastAPI:
     cache.start(config=config)
     js_url_initializer(js_location="app/web/main.dart.js")
 
+    # Admin
+    assert db.engine is not None
+    admin = Admin(
+        db.engine,
+        title="Admin Console",
+        auth_provider=MyAuthProvider(),
+        middlewares=[Middleware(SessionMiddleware, secret_key=JWT_SECRET)],
+    )
+    admin.add_view(UserAdminView(Users, icon="fa fa-users", label="Users"))
+    admin.add_view(ApiKeyAdminView(ApiKeys, icon="fa fa-key", label="API Keys"))
+    admin.add_view(ModelView(ApiWhiteLists, icon="fa fa-list", label="API White Lists"))
+    admin.mount_to(new_app)
+    admin.add_view(
+        DropDown(
+            "Links",
+            icon="fa fa-link",
+            views=[
+                Link("Index", url="/"),
+                Link("Docs", url="/docs"),
+                Link("Chat", url="/chat", target="_blank"),
+            ],
+        )
+    )
+
     # Middlewares
     """
     Access control middleware: Authorized request only
     CORS middleware: Allowed sites only
     Trusted host middleware: Allowed host only
     """
+
     new_app.add_middleware(dispatch=access_control, middleware_class=BaseHTTPMiddleware)
     new_app.add_middleware(
         CORSMiddleware,

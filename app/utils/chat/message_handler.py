@@ -127,7 +127,7 @@ class MessageHandler:
             buffer.current_user_chat_context.copy_from(backup_context)
             raise ChatInterruptedException(msg=str(interrupted_error))
         except Exception as exception:
-            api_logger.error(f"unexpected chat exception: {exception}")
+            api_logger.error(f"unexpected chat exception: {exception}", exc_info=True)
             buffer.current_user_chat_context.copy_from(backup_context)
             raise ChatTextGenerationException()
         else:

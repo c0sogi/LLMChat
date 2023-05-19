@@ -8,6 +8,7 @@ from app.database.schemas.auth import Users
 from app.dependencies import user_dependency
 from app.errors.api_exceptions import Responses_400, Responses_404
 from app.utils.auth.token import create_access_token, token_decode
+from app.utils.chat.cache_manager import CacheManager
 from app.viewmodels.base_models import SnsType, Token, UserRegister, UserToken
 
 router = APIRouter(prefix="/auth")
@@ -67,6 +68,8 @@ async def unregister(
     authorization: str = Security(user_dependency),
 ):
     registered_user: UserToken = UserToken(**token_decode(authorization))
+    if registered_user.email is not None:
+        await CacheManager.delete_user(user_id=registered_user.email)
     await Users.delete_filtered(Users.email == registered_user.email, autocommit=True)
 
 

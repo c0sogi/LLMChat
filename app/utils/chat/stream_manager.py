@@ -111,7 +111,9 @@ class ChatStreamManager:
                                 await CacheManager.update_model(user_chat_context=buffer.current_user_chat_context)
             elif received_bytes is not None:
                 await buffer.queue.put(
-                    await VectorStoreManager.embed_file_to_vectorstore(file=received_bytes, filename=filename)
+                    await VectorStoreManager.embed_file_to_vectorstore(
+                        file=received_bytes, filename=filename, index_name=buffer.current_user_chat_context.user_id
+                    )
                 )
 
     @classmethod

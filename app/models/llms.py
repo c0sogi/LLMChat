@@ -4,6 +4,7 @@ from typing import Optional
 from app.common.config import OPENAI_API_KEY
 
 from app.models.llm_tokenizers import BaseTokenizer, LlamaTokenizer, OpenAITokenizer
+from app.utils.chat.prompts import USER_AI_TMPL_CHAT
 
 
 @dataclass
@@ -51,8 +52,15 @@ class LlamaCppModel(LLMModel):
     description: Optional[str] = None  # A prefix to prepend to the generated text. If None, no prefix is prepended.
 
     def __post_init__(self):
-        if self.description is not None:
-            self.description_tokens = self.tokenizer.tokens_of(self.description)
+        self._description_tokens = None
+
+    @property
+    def description_tokens(self) -> int:
+        if self.description is None:
+            return 0
+        if self._description_tokens is None:
+            self._description_tokens = self.tokenizer.tokens_of(self.description)
+        return self._description_tokens
 
 
 @dataclass
@@ -71,15 +79,6 @@ class LLMModels(Enum):  # gpt models for openai api
         api_url="https://api.openai.com/v1/chat/completions",
         api_key=OPENAI_API_KEY,
     )
-    gpt_3_5_turbo_proxy = OpenAIModel(
-        name="gpt-3.5-turbo",
-        max_total_tokens=4096,
-        max_tokens_per_request=2048,
-        token_margin=8,
-        tokenizer=OpenAITokenizer("gpt-3.5-turbo"),
-        api_url="https://whocars123-oai-proxy.hf.space/proxy/openai/v1/chat/completions",
-        api_key="SOME_API_KEY",
-    )
 
     gpt_4 = OpenAIModel(
         name="gpt-4",
@@ -91,61 +90,62 @@ class LLMModels(Enum):  # gpt models for openai api
         api_key=OPENAI_API_KEY,
     )
 
-    gpt_4_proxy = OpenAIModel(
-        name="gpt-4",
-        max_total_tokens=8192,
-        max_tokens_per_request=4096,
+    gpt_3_5_turbo_proxy = OpenAIModel(
+        name="gpt-3.5-turbo",
+        max_total_tokens=4096,
+        max_tokens_per_request=2048,
         token_margin=8,
-        tokenizer=OpenAITokenizer("gpt-4"),
-        api_url="https://whocars123-oai-proxy.hf.space/proxy/openai/v1/chat/completions",
-        api_key="SOME_API_KEY",
+        tokenizer=OpenAITokenizer("gpt-3.5-turbo"),
+        api_url="https://biyan.xyz/proxy/openai/v1/chat/completions",
+        api_key="arcalive",
     )
 
-    vicuna = LlamaCppModel(
-        name="wizard-vicuna-13B-ggml-q5-1",
+    wizard_vicuna_7b_uncensored = LlamaCppModel(
+        name="Wizard-Vicuna-7B-Uncensored-GGML",
         max_total_tokens=2048,  # context tokens (n_ctx)
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
-        tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
-        model_path="./llama_models/ggml/wizard-vicuna-13B.ggml.q5_1.bin",
-        description="""The following is a friendly conversation between a {user} and an {ai}. The {ai} is talkative and provides lots of specific details from its context. If the {ai} does not know the answer to a question, it truthfully says it does not know:\n""",
+        tokenizer=LlamaTokenizer("ehartford/Wizard-Vicuna-7B-Uncensored"),
+        model_path="./llama_models/ggml/Wizard-Vicuna-7B-Uncensored.ggmlv2.q4_1.bin",
+        description=USER_AI_TMPL_CHAT,
     )
-    vicunaunc = LlamaCppModel(
-        name="Wizard-Vicuna-13B-Uncensored-GGML",
+    wizard_vicuna_13b_uncensored = LlamaCppModel(
+        name="Wizard-Vicuna-13B-Uncensored",
         max_total_tokens=2048,  # context tokens (n_ctx)
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
-        tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
-        model_path="./llama_models/ggml/ggml-model-q4_1.bin",
-        description="""The following is a conversation between a {user} and an {ai}. The {ai} is talkative and provides lots of specific details from its context. If the {ai} does not know the answer to a question, it truthfully says it does not know:\n""",
+        tokenizer=LlamaTokenizer("ehartford/Wizard-Vicuna-13B-Uncensored"),
+        model_path="./llama_models/ggml/Wizard-Vicuna-13B-Uncensored.ggml.q5_1.bin",
+        description=USER_AI_TMPL_CHAT,
     )
-    gpt4x = LlamaCppModel(
+    gpt4_x_vicuna_13b = LlamaCppModel(
         name="gpt4-x-vicuna-13B-GGML",
         max_total_tokens=2048,  # context tokens (n_ctx)
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
         tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
         model_path="./llama_models/ggml/gpt4-x-vicuna-13B.ggml.q4_0.bin",
-        description="""The following is a conversation between a {user} and an {ai}. The {ai} is talkative and provides lots of specific details from its context. If the {ai} does not know the answer to a question, it truthfully says it does not know:\n""",
+        description=USER_AI_TMPL_CHAT,
     )
-    wizardlmunc = LlamaCppModel(
-        name="WizardLM-13B-Uncensored-Q5_1-GGML",
-        max_total_tokens=2048,  # context tokens (n_ctx)
-        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
-        token_margin=8,
-        tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
-        model_path="./llama_models/ggml/WizardML-Unc-13b-Q5_1.bin",
-        description="""The following is a conversation between a {user} and an {ai}. The {ai} is talkative and provides lots of specific details from its context. If the {ai} does not know the answer to a question, it truthfully says it does not know:\n""",
-    )
-    wizardmega = LlamaCppModel(
+    wizard_mega_13b = LlamaCppModel(
         name="wizard-mega-13B-GGML",
         max_total_tokens=2048,  # context tokens (n_ctx)
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
         tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
         model_path="./llama_models/ggml/wizard-mega-13B.ggml.q4_0.bin",
-        stop=field(default_factory=lambda: ["\u200b", "</s>"]),
-        description="""The following is a conversation between a {user} and an {ai}. The {ai} is talkative and provides lots of specific details from its context. If the {ai} does not know the answer to a question, it truthfully says it does not know:\n""",
+        stop=["\u200b", "</s>"],
+        description=USER_AI_TMPL_CHAT,
+    )
+    manticore_13b_uncensored = LlamaCppModel(
+        name="Manticore-13B-GGML",
+        max_total_tokens=2048,  # context tokens (n_ctx)
+        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
+        token_margin=8,
+        tokenizer=LlamaTokenizer("openaccess-ai-collective/manticore-13b"),
+        model_path="./llama_models/ggml/Manticore-13B.ggmlv2.q5_1.bin",
+        stop=["\u200b", "</s>"],
+        description=USER_AI_TMPL_CHAT,
     )
 
     @classmethod

@@ -18,6 +18,7 @@ h11
 httptools
 httpx
 idna
+itsdangerous
 iniconfig
 jinja2
 jmespath
@@ -49,6 +50,7 @@ six
 sqlalchemy
 sqlalchemy-utils
 starlette
+starlette_admin
 tiktoken
 toml
 transformers

@@ -1,4 +1,6 @@
+import enum
 from sqlalchemy import (
+    Column,
     String,
     Integer,
     Enum,
@@ -14,9 +16,21 @@ from .. import Base
 from . import Mixin
 
 
+class UserStatus(str, enum.Enum):
+    ACTIVE = "active"
+    DELETED = "deleted"
+    BLOCKED = "blocked"
+
+
+class ApiKeyStatus(str, enum.Enum):
+    ACTIVE = "active"
+    STOPPED = "stopped"
+    DELETED = "deleted"
+
+
 class Users(Base, Mixin):
     __tablename__ = "users"
-    status: Mapped[str] = mapped_column(Enum("active", "deleted", "blocked"), default="active")
+    status = Column(String, Enum(UserStatus), default=UserStatus.ACTIVE, nullable=False)
     email: Mapped[str] = mapped_column(String(length=20))
     password: Mapped[str | None] = mapped_column(String(length=72))
     name: Mapped[str | None] = mapped_column(String(length=20))
@@ -35,7 +49,7 @@ class Users(Base, Mixin):
 
 class ApiKeys(Base, Mixin):
     __tablename__ = "api_keys"
-    status: Mapped[str] = mapped_column(Enum("active", "stopped", "deleted"), default="active")
+    status = Column(String, Enum(ApiKeyStatus), default=ApiKeyStatus.ACTIVE, nullable=False)
     access_key: Mapped[str] = mapped_column(String(length=64), index=True, unique=True)
     secret_key: Mapped[str] = mapped_column(String(length=64))
     user_memo: Mapped[str | None] = mapped_column(String(length=40))

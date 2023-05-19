@@ -16,7 +16,6 @@
         "**/Thumbs.db": true,
         "**/__pycache__": true,
         "**/.pytest_cache": true,
-        "**/deprecated_api_request_in_flutter.dart": true,
     },
     "python.analysis.typeCheckingMode": "basic",
 }

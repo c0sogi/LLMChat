@@ -183,12 +183,10 @@ When a user enters a command in the chat window like `/embed <text_to_embed>`, t
 ```python
 @staticmethod
 @CommandResponse.send_message_and_stop
-async def embed(text_to_embed: str, /) -> str:
+async def embed(text_to_embed: str, /, buffer: BufferedUserContext) -> str:
     """Embed the text and save its vectors in the redis vectorstore.\n
     /embed <text_to_embed>"""
-    await VectorStoreManager.create_documents(
-        text=text_to_embed,
-    )
+    await VectorStoreManager.create_documents(text=text_to_embed, index_name=buffer.user_id)
     return "Embedding successful!"
 ```
 
@@ -203,7 +201,9 @@ async def query(query: str, /, buffer: BufferedUserContext) -> None:
     """Query from redis vectorstore\n
     /query <query>"""
     k: int = 3
-    found_document: list[Document] = (await VectorStoreManager.asimilarity_search(queries=[query], k=k))[0]
+    found: list[list[Document]] | None = await VectorStoreManager.asimilarity_search(
+        queries=[query], index_name=buffer.user_id, k=k
+    )
     ...
 ```
 
@@ -213,11 +213,11 @@ When running the `begin_chat` function, if a user uploads a file containing text
 
 ```python
 @classmethod
-async def embed_file_to_vectorstore(cls, file: bytes, filename: str) -> str:
+async def embed_file_to_vectorstore(cls, file: bytes, filename: str, index_name: str) -> str:
     # if user uploads file, embed it
     try:
         text: str = await run_in_threadpool(read_bytes_to_text, file, filename)
-        docs: list[str] = await VectorStoreManager.create_documents(text)
+        docs: list[str] = await VectorStoreManager.create_documents(text, index_name=index_name)
         return f"Successfully embedded documents. You uploaded file begins with...\n\n```{docs[0][:50]}```..."
     except Exception:
         return "Can't embed this type of file. Try another file."

@@ -1,53 +1,30 @@
-import openai
-from os import environ
+from uuid import uuid4
 
 import pytest
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.embeddings.base import Embeddings
-from langchain.text_splitter import TokenTextSplitter
-from app.utils.langchain.redis_vectorstore import Redis, _aensure_index_exist, _redis_prefix
+from langchain.docstore.document import Document
+from app.database.connection import cache
+from app.utils.chat.vectorstore_manager import VectorStoreManager
 
 
 @pytest.mark.asyncio
 async def test_embedding(config, test_logger):
-    sample_texts = [
-        "Thornton Gombar lifted his gaze to the sky as a hovercraft zoomed over his home. Based on the rosy pink tints that adorned its exterior, Thornton surmised that the vehicle was a pleasure craft, likely filled with a small group of men and women engaging in gross debauchery as the self-driving vehicle propelled itself across the sky. The craft jerked and jolted in an arrhythmic manner as it flew to the heart of Homasoro City.",
-        "The wind was a torrent of darkness among the gusty trees, The moon was a ghostly galleon tossed upon cloudy seas, The road was a ribbon of moonlight over the purple moor, And the highwayman came riding— Riding—riding— The highwayman came riding, up to the old inn-door.",
-        "The sun shone brightly on the small village of Kinkan. It was a beautiful day, and everyone was busy with their daily chores. In the center of the village, there was a large fountain where children liked to play and splash each other. Among them was a young girl named Ahiru, who had bright red hair and a cheerful smile. She loved to dance and dreamed of becoming a ballerina someday.",
-    ]  # noqa: E501
+    cache.start(config=config)
+    test_logger.info("Testing embedding")
+    index_name: str = uuid4().hex
+    test_logger.info(f"Index name: {index_name}")
+    sample_text = """Madam Speaker, Madam Vice President, our First Lady and Second Gentleman. Members of Congress and the Cabinet. Justices of the Supreme Court. My fellow Americans.   Last year COVID-19 kept us apart. This year we are finally together again.  Tonight, we meet as Democrats Republicans and Independents. But most importantly as Americans.  With a duty to one another to the American people to the Constitution.  And with an unwavering resolve that freedom will always triumph over tyranny.  Six days ago, Russia’s Vladimir Putin sought to shake the foundations of the free world thinking he could make it bend to his menacing ways. But he badly miscalculated. He thought he could roll into Ukraine and the world would roll over. Instead he met a wall of strength he never imagined.  He met the Ukrainian people.  From President Zelenskyy to every Ukrainian, their fearlessness, their courage, their determination, inspires the world.  Groups of citizens blocking tanks with their bodies. Everyone from students to retirees teachers turned soldiers defending their homeland.  In this struggle as President Zelenskyy said in his speech to the European Parliament “Light will win over darkness.” The Ukrainian Ambassador to the United States is here tonight. Let each of us here tonight in this Chamber send an unmistakable signal to Ukraine and to the world.  Please rise if you are able and show that, Yes, we the United States of America stand with the Ukrainian people. Throughout our history we’ve learned this lesson when dictators do not pay a price for their aggression they cause more chaos. They keep moving. And the costs and the threats to America and the world keep rising.    That’s why the NATO Alliance was created to secure peace and stability in Europe after World War 2. The United States is a member along with 29 other nations.  It matters. American diplomacy matters. American resolve matters.  Putin’s latest attack on Ukraine was premeditated and unprovoked.  He rejected repeated efforts at diplomacy.  He thought the West and NATO wouldn’t respond. And he thought he could divide us at home. Putin was wrong. We were ready.  Here is what we did.    We prepared extensively and carefully. We spent months building a coalition of other freedom-loving nations from Europe and the Americas to Asia and Africa to confront Putin. I spent countless hours unifying our European allies. We shared with the world in advance what we knew Putin was planning and precisely how he would try to falsely justify his aggression.   We countered Russia’s lies with truth.    And now that he has acted the free world is holding him accountable.  Along with twenty-seven members of the European Union including France, Germany, Italy, as well as countries like the United Kingdom, Canada, Japan, Korea, Australia, New Zealand, and many others, even Switzerland. We are inflicting pain on Russia and supporting the people of Ukraine. Putin is now isolated from the world more than ever. Together with our allies –we are right now enforcing powerful economic sanctions. We are cutting off Russia’s largest banks from the international financial system.   Preventing Russia’s central bank from defending the Russian Ruble making Putin’s $630 Billion “war fund” worthless."""  # noqa: E501
     sample_queries = [
-        "What is the name of the city where Thornton lives?",
-        "What is the rhyme scheme of “The Highwayman”?",
-        "What is the genre of “Princess Tutu”?",
+        "What has been the response of the Ukrainian people to the Russian invasion, as depicted in the speech?",
+        "What preparations did the speaker mention were made to confront Putin's actions, and how does this reflect on the role of NATO and American diplomacy?",
+        "What are the specific economic sanctions mentioned in the speech that the United States and its allies are enforcing against Russia, and how do they aim to impact Russia's economy and Putin's 'war fund'?",
     ]
-    text_splitter = TokenTextSplitter(
-        chunk_size=20,
-        chunk_overlap=0,
-        model_name="gpt-3.5-turbo",
+    assert await VectorStoreManager.asimilarity_search(sample_queries, index_name=index_name, k=3) is None
+    await VectorStoreManager.create_documents(sample_text, index_name=index_name)
+    results: list[list[Document]] | None = await VectorStoreManager.asimilarity_search(
+        sample_queries, index_name=index_name, k=3
     )
-
-    texts = text_splitter.split_text("\n".join(sample_texts))  # noqa: F841
-    test_logger.info(f"len(texts): {len(texts)}")
-    embeddings: Embeddings = OpenAIEmbeddings(
-        client=openai.Embedding,
-        openai_api_key=environ["OPENAI_API_KEY"],
-    )
-
-    redis_url = "redis://{username}:{password}@{host}:{port}/{db}".format(
-        username="",
-        password=config.redis_password,
-        host=config.redis_host,
-        port=config.redis_port,
-        db=config.redis_database,
-    )
-    rds = await Redis.afrom_texts(
-        texts,
-        embedding=embeddings,
-        redis_url=redis_url,
-        index_name="test_texts",
-    )
-    # rds = await Redis.afrom_existing_index(embedding=embeddings, redis_url=redis_url, index_name="test_texts")
-    test_logger.info(f"rds.index_name: {rds.index_name}")
-    for query in sample_queries:
-        result = await rds.asimilarity_search(query, k=1)
-        test_logger.info(f"result: {result}")
+    assert results is not None
+    for i, result in enumerate(results):
+        test_logger.info(f"\n### Query Result{i + 1}")
+        for j, doc in enumerate(result):
+            test_logger.info(f"-----> Document[{j + 1}]\n{doc.page_content}\n")

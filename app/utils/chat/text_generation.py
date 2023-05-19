@@ -173,7 +173,7 @@ async def generate_from_openai(user_chat_context: UserChatContext) -> AsyncGener
             except ChatLengthException:
                 api_logger.error("token limit exceeded")
                 if len(user_chat_context.user_message_histories) == len(user_chat_context.ai_message_histories):
-                    deleted_histories += await MessageManager.set_message_history_safely(
+                    deleted_while_overriding: int | None = await MessageManager.set_message_history_safely(
                         user_chat_context=user_chat_context,
                         role=ChatRoles.AI,
                         index=-1,
@@ -182,6 +182,8 @@ async def generate_from_openai(user_chat_context: UserChatContext) -> AsyncGener
                         update_cache=False,
                         extra_token_margin=ChatConfig.extra_token_margin,
                     )
+                    if deleted_while_overriding is not None:
+                        deleted_histories += deleted_while_overriding
 
                 else:
                     deleted_histories = await MessageManager.add_message_history_safely(

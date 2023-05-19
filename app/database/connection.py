@@ -31,7 +31,6 @@ import openai
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.embeddings.base import Embeddings
 from app.utils.langchain.redis_vectorstore import Redis as RedisVectorStore
-from app.utils.langchain.redis_vectorstore import _ensure_index_exist, _redis_prefix
 from app.common.config import OPENAI_API_KEY
 
 
@@ -196,6 +195,7 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
             Base.metadata.reflect(conn)
             conn.commit()
         self.root_engine.dispose()
+        self.root_engine = None
         self.engine = create_async_engine(
             database_url,
             echo=config.db_echo,
@@ -209,10 +209,12 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         self.is_initiated = True
 
     async def close(self) -> None:
-        if self.session is None or self.engine is None:
-            return
-        await self.session.close()
-        await self.engine.dispose()
+        if self.session is not None:
+            await self.session.close()
+        if self.engine is not None:
+            await self.engine.dispose()
+        if self.root_engine is not None:
+            self.root_engine.dispose()
         self.is_initiated = False
 
     async def get_db(self) -> AsyncGenerator[AsyncSession, str]:
@@ -372,7 +374,6 @@ class RedisFactory(metaclass=SingletonMetaClass):
     def start(
         self,
         config: Config,
-        index_name: str = "vectorstore",
         content_key: str = "content",
         metadata_key: str = "metadata",
         vector_key: str = "content_vector",
@@ -393,28 +394,8 @@ class RedisFactory(metaclass=SingletonMetaClass):
             client=openai.Embedding,
             openai_api_key=openai_api_key,
         )
-        _tmp_ = RedisVectorStore(
-            redis_url=redis_url,
-            index_name=index_name,
-            embedding_function=embeddings.embed_query,
-            content_key=content_key,
-            metadata_key=metadata_key,
-            vector_key=vector_key,
-            is_async=False,
-        )
-        _ensure_index_exist(
-            client=_tmp_.client,  # type: ignore
-            index_name=index_name,
-            prefix=_redis_prefix(index_name),
-            content_key=content_key,
-            metadata_key=metadata_key,
-            vector_key=vector_key,
-            dim=vector_dimension,
-        )
-        _tmp_.client.close()
         self._vectorstore = RedisVectorStore(  # type: ignore
             redis_url=redis_url,
-            index_name=index_name,
             embedding_function=embeddings.embed_query,
             content_key=content_key,
             metadata_key=metadata_key,

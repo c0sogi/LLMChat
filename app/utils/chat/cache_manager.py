@@ -5,6 +5,7 @@ import re
 from app.database.connection import cache
 from app.models.llms import LLMModels
 from app.models.chat_models import ChatRoles, MessageHistory, UserChatContext, UserChatProfile
+from app.utils.logger import api_logger
 
 
 class CacheManager:
@@ -62,14 +63,6 @@ class CacheManager:
             for field, value in stored_list.items():
                 if value is not None:
                     stored_list[field] = [orjson_loads(v) for v in value]
-        except Exception:
-            default: UserChatContext = UserChatContext.construct_default(
-                user_id=user_id,
-                chat_room_id=chat_room_id,
-            )
-            await cls.create_context(default)
-            return default
-        else:
             return UserChatContext(
                 user_chat_profile=UserChatProfile(**stored_string["user_chat_profile"]),  # type: ignore
                 llm_model=LLMModels._member_map_[stored_string["llm_model"]],  # type: ignore
@@ -83,6 +76,14 @@ class CacheManager:
                 if stored_list["system_message_histories"] is not None
                 else [],
             )
+        except Exception:
+            api_logger.error("Error reading context from cache", exc_info=True)
+            default: UserChatContext = UserChatContext.construct_default(
+                user_id=user_id,
+                chat_room_id=chat_room_id,
+            )
+            await cls.create_context(default)
+            return default
 
     @classmethod
     async def create_context(
@@ -166,7 +167,7 @@ class CacheManager:
     @classmethod
     async def delete_user(cls, user_id: str) -> int:
         # delete all keys starting with "chat:{user_id}:"
-        keys = [key async for key in cache.redis.scan_iter(f"chat:{user_id}:*")]
+        keys = [key async for key in cache.redis.scan_iter(f"*:{user_id}:*")]
         if not keys:
             return 0
         return await cache.redis.delete(*keys)

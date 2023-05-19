@@ -2,18 +2,21 @@ from asyncio import gather
 
 from fastapi.concurrency import run_in_threadpool
 from langchain.text_splitter import TokenTextSplitter
+from redis.asyncio import Redis as AsyncRedisType
 
 from app.database.connection import cache
 from app.utils.chat.file_loader import read_bytes_to_text
-from app.utils.langchain.redis_vectorstore import Document
+from app.utils.langchain.redis_vectorstore import Document, _acheck_index_exists, _aensure_index_exist, _redis_prefix
 
 
 class VectorStoreManager:
     @staticmethod
     async def create_documents(
         text: str,
+        index_name: str,
         chunk_size: int = 500,
         chunk_overlap: int = 0,
+        dimension: int = 1536,
         tokenizer_model: str = "gpt-3.5-turbo",
     ) -> list[str]:
         texts = TokenTextSplitter(
@@ -21,19 +24,32 @@ class VectorStoreManager:
             chunk_overlap=chunk_overlap,
             model_name=tokenizer_model,
         ).split_text(text)
-        await cache.vectorstore.aadd_texts(texts=texts)
+        assert isinstance(cache.vectorstore.client, AsyncRedisType)
+        await _aensure_index_exist(
+            client=cache.vectorstore.client,
+            prefix=_redis_prefix(index_name),
+            index_name=index_name,
+            dim=dimension,
+        )
+        await cache.vectorstore.aadd_texts(texts, index_name=index_name)
         return texts
 
     @staticmethod
-    async def asimilarity_search(queries: list[str], k: int = 1) -> list[list[Document]]:
-        return await gather(*[cache.vectorstore.asimilarity_search(query, k=k) for query in queries])
+    async def asimilarity_search(queries: list[str], index_name: str, k: int = 1) -> list[list[Document]] | None:
+        assert isinstance(cache.vectorstore.client, AsyncRedisType)
+        if not await _acheck_index_exists(client=cache.vectorstore.client, index_name=index_name):
+            return None
+
+        return await gather(
+            *[cache.vectorstore.asimilarity_search(query, index_name=index_name, k=k) for query in queries]
+        )
 
     @classmethod
-    async def embed_file_to_vectorstore(cls, file: bytes, filename: str) -> str:
+    async def embed_file_to_vectorstore(cls, file: bytes, filename: str, index_name: str) -> str:
         # if user uploads file, embed it
         try:
             text: str = await run_in_threadpool(read_bytes_to_text, file, filename)
-            docs: list[str] = await VectorStoreManager.create_documents(text)
+            docs: list[str] = await VectorStoreManager.create_documents(text, index_name=index_name)
             return f"Successfully embedded documents. You uploaded file begins with...\n\n```{docs[0][:50]}```..."
         except Exception:
             return "Can't embed this type of file. Try another file."
@@ -68,7 +84,13 @@ We used the WEAT score to examine several word embedding models: word2vec and Gl
 
     async def main():
         # await vectorstore_manager.create_documents(texts=sample_texts, chunk_size=50)
-        results: list[list[Document]] = await VectorStoreManager.asimilarity_search(queries=sample_queries)
+        index_name = "abc"
+        results: list[list[Document]] | None = await VectorStoreManager.asimilarity_search(
+            queries=sample_queries, index_name=index_name
+        )
+        if results is None:
+            print("Index does not exist")
+            return
         for idx, docs in enumerate(results):
             print(f"Query: {sample_queries[idx]}\nDocs: {[doc.page_content for doc in docs]}\n\n")
 
