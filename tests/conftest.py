@@ -55,13 +55,13 @@ def base_websocket_url() -> str:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def real_client(app: FastAPI, base_http_url: str) -> AsyncGenerator[httpx.AsyncClient, None]:
+async def async_client(app: FastAPI, base_http_url: str) -> AsyncGenerator[httpx.AsyncClient, None]:
     async with httpx.AsyncClient(app=app, base_url=base_http_url) as ac:
         yield ac
 
 
 @pytest.fixture(scope="session")
-def websocket_app(app: FastAPI) -> Generator[TestClient, None, None]:
+def client(app: FastAPI) -> Generator[TestClient, None, None]:
     with TestClient(app=app) as tc:
         yield tc
 
@@ -80,9 +80,9 @@ async def login_header(random_user: dict[str, str]) -> dict[str, str]:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def api_key_dict(real_client: httpx.AsyncClient, login_header: dict[str, str]):
+async def api_key_dict(async_client: httpx.AsyncClient, login_header: dict[str, str]):
     api_key_memo: str = f"TESTING : {str(datetime.now())}"
-    response: httpx.Response = await real_client.post(
+    response: httpx.Response = await async_client.post(
         "/api/user/apikeys",
         json={"user_memo": api_key_memo},
         headers=login_header,
@@ -96,7 +96,7 @@ async def api_key_dict(real_client: httpx.AsyncClient, login_header: dict[str, s
         "secret_key": response_body["secret_key"],
     }
 
-    response = await real_client.get("/api/user/apikeys", headers=login_header)
+    response = await async_client.get("/api/user/apikeys", headers=login_header)
     response_body = response.json()
     assert response.status_code == 200
     assert api_key_memo in response_body[0]["user_memo"]
@@ -113,7 +113,7 @@ def pytest_collection_modifyitems(items):
     redis_tests = []
     other_tests = []
     for item in items:
-        if "websocket_app" in item.fixturenames:
+        if "client" in item.fixturenames:
             app_tests.append(item)
         elif item.get_closest_marker("redistest") is not None:
             redis_tests.append(item)

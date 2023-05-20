@@ -1,6 +1,5 @@
 import enum
 from sqlalchemy import (
-    Column,
     String,
     Integer,
     Enum,
@@ -17,22 +16,22 @@ from . import Mixin
 
 
 class UserStatus(str, enum.Enum):
-    ACTIVE = "active"
-    DELETED = "deleted"
-    BLOCKED = "blocked"
+    active = "active"
+    deleted = "deleted"
+    blocked = "blocked"
 
 
 class ApiKeyStatus(str, enum.Enum):
-    ACTIVE = "active"
-    STOPPED = "stopped"
-    DELETED = "deleted"
+    active = "active"
+    stopped = "stopped"
+    deleted = "deleted"
 
 
 class Users(Base, Mixin):
     __tablename__ = "users"
-    status = Column(String, Enum(UserStatus), default=UserStatus.ACTIVE, nullable=False)
-    email: Mapped[str] = mapped_column(String(length=20))
-    password: Mapped[str | None] = mapped_column(String(length=72))
+    status: Mapped[str] = mapped_column(Enum(UserStatus), default=UserStatus.active)
+    email: Mapped[str] = mapped_column(String(length=50))
+    password: Mapped[str | None] = mapped_column(String(length=100))
     name: Mapped[str | None] = mapped_column(String(length=20))
     phone_number: Mapped[str | None] = mapped_column(String(length=20))
     profile_img: Mapped[str | None] = mapped_column(String(length=100))
@@ -49,7 +48,7 @@ class Users(Base, Mixin):
 
 class ApiKeys(Base, Mixin):
     __tablename__ = "api_keys"
-    status = Column(String, Enum(ApiKeyStatus), default=ApiKeyStatus.ACTIVE, nullable=False)
+    status: Mapped[str] = mapped_column(Enum(ApiKeyStatus), default=ApiKeyStatus.active)
     access_key: Mapped[str] = mapped_column(String(length=64), index=True, unique=True)
     secret_key: Mapped[str] = mapped_column(String(length=64))
     user_memo: Mapped[str | None] = mapped_column(String(length=40))

@@ -154,4 +154,5 @@ class InitMessage(BaseModel):
     chat_rooms: list[dict[str, str]] | None = None
     models: list[str] | None = None
     selected_model: str | None = None
+    tokens: int | None = None
     wait_next_query: bool

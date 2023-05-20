@@ -112,6 +112,7 @@ async def command_handler(
         callback_name=callback_name,
         callback_args=callback_args,
         buffer=buffer,
+        translate=translate,
     )
     if response_type is ResponseType.DO_NOTHING:
         return
@@ -578,17 +579,35 @@ Start a conversation as "CODEX: Hi, what are we coding today?"
         return f"/testchaining {chain_size-1}", ResponseType.REPEAT_COMMAND
 
     @staticmethod
-    @CommandResponse.handle_both
-    async def query(query: str, /, buffer: BufferedUserContext) -> str:
+    async def query(query: str, /, buffer: BufferedUserContext, **kwargs) -> Tuple[str | None, ResponseType]:
         """Query from redis vectorstore\n
         /query <query>"""
         k: int = 3
-        found: list[list[Document]] | None = await VectorStoreManager.asimilarity_search(
-            queries=[query], index_name=buffer.user_id, k=k
-        )
-        if found is not None and len(found[0]) > 0:
-            found_text: str = "\n\n".join([f"...{document.page_content}..." for document in found[0]])
-            query = CONTEXT_QUESTION_TMPL_QUERY1.format(question=query, context=found_text)
+        found_text_and_score: list[
+            list[Tuple[Document, float]]
+        ] = await VectorStoreManager.asimilarity_search_multiple_index_with_score(
+            queries=[query], index_names=[buffer.user_id, ""], k=k
+        )  # lower score is the better!
+
+        if len(found_text_and_score[0]) > 0:
+            found_text: str = "\n\n".join([document.page_content for document, _ in found_text_and_score[0]])
+            context_and_query: str = CONTEXT_QUESTION_TMPL_QUERY1.format(question=query, context=found_text)
+            await MessageHandler.user(
+                msg=context_and_query,
+                translate=kwargs.get("translate", False),
+                buffer=buffer,
+            )
+            await MessageHandler.ai(
+                translate=kwargs.get("translate", False),
+                buffer=buffer,
+            )
+            await MessageManager.set_message_history_safely(
+                user_chat_context=buffer.current_user_chat_context,
+                role=ChatRoles.USER,
+                new_content=query,
+                index=-1,
+            )
+            return None, ResponseType.DO_NOTHING
         else:
             await SendToWebsocket.message(
                 websocket=buffer.websocket,
@@ -597,7 +616,7 @@ Start a conversation as "CODEX: Hi, what are we coding today?"
                 finish=False,
                 model_name=buffer.current_user_chat_context.llm_model.value.name,
             )
-        return query
+            return query, ResponseType.HANDLE_BOTH
 
     @staticmethod
     @CommandResponse.send_message_and_stop
@@ -606,3 +625,11 @@ Start a conversation as "CODEX: Hi, what are we coding today?"
         /embed <text_to_embed>"""
         await VectorStoreManager.create_documents(text=text_to_embed, index_name=buffer.user_id)
         return "Embedding successful!"
+
+    @staticmethod
+    @CommandResponse.send_message_and_stop
+    async def share(text_to_embed: str, /) -> str:
+        """Embed the text and save its vectors in the redis vectorstore. This index is shared for everyone.\n
+        /share <text_to_embed>"""
+        await VectorStoreManager.create_documents(text=text_to_embed, index_name="")
+        return "Embedding successful! This data will be shared for everyone."

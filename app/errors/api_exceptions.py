@@ -144,6 +144,24 @@ class Responses_400:
         msg="이미 사용중인 웹소켓입니다.",
         detail="Websocket is already in use.",
     )
+    invalid_email_format: APIException = APIException(
+        status_code=400,
+        internal_code=17,
+        msg="올바르지 않은 이메일 형식 입니다.",
+        detail="Invalid Email Format.",
+    )
+    email_length_not_in_range: APIException = APIException(
+        status_code=400,
+        internal_code=18,
+        msg="이메일은 6자 이상 50자 이하로 입력해주세요.",
+        detail="Email must be 6 ~ 50 characters.",
+    )
+    password_length_not_in_range: APIException = APIException(
+        status_code=400,
+        internal_code=19,
+        msg="비밀번호는 6자 이상 100자 이하로 입력해주세요.",
+        detail="Password must be 6 ~ 100 characters.",
+    )
 
 
 @dataclass(frozen=True)

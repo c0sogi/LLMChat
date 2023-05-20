@@ -4,7 +4,7 @@ from typing import Optional
 from app.common.config import OPENAI_API_KEY
 
 from app.models.llm_tokenizers import BaseTokenizer, LlamaTokenizer, OpenAITokenizer
-from app.utils.chat.prompts import USER_AI_TMPL_CHAT
+from app.utils.chat.prompts import USER_AI_TMPL_CHAT1
 
 
 @dataclass
@@ -24,7 +24,7 @@ class LlamaCppModel(LLMModel):
     n_parts: int = (
         -1
     )  # Number of parts to split the model into. If -1, the number of parts is automatically determined.
-    n_gpu_layers: int = 32  # Number of layers to keep on the GPU. If 0, all layers are kept on the GPU.
+    n_gpu_layers: int = 30  # Number of layers to keep on the GPU. If 0, all layers are kept on the GPU.
     seed: int = -1  # Seed. If -1, a random seed is used.
     f16_kv: bool = True  # Use half-precision for key/value cache.
     logits_all: bool = False  # Return logits for all tokens, not just the last token.
@@ -45,7 +45,7 @@ class LlamaCppModel(LLMModel):
     top_p: Optional[float] = 0.95  # The top-p value to use for sampling.
     logprobs: Optional[int] = None  # The number of logprobs to return. If None, no logprobs are returned.
     stop: Optional[list[str]] = field(
-        default_factory=lambda: ["\u200b"]
+        default_factory=lambda: []
     )  # A list of strings to stop generation when encountered.
     repeat_penalty: Optional[float] = 1.1  # The penalty to apply to repeated tokens.
     top_k: Optional[int] = 40  # The top-k value to use for sampling.
@@ -96,7 +96,17 @@ class LLMModels(Enum):  # gpt models for openai api
         max_tokens_per_request=2048,
         token_margin=8,
         tokenizer=OpenAITokenizer("gpt-3.5-turbo"),
-        api_url="https://biyan.xyz/proxy/openai/v1/chat/completions",
+        api_url="https://gookproxy-gyul.hf.space/proxy/openai/v1/chat/completions",
+        api_key="arcalive",
+    )
+
+    gpt_4_proxy = OpenAIModel(
+        name="gpt-4",
+        max_total_tokens=4096,
+        max_tokens_per_request=2048,
+        token_margin=8,
+        tokenizer=OpenAITokenizer("gpt-3.5-turbo"),
+        api_url="https://gookproxy-gyul.hf.space/proxy/openai/v1/chat/completions",
         api_key="arcalive",
     )
 
@@ -107,7 +117,7 @@ class LLMModels(Enum):  # gpt models for openai api
         token_margin=8,
         tokenizer=LlamaTokenizer("ehartford/Wizard-Vicuna-7B-Uncensored"),
         model_path="./llama_models/ggml/Wizard-Vicuna-7B-Uncensored.ggmlv2.q4_1.bin",
-        description=USER_AI_TMPL_CHAT,
+        description=USER_AI_TMPL_CHAT1,
     )
     wizard_vicuna_13b_uncensored = LlamaCppModel(
         name="Wizard-Vicuna-13B-Uncensored",
@@ -116,7 +126,7 @@ class LLMModels(Enum):  # gpt models for openai api
         token_margin=8,
         tokenizer=LlamaTokenizer("ehartford/Wizard-Vicuna-13B-Uncensored"),
         model_path="./llama_models/ggml/Wizard-Vicuna-13B-Uncensored.ggml.q5_1.bin",
-        description=USER_AI_TMPL_CHAT,
+        description=USER_AI_TMPL_CHAT1,
     )
     gpt4_x_vicuna_13b = LlamaCppModel(
         name="gpt4-x-vicuna-13B-GGML",
@@ -125,7 +135,7 @@ class LLMModels(Enum):  # gpt models for openai api
         token_margin=8,
         tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
         model_path="./llama_models/ggml/gpt4-x-vicuna-13B.ggml.q4_0.bin",
-        description=USER_AI_TMPL_CHAT,
+        description=USER_AI_TMPL_CHAT1,
     )
     wizard_mega_13b = LlamaCppModel(
         name="wizard-mega-13B-GGML",
@@ -134,8 +144,7 @@ class LLMModels(Enum):  # gpt models for openai api
         token_margin=8,
         tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
         model_path="./llama_models/ggml/wizard-mega-13B.ggml.q4_0.bin",
-        stop=["\u200b", "</s>"],
-        description=USER_AI_TMPL_CHAT,
+        description=USER_AI_TMPL_CHAT1,
     )
     manticore_13b_uncensored = LlamaCppModel(
         name="Manticore-13B-GGML",
@@ -144,8 +153,7 @@ class LLMModels(Enum):  # gpt models for openai api
         token_margin=8,
         tokenizer=LlamaTokenizer("openaccess-ai-collective/manticore-13b"),
         model_path="./llama_models/ggml/Manticore-13B.ggmlv2.q5_1.bin",
-        stop=["\u200b", "</s>"],
-        description=USER_AI_TMPL_CHAT,
+        description=USER_AI_TMPL_CHAT1,
     )
 
     @classmethod

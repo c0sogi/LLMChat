@@ -11,7 +11,9 @@ from app.errors.chat_exceptions import (
     ChatLengthException,
     ChatTextGenerationException,
 )
+from app.models.llms import OpenAIModel
 from app.utils.chat.message_manager import MessageManager
+from app.utils.chat.prompts import ROLE_CONTENT_TMPL_CHAT1
 from app.viewmodels.base_models import SendInitToWebsocket, SendToStream
 from app.models.chat_models import ChatRoles, UserChatContext
 from app.utils.chat.chat_config import ChatConfig
@@ -51,6 +53,7 @@ def message_history_organizer(
     user_chat_context: UserChatContext,
     send_to_stream: bool = True,
     return_as_string: bool = False,
+    chat_turn_prompt: str = ROLE_CONTENT_TMPL_CHAT1,
 ) -> Union[list[dict], str]:  # organize message history for openai api
     message_histories: list[dict[str, str]] = []
     if send_to_stream:
@@ -76,8 +79,8 @@ def message_history_organizer(
         system_role: str = user_chat_context.user_chat_profile.system_role
         prefix: str = ""
         if hasattr(user_chat_context.llm_model.value, "description"):
-            if user_chat_context.llm_model.value.description is not None:
-                prefix: str = user_chat_context.llm_model.value.description.format(
+            if user_chat_context.llm_model.value.description is not None:  # type: ignore
+                prefix: str = user_chat_context.llm_model.value.description.format(  # type: ignore
                     user=user_role.upper(),
                     USER=user_role.upper(),
                     ai=ai_role.upper(),
@@ -88,21 +91,22 @@ def message_history_organizer(
 
         for message_history in message_histories:
             if message_history["role"] == system_role:
-                prefix += f"{system_role.upper()}: {message_history['content']}\n"
+                prefix += chat_turn_prompt.format(role=system_role.upper(), content=message_history["content"].strip())
             elif message_history["role"] == user_role:
-                prefix += f"{user_role.upper()}: {message_history['content'].strip()}\n"
+                prefix += chat_turn_prompt.format(role=user_role.upper(), content=message_history["content"].strip())
             elif message_history["role"] == ai_role:
-                prefix += f"{ai_role.upper()}: {message_history['content'].strip()}\n"
+                prefix += chat_turn_prompt.format(role=ai_role.upper(), content=message_history["content"].strip())
             else:
                 api_logger.error(f"Invalid message history: {message_history}")
                 raise Exception("Invalid message history")
-        prefix += f"{ai_role.upper()}: "
+        prefix += chat_turn_prompt.format(role=ai_role.upper(), content="").strip() + " "
         return prefix
     else:
         return message_histories  # return message histories to be used in openai api
 
 
 async def generate_from_openai(user_chat_context: UserChatContext) -> AsyncGenerator:  # async generator for streaming
+    assert isinstance(user_chat_context.llm_model.value, OpenAIModel)
     user_defined_api_key: str | None = user_chat_context.optional_info.get("api_key")
     default_api_key: str | None = user_chat_context.llm_model.value.api_key
     api_key_to_use: Any = user_defined_api_key if user_defined_api_key is not None else default_api_key
@@ -234,7 +238,7 @@ async def generate_from_llama_cpp(
             )
             break
         else:
-            api_logger.error(f"llama_cpp exception: {generation}")
+            api_logger.error(f"llama_cpp exception: {type(generation)}{str(generation)}")
             raise ChatTextGenerationException(
                 msg="Unexpected response from llama_cpp"
             )  # raise exception for unexpected response

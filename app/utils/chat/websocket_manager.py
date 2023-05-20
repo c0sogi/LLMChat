@@ -17,6 +17,7 @@ class SendToWebsocket:
         send_previous_chats: bool = False,
         send_models: bool = False,
         send_selected_model: bool = False,
+        send_tokens: bool = False,
         wait_next_query: bool = False,
     ) -> None:
         """Send initial message to websocket, providing current state of user"""
@@ -34,6 +35,7 @@ class SendToWebsocket:
                 selected_model=buffer.current_user_chat_context.llm_model.name
                 if send_selected_model or send_previous_chats or send_models
                 else None,
+                tokens=buffer.current_user_chat_context.total_tokens if send_tokens else None,
                 wait_next_query=wait_next_query,
             ).json(),
             chat_room_id=buffer.current_chat_room_id,

@@ -1,4 +1,4 @@
-import asyncio
+from asyncio import gather
 from app.utils.chat.cache_manager import CacheManager
 from app.models.chat_models import ChatRoles, MessageHistory, UserChatContext
 
@@ -44,7 +44,7 @@ class MessageManager:
             )
 
             if num_of_deleted_histories > 0:
-                asyncio.gather(
+                await gather(
                     CacheManager.lpop_message_history(
                         user_id=user_chat_context.user_id,
                         chat_room_id=user_chat_context.chat_room_id,
@@ -137,13 +137,20 @@ class MessageManager:
                 index=index,
             )
             if num_of_deleted_histories > 0:
-                for role in (ChatRoles.AI, ChatRoles.USER):
-                    await CacheManager.lpop_message_history(
+                await gather(
+                    CacheManager.lpop_message_history(
                         user_id=user_chat_context.user_id,
                         chat_room_id=user_chat_context.chat_room_id,
-                        role=role,
+                        role=ChatRoles.AI,
                         count=num_of_deleted_histories,
-                    )
+                    ),
+                    CacheManager.lpop_message_history(
+                        user_id=user_chat_context.user_id,
+                        chat_room_id=user_chat_context.chat_room_id,
+                        role=ChatRoles.USER,
+                        count=num_of_deleted_histories,
+                    ),
+                )
         return num_of_deleted_histories
 
     @staticmethod

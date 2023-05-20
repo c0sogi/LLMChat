@@ -120,6 +120,10 @@ class ChatStreamManager:
     async def _websocket_sender(cls, buffer: BufferedUserContext) -> None:
         while True:  # loop until connection is closed
             try:
+                await SendToWebsocket.init(
+                    buffer=buffer,
+                    send_tokens=True,
+                )
                 item: MessageFromWebsocket | str = await buffer.queue.get()
 
                 if isinstance(item, str):

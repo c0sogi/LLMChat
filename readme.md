@@ -7,13 +7,17 @@
 
 ## **Demo**
 ---
-+ ### Overall UI
++ ### Chat UI
     Note that the API keys doesn't play any role at this moment. OpenAI key in `.env` file will be used for all the requests. I just added this feature for who wants to use this project as a template for build production-ready chat app.
-> ![Overall UI](app/contents/ui_demo.png)
+> ![Overall UI](app/contents/chat_demo.gif)
+---
++ ### Embedding text
+    With the `/embed` command, you can store the text indefinitely in your own private vector database and query it later, anytime. If you use the `/share` command, the text is stored in a public vector database that everyone can share. The `/query` command helps the AI generate contextualized answers by searching for text similarities in the public and private databases. This solves one of the biggest limitations of language models: memory. 
+> ![Switching Chat](app/contents/embed_demo.png)
 ---
 + ### Embedding PDF file
     You can embed PDF file by clicking `Embed document` on the bottom left. In a few seconds, text contents of PDF will be converted to vectors and embedded to Redis cache. You can search in  similar documents by entering command `/query <query>` on the chat.
-> ![Switching Chat](app/contents/embed_demo.png)
+> ![Switching Chat](app/contents/embed_file_demo.png)
 ---
 + ### Change your chat model
     You can change your chat model by dropdown menu. You can define whatever model you want to use in `LLMModels` which is located in `app/models/llms.py`. 
@@ -23,10 +27,15 @@
     You can change your chat title by clicking the title of the chat. This will be stored until you change or delete it!
 > ![Switching Chat](app/contents/edit_title_demo.png)
 ---
++ ### Markdown
+    You can ask and get texts with markdown-formatted. Codes will be syntax-highlighted.
+> ![Switching Chat](app/contents/code_demo.png)
+---
 + ### Stop generation
     You can just stop generating text by clicking the stop button at bottom right corner.
 > ![Switching Chat](app/contents/stop_generation_demo.gif)
 ---
+
 
 ## Key Features
 - **FastAPI** - High-performance `web framework` for building APIs with Python.
@@ -192,18 +201,19 @@ async def embed(text_to_embed: str, /, buffer: BufferedUserContext) -> str:
 
 ### 2. Querying embedded data using the `/query` command
 
-When the user enters the `/query <query>` command, the `asimilarity_search` function is used to find up to three results with the highest vector similarity to the embedded data in the Redis vectorstore. These results are then stored in the context of the chatlist, which helps AI answer the query by referring to this data in the future.
+When the user enters the `/query <query>` command, the `asimilarity_search` function is used to find up to three results with the highest vector similarity to the embedded data in the Redis vectorstore. These results are temporarily stored in the context of the chat, which helps AI answer the query by referring to these data.
 
 ```python
 @staticmethod
-@CommandResponse.handle_ai
-async def query(query: str, /, buffer: BufferedUserContext) -> None:
+async def query(query: str, /, buffer: BufferedUserContext, **kwargs) -> Tuple[str | None, ResponseType]:
     """Query from redis vectorstore\n
     /query <query>"""
     k: int = 3
-    found: list[list[Document]] | None = await VectorStoreManager.asimilarity_search(
-        queries=[query], index_name=buffer.user_id, k=k
-    )
+    found_text_and_score: list[
+        list[Tuple[Document, float]]
+    ] = await VectorStoreManager.asimilarity_search_multiple_index_with_score(
+        queries=[query], index_names=[buffer.user_id, ""], k=k
+    )  # lower score is the better!
     ...
 ```
 

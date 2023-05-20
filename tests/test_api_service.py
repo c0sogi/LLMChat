@@ -6,7 +6,7 @@ from app.utils.params_utils import hash_params, parse_params
 
 
 async def request_service(
-    real_client: AsyncClient,
+    async_client: AsyncClient,
     access_key: str,
     secret_key: str,
     request_method: Literal["get", "post", "put", "delete", "options"],
@@ -37,13 +37,13 @@ async def request_service(
 
     if stream:
         response_body = ""
-        async with real_client.stream(method=request_method.upper(), url=url, **method_options) as response:
+        async with async_client.stream(method=request_method.upper(), url=url, **method_options) as response:
             assert response.status_code in allowed_status_codes
             async for chunk in response.aiter_text():
                 response_body += chunk
                 logger.info(f"Streamed data: {chunk}") if logger is not None else ...
     else:
-        response: Response = await getattr(real_client, request_method.lower())(url=url, **method_options)
+        response: Response = await getattr(async_client, request_method.lower())(url=url, **method_options)
         response_body: Any = response.json()
         logger.info(f"response_body: {response_body}") if logger is not None else ...
         assert response.status_code in allowed_status_codes
@@ -51,7 +51,7 @@ async def request_service(
 
 
 @pytest.mark.asyncio
-async def test_request_api(real_client: AsyncClient, api_key_dict: dict, test_logger):
+async def test_request_api(async_client: AsyncClient, api_key_dict: dict, test_logger):
     access_key, secret_key = api_key_dict["access_key"], api_key_dict["secret_key"]
     service_name: str = ""
     request_method: str = "get"
@@ -59,7 +59,7 @@ async def test_request_api(real_client: AsyncClient, api_key_dict: dict, test_lo
     required_headers: dict[str, Any] = {}
     allowed_status_codes: tuple = (200, 201, 307)
     await request_service(
-        real_client=real_client,
+        async_client=async_client,
         access_key=access_key,
         secret_key=secret_key,
         request_method=request_method,
@@ -73,7 +73,7 @@ async def test_request_api(real_client: AsyncClient, api_key_dict: dict, test_lo
 
 
 # @pytest.mark.asyncio
-# async def test_weather_api(real_client: AsyncClient, api_key_dict: dict):
+# async def test_weather_api(async_client: AsyncClient, api_key_dict: dict):
 #     access_key, secret_key = api_key_dict["access_key"], api_key_dict["secret_key"]
 #     service_name: str = "weather"
 #     request_method: str = "get"
@@ -84,7 +84,7 @@ async def test_request_api(real_client: AsyncClient, api_key_dict: dict, test_lo
 #     required_headers: dict[str, any] = {}
 #     allowed_status_codes: tuple[int] = (200, 307)
 #     await request_service(
-#         real_client=real_client,
+#         async_client=async_client,
 #         access_key=access_key,
 #         secret_key=secret_key,
 #         request_method=request_method,
@@ -97,7 +97,7 @@ async def test_request_api(real_client: AsyncClient, api_key_dict: dict, test_lo
 
 
 # @pytest.mark.asyncio
-# async def test_stream_api(real_client: AsyncClient, api_key_dict: dict):
+# async def test_stream_api(async_client: AsyncClient, api_key_dict: dict):
 #     access_key, secret_key = api_key_dict["access_key"], api_key_dict["secret_key"]
 #     service_name: str = "stream"
 #     request_method: str = "get"
@@ -105,7 +105,7 @@ async def test_request_api(real_client: AsyncClient, api_key_dict: dict, test_lo
 #     required_headers: dict[str, any] = {}
 #     allowed_status_codes: tuple[int] = (200, 307)
 #     await request_service(
-#         real_client=real_client,
+#         async_client=async_client,
 #         access_key=access_key,
 #         secret_key=secret_key,
 #         request_method=request_method,

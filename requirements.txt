@@ -29,6 +29,7 @@ orjson
 openai
 packaging
 pdf2image
+pexpect
 pluggy
 premailer
 py

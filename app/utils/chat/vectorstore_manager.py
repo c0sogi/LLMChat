@@ -9,6 +9,22 @@ from app.utils.chat.file_loader import read_bytes_to_text
 from app.utils.langchain.redis_vectorstore import Document, _acheck_index_exists, _aensure_index_exist, _redis_prefix
 
 
+async def search_if_index_exists(query: str, index_name: str, k: int) -> list[Document]:
+    assert isinstance(cache.vectorstore.client, AsyncRedisType)
+    if await _acheck_index_exists(client=cache.vectorstore.client, index_name=index_name):
+        return await cache.vectorstore.asimilarity_search(query, index_name=index_name, k=k)
+    else:
+        return []
+
+
+async def search_with_score_if_index_exists(query: str, index_name: str, k: int) -> list[tuple[Document, float]]:
+    assert isinstance(cache.vectorstore.client, AsyncRedisType)
+    if await _acheck_index_exists(client=cache.vectorstore.client, index_name=index_name):
+        return await cache.vectorstore.asimilarity_search_with_score(query, index_name=index_name, k=k)
+    else:
+        return []
+
+
 class VectorStoreManager:
     @staticmethod
     async def create_documents(
@@ -35,17 +51,68 @@ class VectorStoreManager:
         return texts
 
     @staticmethod
-    async def asimilarity_search(queries: list[str], index_name: str, k: int = 1) -> list[list[Document]] | None:
-        assert isinstance(cache.vectorstore.client, AsyncRedisType)
-        if not await _acheck_index_exists(client=cache.vectorstore.client, index_name=index_name):
-            return None
+    async def asimilarity_search(
+        queries: list[str],
+        index_name: str,
+        k: int = 1,
+    ) -> list[list[Document]]:
+        return await gather(*[search_if_index_exists(query=query, index_name=index_name, k=k) for query in queries])
 
-        return await gather(
-            *[cache.vectorstore.asimilarity_search(query, index_name=index_name, k=k) for query in queries]
-        )
+    @staticmethod
+    async def asimilarity_search_multiple_index(
+        queries: list[str],
+        index_names: list[str],
+        k: int = 1,
+    ) -> list[list[Document]]:
+        # Nested function to handle index check and search.
+
+        results = await gather(
+            *[
+                gather(*[search_if_index_exists(query=query, index_name=index_name, k=k) for query in queries])
+                for index_name in index_names
+            ]
+        )  # shape: (index, query, k)
+
+        # Reorganize results to have shape: (query, k * index)
+        results = [[item for sublist in results_for_query for item in sublist] for results_for_query in zip(*results)]
+
+        return results
+
+    @staticmethod
+    async def asimilarity_search_multiple_index_with_score(
+        queries: list[str],
+        index_names: list[str],
+        k: int = 1,
+    ) -> list[list[tuple[Document, float]]]:
+        # Nested function to handle index check and search.
+
+        # search_with_score_if_index_exists's shape: k
+        # search_with_score_if_index_exists's return type: list[tuple[Document, float]]
+        # Assume that tuple[Document, float] is a single result.
+        results = await gather(
+            *[
+                gather(
+                    *[search_with_score_if_index_exists(query=query, index_name=index_name, k=k) for query in queries]
+                )
+                for index_name in index_names
+            ]
+        )  # shape: (index, query, k)
+
+        # Reorganize results to have shape: (query, k * index) and sort the results
+        results = [
+            sorted([item for sublist in results_for_query for item in sublist], key=lambda x: x[1])
+            for results_for_query in zip(*results)
+        ]
+
+        return results
 
     @classmethod
-    async def embed_file_to_vectorstore(cls, file: bytes, filename: str, index_name: str) -> str:
+    async def embed_file_to_vectorstore(
+        cls,
+        file: bytes,
+        filename: str,
+        index_name: str,
+    ) -> str:
         # if user uploads file, embed it
         try:
             text: str = await run_in_threadpool(read_bytes_to_text, file, filename)

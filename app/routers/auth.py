@@ -7,6 +7,11 @@ from app.database.crud.users import is_email_exist, register_new_user
 from app.database.schemas.auth import Users
 from app.dependencies import user_dependency
 from app.errors.api_exceptions import Responses_400, Responses_404
+from app.utils.auth.register_validation import (
+    is_email_length_in_range,
+    is_email_valid_format,
+    is_password_length_in_range,
+)
 from app.utils.auth.token import create_access_token, token_decode
 from app.utils.chat.cache_manager import CacheManager
 from app.viewmodels.base_models import SnsType, Token, UserRegister, UserToken
@@ -39,8 +44,19 @@ async def register(
     if sns_type == SnsType.EMAIL:
         if not (reg_info.email and reg_info.password):
             raise Responses_400.no_email_or_password
-        if await is_email_exist(reg_info.email):
+
+        if is_email_length_in_range(email=reg_info.email) is False:
+            raise Responses_400.email_length_not_in_range
+
+        if is_password_length_in_range(password=reg_info.password) is False:
+            raise Responses_400.password_length_not_in_range
+
+        if is_email_valid_format(email=reg_info.email) is False:
+            raise Responses_400.invalid_email_format
+
+        if await is_email_exist(email=reg_info.email):
             raise Responses_400.email_already_exists
+
         hashed_password: str = bcrypt.hashpw(
             password=reg_info.password.encode("utf-8"),
             salt=bcrypt.gensalt(),

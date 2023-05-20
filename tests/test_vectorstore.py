@@ -7,7 +7,10 @@ from app.utils.chat.vectorstore_manager import VectorStoreManager
 
 
 @pytest.mark.asyncio
-async def test_embedding(config, test_logger):
+async def test_embedding_single_index(config, test_logger):
+    """Warning! This is expensive test!
+    It costs a lot to embed the text"""
+
     cache.start(config=config)
     test_logger.info("Testing embedding")
     index_name: str = uuid4().hex
@@ -18,7 +21,8 @@ async def test_embedding(config, test_logger):
         "What preparations did the speaker mention were made to confront Putin's actions, and how does this reflect on the role of NATO and American diplomacy?",
         "What are the specific economic sanctions mentioned in the speech that the United States and its allies are enforcing against Russia, and how do they aim to impact Russia's economy and Putin's 'war fund'?",
     ]
-    assert await VectorStoreManager.asimilarity_search(sample_queries, index_name=index_name, k=3) is None
+    empty = await VectorStoreManager.asimilarity_search(sample_queries, index_name=index_name, k=3)
+    assert len(empty[0]) == 0
     await VectorStoreManager.create_documents(sample_text, index_name=index_name)
     results: list[list[Document]] | None = await VectorStoreManager.asimilarity_search(
         sample_queries, index_name=index_name, k=3
@@ -28,3 +32,28 @@ async def test_embedding(config, test_logger):
         test_logger.info(f"\n### Query Result{i + 1}")
         for j, doc in enumerate(result):
             test_logger.info(f"-----> Document[{j + 1}]\n{doc.page_content}\n")
+
+
+@pytest.mark.asyncio
+async def test_embedding_multiple_index(config, test_logger):
+    cache.start(config=config)
+    test_logger.info("Testing embedding")
+    index_names: list[str] = [uuid4().hex for _ in range(2)]
+    test_logger.info(f"Index names: {index_names}")
+    texts_1 = ["Monkey loves banana", "Apple is red"]
+    texts_2 = ["Banana is yellow", "Apple is green"]
+    queries = ["Monkey loves banana", "Apple is red"]
+    empty = await VectorStoreManager.asimilarity_search_multiple_index(queries, index_names=index_names, k=3)
+    assert len(empty[0]) == 0
+
+    for index_name, texts in zip(index_names, [texts_1, texts_2]):
+        for text in texts:
+            await VectorStoreManager.create_documents(text, index_name=index_name)
+
+    queries_results: list[
+        list[tuple[Document, float]]
+    ] = await VectorStoreManager.asimilarity_search_multiple_index_with_score(queries, index_names=index_names, k=3)
+    for query, query_results in zip(queries, queries_results):
+        for doc, score in query_results:
+            test_logger.info(f"\n\n\n\nQuery={query}\nScore={score}\nContent={doc.page_content}")
+    test_logger.info(f"\n\n\n\n\n\nTesting embedding: {queries_results}")

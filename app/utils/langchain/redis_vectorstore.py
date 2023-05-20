@@ -110,7 +110,7 @@ async def _acheck_index_exists(client: AsyncRedisType, index_name: str) -> bool:
     except:  # noqa: E722
         api_logger.info("Index does not exist")
         return False
-    api_logger.info("Index already exists")
+    api_logger.info("Index exists!")
     return True
 
 

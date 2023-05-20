@@ -1,3 +1,4 @@
+import json
 import time
 from fastapi.testclient import TestClient
 import pytest
@@ -73,12 +74,14 @@ async def test_chat_redis(cache_manager):
 
 
 @pytest.mark.skipif(OPENAI_API_KEY is None, reason="OpenAI API Key is not set")
-def test_chat_connection(websocket_app: TestClient, base_websocket_url: str):
-    with websocket_app.websocket_connect(f"{base_websocket_url}/ws/chat/{OPENAI_API_KEY}") as ws_client:
+def test_chat_connection(client: TestClient, base_websocket_url: str):
+    with client.websocket_connect(f"{base_websocket_url}/ws/chat/{OPENAI_API_KEY}") as ws_client:
         assert isinstance(ws_client, WebSocketTestSession)
 
         client_received: MessageToWebsocket = MessageToWebsocket.parse_raw(ws_client.receive_text())
         assert client_received.init
+        client_received: MessageToWebsocket = MessageToWebsocket.parse_raw(ws_client.receive_text())
+        assert client_received.msg is not None and "tokens" in json.loads(client_received.msg)
         # send message to websocket
         ws_client.send_json(
             MessageFromWebsocket(
@@ -95,10 +98,10 @@ def test_chat_connection(websocket_app: TestClient, base_websocket_url: str):
 
 
 @pytest.mark.skipif(OPENAI_API_KEY is None, reason="OpenAI API Key is not set")
-def test_chat_conversation(websocket_app: TestClient, base_websocket_url: str, test_logger):
+def test_chat_conversation(client: TestClient, base_websocket_url: str, test_logger):
     # parameters
     timeout: int = 10
-    with websocket_app.websocket_connect(f"{base_websocket_url}/ws/chat/{OPENAI_API_KEY}") as ws_client:
+    with client.websocket_connect(f"{base_websocket_url}/ws/chat/{OPENAI_API_KEY}") as ws_client:
         assert isinstance(ws_client, WebSocketTestSession)
         client_received: MessageToWebsocket = MessageToWebsocket.parse_raw(ws_client.receive_text())
         assert client_received.init
