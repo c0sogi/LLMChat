@@ -121,6 +121,14 @@ class VectorStoreManager:
         except Exception:
             return "Can't embed this type of file. Try another file."
 
+    @staticmethod
+    async def drop_index(index_name: str) -> bool:
+        assert isinstance(cache.vectorstore.client, AsyncRedisType)
+        if not await _acheck_index_exists(client=cache.vectorstore.client, index_name=index_name):
+            return False
+        await cache.vectorstore.client.ft(index_name).dropindex(delete_documents=True)
+        return True
+
 
 if __name__ == "__main__":
     import asyncio

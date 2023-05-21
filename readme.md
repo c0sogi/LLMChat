@@ -8,32 +8,32 @@
 ## **Demo**
 ---
 + ### Chat UI
-    Note that the API keys doesn't play any role at this moment. OpenAI key in `.env` file will be used for all the requests. I just added this feature for who wants to use this project as a template for build production-ready chat app.
-> ![Overall UI](app/contents/chat_demo.gif)
+    Enjoy the beautiful UI and rich set of customizable widgets provided by Flutter.
+    - It supports both `mobile` and `PC` environments. 
+    - `Markdown` is also supported, so you can use it to format your messages.
+    > ![Overall UI](app/contents/ui_demo.png)
 ---
-+ ### Embedding text
-    With the `/embed` command, you can store the text indefinitely in your own private vector database and query it later, anytime. If you use the `/share` command, the text is stored in a public vector database that everyone can share. The `/query` command helps the AI generate contextualized answers by searching for text similarities in the public and private databases. This solves one of the biggest limitations of language models: memory. 
-> ![Switching Chat](app/contents/embed_demo.png)
----
-+ ### Embedding PDF file
-    You can embed PDF file by clicking `Embed document` on the bottom left. In a few seconds, text contents of PDF will be converted to vectors and embedded to Redis cache. You can search in  similar documents by entering command `/query <query>` on the chat.
-> ![Switching Chat](app/contents/embed_file_demo.png)
++ ### Vector Embedding
+    + #### **Embed Any Text**
+        With the `/embed` command, you can store the text indefinitely in your own private vector database and query it later, anytime. If you use the `/share` command, the text is stored in a public vector database that everyone can share. Enabling `Query` toggle button or `/query` command helps the AI generate contextualized answers by searching for text similarities in the public and private databases. This solves one of the biggest limitations of language models: **memory**. 
+
+    + #### **Upload Your PDF File**
+        You can embed PDF file by clicking `Embed Document` on the bottom left. In a few seconds, text contents of PDF will be converted to vectors and embedded to Redis cache.
+    > ![Upload Your PDF File](app/contents/embed_demo.png)
+
+
 ---
 + ### Change your chat model
     You can change your chat model by dropdown menu. You can define whatever model you want to use in `LLMModels` which is located in `app/models/llms.py`. 
-> ![Switching Chat](app/contents/model_selection_demo.png)
+    > ![Change your chat model](app/contents/model_selection_demo.png)
 ---
 + ### Change your chat title
     You can change your chat title by clicking the title of the chat. This will be stored until you change or delete it!
-> ![Switching Chat](app/contents/edit_title_demo.png)
----
-+ ### Markdown
-    You can ask and get texts with markdown-formatted. Codes will be syntax-highlighted.
-> ![Switching Chat](app/contents/code_demo.png)
+    > ![Change your chat title](app/contents/edit_title_demo.png)
 ---
 + ### Stop generation
     You can just stop generating text by clicking the stop button at bottom right corner.
-> ![Switching Chat](app/contents/stop_generation_demo.gif)
+    > ![top generation](app/contents/stop_generation_demo.gif)
 ---
 
 
@@ -195,8 +195,7 @@ When a user enters a command in the chat window like `/embed <text_to_embed>`, t
 async def embed(text_to_embed: str, /, buffer: BufferedUserContext) -> str:
     """Embed the text and save its vectors in the redis vectorstore.\n
     /embed <text_to_embed>"""
-    await VectorStoreManager.create_documents(text=text_to_embed, index_name=buffer.user_id)
-    return "Embedding successful!"
+    ...
 ```
 
 ### 2. Querying embedded data using the `/query` command
@@ -208,12 +207,6 @@ When the user enters the `/query <query>` command, the `asimilarity_search` func
 async def query(query: str, /, buffer: BufferedUserContext, **kwargs) -> Tuple[str | None, ResponseType]:
     """Query from redis vectorstore\n
     /query <query>"""
-    k: int = 3
-    found_text_and_score: list[
-        list[Tuple[Document, float]]
-    ] = await VectorStoreManager.asimilarity_search_multiple_index_with_score(
-        queries=[query], index_names=[buffer.user_id, ""], k=k
-    )  # lower score is the better!
     ...
 ```
 
@@ -225,12 +218,7 @@ When running the `begin_chat` function, if a user uploads a file containing text
 @classmethod
 async def embed_file_to_vectorstore(cls, file: bytes, filename: str, index_name: str) -> str:
     # if user uploads file, embed it
-    try:
-        text: str = await run_in_threadpool(read_bytes_to_text, file, filename)
-        docs: list[str] = await VectorStoreManager.create_documents(text, index_name=index_name)
-        return f"Successfully embedded documents. You uploaded file begins with...\n\n```{docs[0][:50]}```..."
-    except Exception:
-        return "Can't embed this type of file. Try another file."
+    ...
 ```
 
 ### 4. `commands.py` functionality

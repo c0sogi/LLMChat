@@ -40,6 +40,7 @@ class SendToWebsocket:
             ).json(),
             chat_room_id=buffer.current_chat_room_id,
             init=True,
+            finish=False,
         )
 
     @staticmethod

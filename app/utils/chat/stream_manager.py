@@ -4,6 +4,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from orjson import JSONDecodeError
 from orjson import loads as orjson_loads
 from pydantic import ValidationError
+from app.database.schemas.auth import Users
 
 from app.errors.chat_exceptions import (
     ChatException,
@@ -31,14 +32,14 @@ from app.viewmodels.base_models import MessageFromWebsocket
 
 class ChatStreamManager:
     @classmethod
-    async def begin_chat(cls, websocket: WebSocket, user_id: str) -> None:
+    async def begin_chat(cls, websocket: WebSocket, user: Users) -> None:
         # initialize variables
         buffer: BufferedUserContext = BufferedUserContext(
-            user_id=user_id,
+            user=user,
             websocket=websocket,
             sorted_ctxts=await get_contexts_sorted_from_recent_to_past(
-                user_id=user_id,
-                chat_room_ids=await CacheManager.get_all_chat_rooms(user_id=user_id),
+                user_id=user.email,
+                chat_room_ids=await CacheManager.get_all_chat_rooms(user_id=user.email),
             ),
         )
         await SendToWebsocket.init(

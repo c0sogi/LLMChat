@@ -1,8 +1,10 @@
+from asyncio import sleep
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.common.config import HOST_MAIN, OPENAI_API_KEY
 from app.database.crud import api_keys
-from app.database.schemas.auth import Users
-from app.errors.api_exceptions import Responses_400
+from app.database.schemas.auth import ApiKeyStatus, UserStatus, Users
+from app.errors.api_exceptions import Responses_400, Responses_401
+from app.utils.chat.websocket_manager import SendToWebsocket
 from app.utils.logger import api_logger
 from app.utils.chat.stream_manager import ChatStreamManager
 from app.common.config import API_ENV
@@ -19,6 +21,22 @@ async def ws_chat(websocket: WebSocket, api_key: str):
         try:  # get user from api key
             if api_key != OPENAI_API_KEY and not API_ENV == "test":
                 api_key, user = await api_keys.get_api_key_and_owner(access_key=api_key)
+                if user.status not in (UserStatus.active, UserStatus.admin):
+                    await SendToWebsocket.message(
+                        websocket=websocket,
+                        msg="Your account is not active",
+                        chat_room_id=" ",
+                    )
+                    await sleep(60)
+                    raise Responses_401.not_authorized
+                if api_key.status is not ApiKeyStatus.active:
+                    await SendToWebsocket.message(
+                        websocket=websocket,
+                        msg="Your api key is not active",
+                        chat_room_id=" ",
+                    )
+                    await sleep(60)
+                    raise Responses_401.not_authorized
             else:
                 user: Users = Users(email=f"testaccount@{HOST_MAIN}")
         except Exception as exception:
@@ -26,7 +44,7 @@ async def ws_chat(websocket: WebSocket, api_key: str):
             return
         await ChatStreamManager.begin_chat(
             websocket=websocket,
-            user_id=user.email,
+            user=user,
         )
     except WebSocketDisconnect:
         ...

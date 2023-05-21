@@ -43,7 +43,7 @@ class MessageHandler:
                 wait_next_query=True,
             )
         if translate:  # if user message is translated
-            msg = await Translator.auto_translate(
+            msg = await Translator.translate(
                 text=msg,
                 src_lang="ko",
                 trg_lang="en",
@@ -133,7 +133,7 @@ class MessageHandler:
         else:
             try:
                 if translate:  # if user message is translated
-                    translated_msg = await Translator.auto_translate(
+                    translated_msg = await Translator.translate(
                         text=msg,
                         src_lang="en",
                         trg_lang="ko",

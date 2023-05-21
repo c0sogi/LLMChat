@@ -1,13 +1,14 @@
 import asyncio
 from dataclasses import dataclass, field
 from fastapi import WebSocket
+from app.database.schemas.auth import Users
 
 from app.models.chat_models import UserChatContext
 
 
 @dataclass
 class BufferedUserContext:
-    user_id: str
+    user: Users
     websocket: WebSocket
     sorted_ctxts: list[UserChatContext]
     queue: asyncio.Queue = field(default_factory=asyncio.Queue)
@@ -31,6 +32,10 @@ class BufferedUserContext:
 
     def change_context_to(self, index: int) -> None:
         self._current_ctxt = self.sorted_ctxts[index]
+
+    @property
+    def user_id(self) -> str:
+        return self.user.email
 
     @property
     def buffer_size(self) -> int:

@@ -6,6 +6,7 @@ from typing import Any, Callable, Tuple
 from uuid import uuid4
 
 from fastapi import WebSocket
+from app.database.schemas.auth import UserStatus
 from app.errors.api_exceptions import InternalServerError
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.cache_manager import CacheManager
@@ -582,12 +583,16 @@ Start a conversation as "CODEX: Hi, what are we coding today?"
     async def query(query: str, /, buffer: BufferedUserContext, **kwargs) -> Tuple[str | None, ResponseType]:
         """Query from redis vectorstore\n
         /query <query>"""
+        if query.startswith("/"):
+            return query, ResponseType.REPEAT_COMMAND
+
         k: int = 3
         found_text_and_score: list[
             list[Tuple[Document, float]]
         ] = await VectorStoreManager.asimilarity_search_multiple_index_with_score(
             queries=[query], index_names=[buffer.user_id, ""], k=k
         )  # lower score is the better!
+        print(found_text_and_score)
 
         if len(found_text_and_score[0]) > 0:
             found_text: str = "\n\n".join([document.page_content for document, _ in found_text_and_score[0]])
@@ -633,3 +638,17 @@ Start a conversation as "CODEX: Hi, what are we coding today?"
         /share <text_to_embed>"""
         await VectorStoreManager.create_documents(text=text_to_embed, index_name="")
         return "Embedding successful! This data will be shared for everyone."
+
+    @staticmethod
+    @CommandResponse.send_message_and_stop
+    async def drop(buffer: BufferedUserContext) -> str:
+        """Drop the index from the redis vectorstore.\n
+        /drop"""
+        dropped_index: list[str] = []
+        if await VectorStoreManager.drop_index(index_name=buffer.user_id):
+            dropped_index.append(buffer.user_id)
+        if buffer.user.status is UserStatus.admin and await VectorStoreManager.drop_index(index_name=""):
+            dropped_index.append("shared")
+        if len(dropped_index) == 0:
+            return "No index dropped."
+        return f"Index dropped: {', '.join(dropped_index)}"

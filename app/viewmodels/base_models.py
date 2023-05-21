@@ -4,6 +4,8 @@ from enum import Enum
 from pydantic import Field
 from pydantic.main import BaseModel
 
+from app.database.schemas.auth import UserStatus
+
 # from pydantic.networks import EmailStr, IPvanyAddress
 
 
@@ -42,11 +44,9 @@ class MessageOk(BaseModel):
 
 class UserToken(BaseModel):
     id: int
+    status: UserStatus
     email: str | None = None
     name: str | None = None
-    phone_number: str | None = None
-    profile_img: str | None = None
-    sns_type: str | None = None
 
     class Config:
         orm_mode = True

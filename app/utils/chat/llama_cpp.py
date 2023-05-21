@@ -193,7 +193,9 @@ def llama_cpp_generation(
                     if m_done.is_set() or retry_count > 10:
                         m_queue.put_nowait(Exception("Max retry count reached"))
                         m_done.set()
-                        raise Exception(f"Exceeded retry limit {retry_count}")  # stop generating if main process requests to stop
+                        raise Exception(
+                            f"Exceeded retry limit {retry_count}"
+                        )  # stop generating if main process requests to stop
                     finish_reason: str | None = generation["choices"][0]["finish_reason"]  # type: ignore
                     text: str = generation["choices"][0]["text"]  # type: ignore
                     if text.replace("\u200b", "") == "":
@@ -217,7 +219,15 @@ def llama_cpp_generation(
                 prompt += content_buffer
                 deleted_histories += user_chat_context.ensure_token_not_exceed()
                 deleted_histories += user_chat_context.clear_tokens(tokens_to_remove=ChatConfig.extra_token_margin)
-                continue
+            except ValueError as e:
+                if "tokens exceed context window" in str(e):
+                    prompt += content_buffer
+                    deleted_histories += user_chat_context.ensure_token_not_exceed()
+                    deleted_histories += user_chat_context.clear_tokens(tokens_to_remove=ChatConfig.extra_token_margin)
+                    print("[Warning] Token limit exceeded. Retrying...")
+                else:
+                    print("[Warning] ValueError. Retrying...")
+                    raise e
             except ChatBreakException:
                 break
             except ChatContinueException:
@@ -293,9 +303,10 @@ if __name__ == "__main__":
     m_done = process_manager.Event()
     llama_cpp_model: "LlamaCppModel" = LLMModels.wizard_vicuna_7b_uncensored.value
     llm = get_llama(llama_cpp_model)
+    prompt = """"""
     llama_cpp_generation(
         llama_cpp_model=llama_cpp_model,
-        prompt="test",
+        prompt=prompt,
         m_queue=m_queue,
         m_done=m_done,
         user_chat_context=UserChatContext.construct_default(user_id="test_user_id", chat_room_id="test_chat_room_id"),

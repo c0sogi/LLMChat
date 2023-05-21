@@ -6,7 +6,7 @@
             "type": "dart",
             "request": "launch",
             "program": "frontend/lib/main.dart",
-            "deviceId": "edge"
+            "deviceId": "chrome"
         },
         {
             "name": "Python: FastAPI",

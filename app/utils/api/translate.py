@@ -1,42 +1,61 @@
+from typing import Callable
 import httpx
 import orjson
-from app.common.config import GOOGLE_TRANSLATE_API_KEY, PAPAGO_CLIENT_ID, PAPAGO_CLIENT_SECRET, RAPID_API_KEY
+from app.utils.logger import api_logger
+from app.common.config import (
+    GOOGLE_TRANSLATE_API_KEY,
+    PAPAGO_CLIENT_ID,
+    PAPAGO_CLIENT_SECRET,
+    RAPID_API_KEY,
+    CUSTOM_TRANSLATE_URL,
+)
 
 
 class Translator:
+    cached_function: Callable | None = None
+    cached_args: dict = {}
+
+    TRANSLATION_CONFIGS = [
+        {"function": "custom_translate_api", "args": {"api_url": CUSTOM_TRANSLATE_URL}},
+        {"function": "deepl_via_rapid_api", "args": {"api_key": RAPID_API_KEY}},
+        {"function": "google", "args": {"api_key": GOOGLE_TRANSLATE_API_KEY}},
+        {"function": "papago", "args": {"client_id": PAPAGO_CLIENT_ID, "client_secret": PAPAGO_CLIENT_SECRET}},
+    ]
+
     @classmethod
-    async def auto_translate(cls, text: str, src_lang: str, trg_lang: str) -> str:
-        if RAPID_API_KEY is not None:
+    async def translate(cls, text: str, src_lang: str, trg_lang: str) -> str:
+        if cls.cached_function is not None:
             try:
-                return await cls.deeple_via_rapid_api(
+                api_logger.info(f"cached_function: {cls.cached_function}")
+                return await cls.cached_function(
                     text=text,
                     src_lang=src_lang,
                     trg_lang=trg_lang,
-                    api_key=RAPID_API_KEY,
+                    **cls.cached_args,
                 )
             except Exception:
-                ...
-        if GOOGLE_TRANSLATE_API_KEY is not None:
-            try:
-                return await cls.google(
-                    text=text,
-                    src_lang=src_lang,
-                    trg_lang=trg_lang,
-                    api_key=GOOGLE_TRANSLATE_API_KEY,
-                )
-            except Exception:
-                ...
-        if PAPAGO_CLIENT_ID is not None and PAPAGO_CLIENT_SECRET is not None:
-            try:
-                return await cls.papago(
-                    text=text,
-                    src_lang=src_lang,
-                    trg_lang=trg_lang,
-                    client_id=PAPAGO_CLIENT_ID,
-                    client_secret=PAPAGO_CLIENT_SECRET,
-                )
-            except Exception:
-                ...
+                pass
+
+        for cfg in cls.TRANSLATION_CONFIGS:
+            function = getattr(cls, cfg["function"])
+            args = cfg["args"]
+
+            if all(arg is not None for arg in args.values()):
+                try:
+                    result = await function(
+                        text=text,
+                        src_lang=src_lang,
+                        trg_lang=trg_lang,
+                        **args,
+                    )
+                    api_logger.info(f"Succeeded to translate using {cfg['function']}")
+                    cls.cached_function = function
+                    cls.cached_args = args
+                    return result
+                except Exception:
+                    api_logger.error(f"Failed to translate using {cfg['function']}", exc_info=True)
+                    pass
+
         return "번역 API가 설정되지 않았습니다."
 
     @staticmethod
@@ -74,7 +93,7 @@ class Translator:
         return orjson.loads(response.text)["data"]["translations"][0]["translatedText"]
 
     @staticmethod
-    async def deeple_via_rapid_api(
+    async def deepl_via_rapid_api(
         text: str,
         src_lang: str,
         trg_lang: str,
@@ -88,7 +107,23 @@ class Translator:
             "X-RapidAPI-Key": api_key,
             "X-RapidAPI-Host": api_host,
         }
-        content = orjson.dumps({"text": text, "source": src_lang, "target": trg_lang})
+        content = orjson.dumps({"text": text, "source": src_lang.upper(), "target": trg_lang.upper()})
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(api_url, headers=headers, content=content)
         return orjson.loads(response.text)["text"]
+
+    @staticmethod
+    async def custom_translate_api(
+        text: str,
+        src_lang: str,
+        trg_lang: str,
+        api_url: str,
+        timeout: int = 10,
+    ) -> str:
+        headers = {
+            "Content-Type": "application/json",
+        }
+        content = orjson.dumps({"text": text, "source_lang": src_lang, "target_lang": trg_lang})
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(api_url, headers=headers, content=content)
+        return orjson.loads(response.text)["data"]

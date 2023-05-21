@@ -67,9 +67,6 @@ class MessageHistory:
     uuid: str = field(default_factory=lambda: uuid4().hex)
     model_name: str | None = None
 
-    def __post_init__(self):
-        self.role = ChatRoles.get_value(self.role)
-
     def __repr__(self) -> str:
         return f'<{self.role} uuid="{self.uuid}" date="{self.datetime}Z" tokens="{self.tokens}">{self.content}</>'
 
@@ -183,6 +180,9 @@ class UserChatContext:
 - Your ID: `{self.user_id}`
 - This chatroom ID: `{self.chat_room_id}`
 - Your profile created at: `{time_string}`
+- User role: `{self.user_chat_profile.user_role}`
+- AI role: `{self.user_chat_profile.ai_role}`
+- System role: `{self.user_chat_profile.system_role}`
 
 # LLM Info
 - Model Name: `{llm_model.name}`

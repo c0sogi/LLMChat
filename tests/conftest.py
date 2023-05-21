@@ -10,7 +10,7 @@ from app.utils.auth.token import create_access_token
 from app.utils.tests.random import random_user_generator
 from app.database.schemas.auth import Users
 from app.common.app_settings import create_app
-from app.common.config import Config, logging_config
+from app.common.config import Config, LoggingConfig
 from app.utils.logger import CustomLogger
 from app.viewmodels.base_models import UserToken
 from app.utils.chat.cache_manager import CacheManager, cache
@@ -29,7 +29,7 @@ def cache_manager():
 
 @pytest.fixture(scope="session")
 def test_logger():
-    return CustomLogger(name="PyTest", logging_config=logging_config)
+    return CustomLogger(name="PyTest", logging_config=LoggingConfig(file_log_name="./logs/test.log"))
 
 
 @pytest.fixture(scope="session", autouse=True)

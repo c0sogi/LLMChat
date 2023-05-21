@@ -16,6 +16,7 @@ from . import Mixin
 
 
 class UserStatus(str, enum.Enum):
+    admin = "admin"
     active = "active"
     deleted = "deleted"
     blocked = "blocked"
