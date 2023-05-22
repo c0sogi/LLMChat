@@ -18,7 +18,7 @@ from app.dependencies import (
 from app.utils.logger import api_logger
 from app.utils.chat.cache_manager import CacheManager
 from app.utils.js_initializer import js_url_initializer
-from app.dependencies import process_pool_executor
+from app import dependencies
 from starlette_admin.contrib.sqla.admin import Admin
 from starlette_admin.contrib.sqla.view import ModelView
 from starlette_admin.views import DropDown, Link
@@ -128,7 +128,7 @@ def create_app(config: Config) -> FastAPI:
 
     @new_app.on_event("shutdown")
     async def shutdown():
-        process_pool_executor.shutdown(cancel_futures=True, wait=True)
+        dependencies.process_pool_executor.shutdown(cancel_futures=True, wait=True)
         # await CacheManager.delete_user(f"testaccount@{HOST_MAIN}")
         await db.close()
         await cache.close()

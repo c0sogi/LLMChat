@@ -4,6 +4,5 @@ PRIVATE_*
 venv/
 *.pyc
 *.log
-*.txt
 *.bin
 deprecated_*

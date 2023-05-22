@@ -159,6 +159,10 @@ class ChatStreamManager:
                             translate=item.translate,
                             buffer=buffer,
                         )
+                        # await MessageHandler.test_all(
+                        #     msg=item.msg,
+                        #     buffer=buffer,
+                        # )
             except ChatException as chat_exception:
                 await cls._chat_exception_handler(buffer=buffer, chat_exception=chat_exception)
 

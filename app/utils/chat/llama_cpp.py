@@ -1,20 +1,20 @@
 """This module will be spawned in process pool, so parent process can't its global variables."""
+import logging
 from typing import TYPE_CHECKING, Generator
 
 from langchain import LlamaCpp
 from llama_cpp import Llama, LlamaCache, llama_free
 from pydantic import Field, root_validator
 
-from app.errors.chat_exceptions import (
-    ChatBreakException,
-    ChatContinueException,
-    ChatLengthException,
-)
+
+from app.errors.chat_exceptions import ChatBreakException, ChatContinueException, ChatLengthException
 from app.utils.chat.chat_config import ChatConfig
 
 if TYPE_CHECKING:
-    from app.models.llms import LlamaCppModel
     from app.models.chat_models import UserChatContext
+    from app.models.llms import LlamaCppModel
+
+logger = logging.getLogger(__name__)
 
 
 class LlamaCppGpu(LlamaCpp):
@@ -109,9 +109,16 @@ def load_llama(llama_cpp_model: "LlamaCppModel", cache_only_single_model: bool =
         if cache_only_single_model:
             clear_model_keys: list[str] = [key for key in LLAMA_CACHED.keys() if key != model_name]
             for cached_model_name in clear_model_keys:
-                llama_free(LLAMA_CACHED[cached_model_name].client.ctx)
-                LLAMA_CACHED[cached_model_name].client.set_cache(None)
-                del LLAMA_CACHED[cached_model_name]
+                try:
+                    client = LLAMA_CACHED[cached_model_name].client
+                    assert isinstance(client, Llama)
+                    if client.ctx is not None:
+                        llama_free(client.ctx)
+                    client.set_cache(None)
+                    client.reset()
+                    LLAMA_CACHED.pop(cached_model_name)
+                except Exception as e:
+                    logger.error(f"[Error] Could not free llama model: {e}")
         if model_name not in LLAMA_CACHED:
             print(f"Loading LlamaCpp model: {model_name}")
             llama_cpp = get_llama(llama_cpp_model)
@@ -255,7 +262,7 @@ def llama_cpp_generation(
         except Exception as e:
             raise Exception(f"Error while cleaning up: {e}")
     except Exception as e:
-        print(f"[Error] {e}")
+        logger.error("An error occurred during llama_cpp_generation.", exc_info=True)
         m_queue.put_nowait(Exception(f"[Error] {e}"))
         m_done.set()
 
@@ -295,9 +302,9 @@ def get_llama(llama_cpp_model: "LlamaCppModel") -> LlamaCppGpu:
 
 
 if __name__ == "__main__":
-    from app.models.llms import LLMModels
-    from app.models.chat_models import UserChatContext  # noqa: F811
     from app.dependencies import process_manager
+    from app.models.chat_models import UserChatContext  # noqa: F811
+    from app.models.llms import LLMModels
 
     m_queue = process_manager.Queue()
     m_done = process_manager.Event()

@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from fastapi import WebSocket
 from app.database.schemas.auth import Users
 
-from app.models.chat_models import UserChatContext
+from app.models.chat_models import MessageHistory, UserChatContext, UserChatProfile
 
 
 @dataclass
@@ -43,7 +43,15 @@ class BufferedUserContext:
 
     @property
     def current_chat_room_id(self) -> str:
-        return self.current_user_chat_context.chat_room_id
+        return self._current_ctxt.chat_room_id
+
+    @property
+    def current_chat_room_name(self) -> str:
+        return self._current_ctxt.chat_room_name
+
+    @current_chat_room_name.setter
+    def current_chat_room_name(self, new_name: str) -> None:
+        self._current_ctxt.user_chat_profile.chat_room_name = new_name
 
     @property
     def sorted_user_chat_contexts(self) -> list[UserChatContext]:
@@ -67,3 +75,19 @@ class BufferedUserContext:
     @property
     def current_user_chat_context(self) -> UserChatContext:
         return self._current_ctxt
+
+    @property
+    def current_user_message_histories(self) -> list[MessageHistory]:
+        return self._current_ctxt.user_message_histories
+
+    @property
+    def current_ai_message_histories(self) -> list[MessageHistory]:
+        return self._current_ctxt.ai_message_histories
+
+    @property
+    def current_system_message_histories(self) -> list[MessageHistory]:
+        return self._current_ctxt.system_message_histories
+
+    @property
+    def current_user_chat_profile(self) -> UserChatProfile:
+        return self._current_ctxt.user_chat_profile

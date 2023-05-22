@@ -1,4 +1,5 @@
 from datetime import datetime, date, timedelta
+from re import match
 
 
 class UTC:
@@ -28,3 +29,21 @@ class UTC:
     @classmethod
     def date_code(cls, hour_diff: int = 0) -> int:
         return int(cls.date(hour_diff=hour_diff).strftime("%Y%m%d"))
+
+    @staticmethod
+    def check_string_valid(string: str) -> bool:
+        """Check if a string is in ISO 8601 UTC datetime format.
+        e.g. 2023-05-22T05:08:29.087279Z" -> True
+            2023-05-22T05:08:29Z -> True
+            2023-05-22T05:08:29 -> False
+            2023/05/22T05:08:29.087279Z -> False"""
+        regex = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$"
+        return True if match(regex, string) else False
+
+
+if __name__ == "__main__":
+    # 예제 사용 예
+    print(UTC.check_string_valid("2023-05-22T05:08:29.087279Z"))  # True
+    print(UTC.check_string_valid("2023-05-22T05:08:29Z"))  # True
+    print(UTC.check_string_valid("2023-05-22T05:08:29"))  # False
+    print(UTC.check_string_valid("2023/05/22T05:08:29.087279Z"))  # False

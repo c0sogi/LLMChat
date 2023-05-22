@@ -117,7 +117,7 @@ class LLMModels(Enum):  # gpt models for openai api
         token_margin=8,
         tokenizer=LlamaTokenizer("ehartford/Wizard-Vicuna-7B-Uncensored"),
         model_path="./llama_models/ggml/Wizard-Vicuna-7B-Uncensored.ggmlv2.q4_1.bin",
-        # description=USER_AI_TMPL_CHAT1,
+        description=USER_AI_TMPL_CHAT1,
     )
     wizard_vicuna_13b_uncensored = LlamaCppModel(
         name="Wizard-Vicuna-13B-Uncensored",
