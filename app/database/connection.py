@@ -1,37 +1,27 @@
-from collections.abc import Iterable
 from asyncio import current_task
-from typing import AsyncGenerator, Callable, Optional, Type, Any
-from urllib import parse
-from redis.asyncio import Redis as AsyncRedisType
-from sqlalchemy import (
-    Result,
-    ScalarResult,
-    Select,
-    Delete,
-    TextClause,
-    Update,
-    create_engine,
-    text,
-)
-from sqlalchemy.engine.base import Engine, Connection
-from sqlalchemy.ext.asyncio import (
-    async_sessionmaker,
-    async_scoped_session,
-    create_async_engine,
-    AsyncSession,
-    AsyncEngine,
-)
-from sqlalchemy_utils import database_exists, create_database
-from app.errors.api_exceptions import Responses_500
-from app.utils.logger import CustomLogger
-from app.common.config import logging_config, Config, SingletonMetaClass
-from . import Base, DeclarativeMeta
+from collections.abc import Iterable
+from typing import Any, AsyncGenerator, Callable, Optional, Type
 
-import openai
-from langchain.embeddings import OpenAIEmbeddings
 from langchain.embeddings.base import Embeddings
+from redis.asyncio import Redis as AsyncRedisType
+from sqlalchemy import Delete, Result, ScalarResult, Select, TextClause, Update, create_engine, text
+from sqlalchemy.engine.base import Connection, Engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_scoped_session,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy_utils import create_database, database_exists
+
+from app.common.config import Config, SingletonMetaClass, logging_config
+from app.shared import Shared
+from app.errors.api_exceptions import Responses_500
 from app.utils.langchain.redis_vectorstore import Redis as RedisVectorStore
-from app.common.config import OPENAI_API_KEY
+from app.utils.logger import CustomLogger
+
+from . import Base, DeclarativeMeta
 
 
 class MySQL(metaclass=SingletonMetaClass):
@@ -157,28 +147,11 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
             f"Current DB connection of {type(config).__name__}: "
             + f"{config.mysql_host}/{config.mysql_database}@{config.mysql_user}"
         )
-        root_url = config.database_url_format.format(
-            dialect="mysql",
-            driver="pymysql",
-            user="root",
-            password=parse.quote(config.mysql_root_password),
-            host=config.mysql_host,
-            port=config.mysql_port,
-            database=config.mysql_database,
-        )
-        database_url = config.database_url_format.format(
-            dialect="mysql",
-            driver="aiomysql",
-            user=config.mysql_user,
-            password=parse.quote(config.mysql_password),
-            host=config.mysql_host,
-            port=config.mysql_port,
-            database=config.mysql_database,
-        )
-        if not database_exists(root_url):
-            create_database(root_url)
 
-        self.root_engine = create_engine(root_url, echo=config.db_echo)
+        if not database_exists(config.mysql_root_url):
+            create_database(config.mysql_root_url)
+
+        self.root_engine = create_engine(config.mysql_root_url, echo=config.db_echo)
         with self.root_engine.connect() as conn:
             if not MySQL.is_user_exists(config.mysql_user, engine_or_conn=conn):
                 MySQL.create_user(config.mysql_user, config.mysql_password, "%", engine_or_conn=conn)
@@ -197,7 +170,7 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         self.root_engine.dispose()
         self.root_engine = None
         self.engine = create_async_engine(
-            database_url,
+            config.mysql_url,
             echo=config.db_echo,
             pool_recycle=config.db_pool_recycle,
             pool_pre_ping=True,
@@ -377,25 +350,13 @@ class RedisFactory(metaclass=SingletonMetaClass):
         content_key: str = "content",
         metadata_key: str = "metadata",
         vector_key: str = "content_vector",
-        vector_dimension: int = 1536,
-        openai_api_key: str | None = OPENAI_API_KEY,
     ) -> None:
         if self.is_initiated:
             return
         self.is_test_mode = True if config.test_mode else False
-        redis_url = config.redis_url_format.format(
-            username="",
-            password=config.redis_password,
-            host=config.redis_host,
-            port=config.redis_port,
-            db=config.redis_database,
-        )
-        embeddings: Embeddings = OpenAIEmbeddings(
-            client=openai.Embedding,
-            openai_api_key=openai_api_key,
-        )
+        embeddings: Embeddings = Shared().openai_embeddings
         self._vectorstore = RedisVectorStore(  # type: ignore
-            redis_url=redis_url,
+            redis_url=config.redis_url,
             embedding_function=embeddings.embed_query,
             content_key=content_key,
             metadata_key=metadata_key,

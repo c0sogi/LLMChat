@@ -1,12 +1,50 @@
-from typing import AsyncGenerator, AsyncIterator, Generator, Iterator
-from fastapi import WebSocket
-from app.models.llms import LLMModels
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, AsyncGenerator, AsyncIterator, Callable, Generator, Iterator, Optional
 
+from fastapi import WebSocket
+
+from app.errors.chat_exceptions import ChatLengthException, ChatModelNotImplementedException
+from app.models.llms import LLMModels
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.text_generation import (
-    message_history_organizer,
-)
-from app.viewmodels.base_models import InitMessage, MessageToWebsocket
+from app.utils.chat.chat_config import ChatConfig
+from app.utils.chat.prompts import message_history_organizer
+from app.utils.logger import api_logger
+from app.viewmodels.base_models import InitMessage, MessageToWebsocket, StreamProgress
+
+
+class SyncToAsyncGenerator:
+    def __init__(self, sync_gen: Iterator):
+        self._gen: Iterator[Any] = sync_gen
+        self._queue: asyncio.Queue = asyncio.Queue()
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        value = await self._queue.get()
+        if value is self:  # using `self` as sentinel
+            raise StopAsyncIteration
+        return value
+
+    async def run(self, executor: Optional[ThreadPoolExecutor] = None):
+        it = iter(self._gen)  # Get an iterator from the generator
+        while True:
+            try:
+                # Use 'self' as a sentinel value to avoid raising StopIteration
+                value = await asyncio.get_running_loop().run_in_executor(executor, next, it, self)
+                if value is self:  # Check if the iterator is exhausted
+                    await self._queue.put(self)  # Notify of completion
+                    break
+                else:
+                    await self._queue.put(value)
+            except StopIteration:
+                # This exception is expected and handled gracefully
+                break
+            except Exception as e:
+                # Other exceptions are unexpected and should propagate up
+                api_logger.exception(f"Unexpected exception in SyncToAsyncGenerator: {e}")
+                raise e
 
 
 class SendToWebsocket:
@@ -46,12 +84,12 @@ class SendToWebsocket:
     @staticmethod
     async def message(
         websocket: WebSocket,
-        msg: str,
         chat_room_id: str,
         finish: bool = True,
         is_user: bool = False,
         init: bool = False,
-        model_name: str | None = None,
+        msg: Optional[str] = None,
+        model_name: Optional[str] = None,
     ) -> None:
         """Send whole message to websocket"""
         await websocket.send_json(  # send stream message
@@ -69,79 +107,84 @@ class SendToWebsocket:
     async def stream(
         cls,
         buffer: BufferedUserContext,
-        stream: AsyncGenerator | Generator | AsyncIterator | Iterator,
+        stream_func: Callable,
+        stream_kwargs: dict,
+        stream_progress: StreamProgress,
         finish: bool = True,
         is_user: bool = False,
-        chunk_size: int = 2,
-        model_name: str | None = None,
-    ) -> str:
+        chunk_size: int = 1,
+        model_name: Optional[str] = None,
+    ) -> None:
         """Send SSE stream to websocket"""
-        final_response, stream_buffer = "", ""
-        iteration: int = 0
-        await buffer.websocket.send_json(
-            MessageToWebsocket(
-                msg=None,
-                finish=False,
-                chat_room_id=buffer.current_chat_room_id,
-                is_user=is_user,
-                model_name=model_name,
-            ).dict()
-        )
-        try:
-            if isinstance(stream, (Generator, Iterator)):
-                for delta in stream:  # stream from local
-                    if buffer.done.is_set():
-                        buffer.done.clear()
-                        raise InterruptedError(final_response + stream_buffer + delta)
-                    stream_buffer += delta
-                    iteration += 1
-                    if iteration % chunk_size == 0:
-                        final_response += stream_buffer
-                        await buffer.websocket.send_json(
-                            MessageToWebsocket(
-                                msg=stream_buffer,
-                                finish=False,
-                                chat_room_id=buffer.current_chat_room_id,
-                                is_user=is_user,
-                            ).dict()
-                        )
-                        stream_buffer = ""
-            elif isinstance(stream, (AsyncGenerator, AsyncIterator)):
-                async for delta in stream:  # stream from api
-                    if buffer.done.is_set():
-                        buffer.done.clear()
-                        raise InterruptedError(final_response + stream_buffer)
-                    stream_buffer += delta
-                    iteration += 1
-                    if iteration % chunk_size == 0:
-                        final_response += stream_buffer
-                        await buffer.websocket.send_json(
-                            MessageToWebsocket(
-                                msg=stream_buffer,
-                                finish=False,
-                                chat_room_id=buffer.current_chat_room_id,
-                                is_user=is_user,
-                            ).dict()
-                        )
-                        stream_buffer = ""
-            else:
-                raise TypeError("Stream type is not AsyncGenerator or Generator.")
-        except InterruptedError as e:
+
+        async def hand_shake() -> None:
+            # Send initial message
             await cls.message(
                 websocket=buffer.websocket,
-                msg=stream_buffer,
+                msg=None,
                 chat_room_id=buffer.current_chat_room_id,
-                finish=True,
+                finish=False,
                 is_user=is_user,
                 model_name=model_name,
             )
-            raise e
-        await cls.message(
-            websocket=buffer.websocket,
-            msg=stream_buffer,
-            chat_room_id=buffer.current_chat_room_id,
-            finish=True if finish else False,
-            is_user=is_user,
-            model_name=model_name,
-        )
-        return final_response
+
+        async def consumer(async_stream: AsyncIterator) -> None:
+            """Helper function to send chunks of data"""
+            api_logger.info("Sending stream to websocket")
+            iteration: int = 0
+            async for delta in async_stream:  # stream from api
+                if buffer.done.is_set():
+                    raise InterruptedError(stream_progress.response + stream_progress.buffer)
+                stream_progress.buffer += delta
+                iteration += 1
+                if iteration % chunk_size == 0:
+                    stream_progress.response += stream_progress.buffer
+                    await cls.message(
+                        websocket=buffer.websocket,
+                        msg=stream_progress.buffer,
+                        chat_room_id=buffer.current_chat_room_id,
+                        finish=False,
+                        is_user=is_user,
+                        model_name=model_name,
+                    )
+                    stream_progress.buffer = ""
+
+        async def transmission() -> None:
+            try:
+                # Use Python 3.10's pattern matching for cleaner type checking
+                match stream_func(**stream_kwargs):
+                    case _stream if isinstance(_stream, (AsyncGenerator, AsyncIterator)):
+                        await consumer(async_stream=_stream)
+
+                    case _stream if isinstance(_stream, (Generator, Iterator)):
+                        async_stream = SyncToAsyncGenerator(sync_gen=_stream)
+                        await asyncio.gather(consumer(async_stream=async_stream), async_stream.run(executor=None))
+
+                    case _:
+                        raise ChatModelNotImplementedException(msg="Stream type is not AsyncGenerator or Generator.")
+            except ChatLengthException as e:
+                api_logger.info(f"ChatLengthException: {e.msg}")
+                if e.msg is None:
+                    return
+                buffer.current_user_chat_context.ensure_token_not_exceed(
+                    extra_token_margin=buffer.current_user_chat_context.get_tokens_of(stream_progress.response)
+                )
+                buffer.current_user_chat_context.clear_tokens(tokens_to_remove=ChatConfig.extra_token_margin)
+                await transmission()
+
+        async def good_bye() -> None:
+            await cls.message(
+                websocket=buffer.websocket,
+                msg=stream_progress.buffer,
+                chat_room_id=buffer.current_chat_room_id,
+                finish=finish,
+                is_user=is_user,
+                model_name=model_name,
+            )
+
+        try:
+            await hand_shake()
+            await transmission()
+
+        finally:
+            await good_bye()

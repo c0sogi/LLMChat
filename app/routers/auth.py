@@ -5,7 +5,7 @@ from fastapi.requests import Request
 from app.common.config import TOKEN_EXPIRE_HOURS
 from app.database.crud.users import is_email_exist, register_new_user
 from app.database.schemas.auth import Users
-from app.dependencies import user_dependency
+from app.dependencies import USER_DEPENDENCY
 from app.errors.api_exceptions import Responses_400, Responses_404
 from app.utils.auth.register_validation import (
     is_email_length_in_range,
@@ -81,7 +81,7 @@ async def register(
 
 @router.delete("/register", status_code=status.HTTP_204_NO_CONTENT)
 async def unregister(
-    authorization: str = Security(user_dependency),
+    authorization: str = Security(USER_DEPENDENCY),
 ):
     registered_user: UserToken = UserToken(**token_decode(authorization))
     if registered_user.email is not None:

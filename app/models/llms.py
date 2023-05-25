@@ -72,7 +72,7 @@ class OpenAIModel(LLMModel):
 class LLMModels(Enum):  # gpt models for openai api
     gpt_3_5_turbo = OpenAIModel(
         name="gpt-3.5-turbo",
-        max_total_tokens=4096,
+        max_total_tokens=2048,
         max_tokens_per_request=2048,
         token_margin=8,
         tokenizer=OpenAITokenizer("gpt-3.5-turbo"),

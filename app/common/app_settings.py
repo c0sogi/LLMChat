@@ -1,28 +1,25 @@
-from fastapi import FastAPI, Depends
+from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware import Middleware
-from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
-from app.auth.admin import MyAuthProvider
-from app.common.config import JWT_SECRET, Config
-from app.database.connection import db, cache
-from app.database.schemas.auth import ApiKeys, ApiWhiteLists, Users
-from app.middlewares.token_validator import access_control
-from app.middlewares.trusted_hosts import TrustedHostMiddleware
-from app.routers import index, auth, services, users, websocket
-from app.dependencies import (
-    api_service_dependency,
-    user_dependency,
-)
-from app.utils.logger import api_logger
-from app.utils.chat.cache_manager import CacheManager
-from app.utils.js_initializer import js_url_initializer
-from app import dependencies
+from starlette.middleware.sessions import SessionMiddleware
 from starlette_admin.contrib.sqla.admin import Admin
 from starlette_admin.contrib.sqla.view import ModelView
 from starlette_admin.views import DropDown, Link
 
+from app.auth.admin import MyAuthProvider
+from app.common.config import JWT_SECRET, Config
+from app.database.connection import cache, db
+from app.database.schemas.auth import ApiKeys, ApiWhiteLists, Users
+from app.dependencies import USER_DEPENDENCY, api_service_dependency
+from app.middlewares.token_validator import access_control
+from app.middlewares.trusted_hosts import TrustedHostMiddleware
+from app.routers import auth, index, services, users, websocket
+from app.shared import Shared
+from app.utils.chat.cache_manager import CacheManager
+from app.utils.js_initializer import js_url_initializer
+from app.utils.logger import api_logger
 from app.viewmodels.admin import ApiKeyAdminView, UserAdminView
 
 
@@ -101,7 +98,7 @@ def create_app(config: Config) -> FastAPI:
         users.router,
         prefix="/api",
         tags=["Users"],
-        dependencies=[Depends(user_dependency)],
+        dependencies=[Depends(USER_DEPENDENCY)],
     )
 
     @new_app.on_event("startup")
@@ -118,8 +115,9 @@ def create_app(config: Config) -> FastAPI:
         else:
             api_logger.critical("Redis CACHE connection failed!")
         try:
-            import uvloop  # type: ignore
             import asyncio
+
+            import uvloop  # type: ignore
 
             asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
             api_logger.critical("uvloop installed!")
@@ -128,8 +126,9 @@ def create_app(config: Config) -> FastAPI:
 
     @new_app.on_event("shutdown")
     async def shutdown():
-        dependencies.process_pool_executor.shutdown(cancel_futures=True, wait=True)
         # await CacheManager.delete_user(f"testaccount@{HOST_MAIN}")
+        Shared().process_manager.shutdown()
+        Shared().process_pool_executor.shutdown()
         await db.close()
         await cache.close()
         api_logger.critical("DB & CACHE connection closed!")

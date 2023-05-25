@@ -3,6 +3,7 @@ from asyncio import gather
 from fastapi.concurrency import run_in_threadpool
 from langchain.text_splitter import TokenTextSplitter
 from redis.asyncio import Redis as AsyncRedisType
+from app.common.config import EMBEDDING_VECTOR_DIMENSION
 
 from app.database.connection import cache
 from app.utils.chat.file_loader import read_bytes_to_text
@@ -32,7 +33,7 @@ class VectorStoreManager:
         index_name: str,
         chunk_size: int = 500,
         chunk_overlap: int = 0,
-        dimension: int = 1536,
+        dimension: int = EMBEDDING_VECTOR_DIMENSION,
         tokenizer_model: str = "gpt-3.5-turbo",
     ) -> list[str]:
         texts = TokenTextSplitter(
