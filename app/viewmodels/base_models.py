@@ -156,3 +156,8 @@ class InitMessage(BaseModel):
     selected_model: str | None = None
     tokens: int | None = None
     wait_next_query: bool
+
+
+class StreamProgress(BaseModel):
+    response: str = ""
+    buffer: str = ""

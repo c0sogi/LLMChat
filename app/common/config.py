@@ -6,6 +6,7 @@ from os import environ
 from pathlib import Path
 from re import Pattern, compile
 from dotenv import load_dotenv
+from urllib import parse
 
 load_dotenv()
 
@@ -33,6 +34,7 @@ TOKEN_EXPIRE_HOURS: int = 168
 MAX_API_KEY: int = 3
 MAX_API_WHITELIST: int = 10
 BASE_DIR: Path = Path(__file__).parents[2]
+EMBEDDING_VECTOR_DIMENSION: int = 1536
 
 # MySQL Variables
 MYSQL_ROOT_PASSWORD: str = environ["MYSQL_ROOT_PASSWORD"]
@@ -113,6 +115,37 @@ class Config(metaclass=SingletonMetaClass):
     trusted_hosts: list[str] = field(default_factory=lambda: ["*"])
     allowed_sites: list[str] = field(default_factory=lambda: ["*"])
 
+    def __post_init__(self):
+        if not DOCKER_MODE:
+            self.port = 8001
+            self.mysql_host = "localhost"
+            self.redis_host = "localhost"
+        self.mysql_root_url = self.database_url_format.format(
+            dialect="mysql",
+            driver="pymysql",
+            user="root",
+            password=parse.quote(self.mysql_root_password),
+            host=self.mysql_host,
+            port=self.mysql_port,
+            database=self.mysql_database,
+        )
+        self.mysql_url = self.database_url_format.format(
+            dialect="mysql",
+            driver="aiomysql",
+            user=self.mysql_user,
+            password=parse.quote(self.mysql_password),
+            host=self.mysql_host,
+            port=self.mysql_port,
+            database=self.mysql_database,
+        )
+        self.redis_url = self.redis_url_format.format(
+            username="",
+            password=self.redis_password,
+            host=self.redis_host,
+            port=self.redis_port,
+            db=self.redis_database,
+        )
+
     @staticmethod
     def get(
         option: str | None = None,
@@ -124,10 +157,7 @@ class Config(metaclass=SingletonMetaClass):
             "local": LocalConfig,
             "test": TestConfig,
         }[config_key]()
-        if not DOCKER_MODE:
-            _config.port = 8001
-            _config.mysql_host = "localhost"
-            _config.redis_host = "localhost"
+
         return _config
 
 
@@ -176,6 +206,3 @@ class LoggingConfig:
 
 config = Config.get()
 logging_config = LoggingConfig()
-
-if __name__ == "__main__":
-    print(BASE_DIR / "app")

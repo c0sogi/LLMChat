@@ -1,9 +1,14 @@
 import asyncio
 from dataclasses import dataclass, field
-from fastapi import WebSocket
-from app.database.schemas.auth import Users
+from typing import TYPE_CHECKING
 
+from fastapi import WebSocket
+
+from app.database.schemas.auth import Users
 from app.models.chat_models import MessageHistory, UserChatContext, UserChatProfile
+
+if TYPE_CHECKING:
+    from app.models.llms import LLMModels
 
 
 @dataclass
@@ -44,6 +49,10 @@ class BufferedUserContext:
     @property
     def current_chat_room_id(self) -> str:
         return self._current_ctxt.chat_room_id
+
+    @property
+    def current_llm_model(self) -> "LLMModels":
+        return self._current_ctxt.llm_model
 
     @property
     def current_chat_room_name(self) -> str:
