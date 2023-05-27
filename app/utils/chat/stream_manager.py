@@ -13,14 +13,13 @@ from app.errors.chat_exceptions import (
     ChatTextGenerationException,
     ChatTooMuchTokenException,
 )
-from app.models.chat_models import ChatRoles
+from app.models.chat_models import ChatRoles, UserChatProfile
 from app.models.llms import LLMModels
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.cache_manager import CacheManager
 from app.utils.chat.chat_commands import (
     command_handler,
     create_new_chat_room,
-    get_contexts_sorted_from_recent_to_past,
 )
 from app.utils.chat.message_handler import MessageHandler
 from app.utils.chat.message_manager import MessageManager
@@ -30,6 +29,17 @@ from app.utils.logger import api_logger
 from app.viewmodels.base_models import MessageFromWebsocket
 
 
+async def initialize_callback(user_id: str) -> list[UserChatProfile]:
+    user_chat_profiles: list[UserChatProfile] = await CacheManager.fetch_chat_profiles(user_id=user_id)
+    if not user_chat_profiles:
+        # create new chatroom
+        return [(await create_new_chat_room(user_id=user_id)).user_chat_profile]
+    else:
+        # get latest chatroom
+        user_chat_profiles.sort(key=lambda profile: profile.created_at, reverse=True)
+        return user_chat_profiles
+
+
 class ChatStreamManager:
     @classmethod
     async def begin_chat(cls, websocket: WebSocket, user: Users) -> None:
@@ -37,11 +47,10 @@ class ChatStreamManager:
         buffer: BufferedUserContext = BufferedUserContext(
             user=user,
             websocket=websocket,
-            sorted_ctxts=await get_contexts_sorted_from_recent_to_past(
-                user_id=user.email,
-                chat_room_ids=await CacheManager.get_all_chat_rooms(user_id=user.email),
-            ),
+            initialize_callback=initialize_callback,
+            read_callback=CacheManager.read_context_from_profile,
         )
+        await buffer.init()
         await SendToWebsocket.init(
             buffer=buffer,
             send_chat_rooms=True,
@@ -135,7 +144,7 @@ class ChatStreamManager:
                     )
                 elif isinstance(item, MessageFromWebsocket):
                     if item.chat_room_id != buffer.current_chat_room_id:
-                        # This is a message from another chat room, interpreted as change of context, while ignoring message
+                        # This is a message from another chat room, interpreted as change of context, ignoring message
                         await cls._change_context(
                             buffer=buffer,
                             changed_chat_room_id=item.chat_room_id,
@@ -179,7 +188,7 @@ class ChatStreamManager:
             )
         else:
             # if received chat_room_id is in chat_room_ids, get context from memory
-            buffer.change_context_to(index=index)
+            await buffer.change_context_to(index=index)
             await SendToWebsocket.init(
                 buffer=buffer,
                 send_previous_chats=True,

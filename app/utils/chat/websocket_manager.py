@@ -1,16 +1,17 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, AsyncGenerator, AsyncIterator, Callable, Generator, Iterator, Optional
+from typing import Any, AsyncGenerator, AsyncIterator, Callable, Generator, Iterator, Optional, Union
 
 from fastapi import WebSocket
+from app.common.config import ChatConfig
 
 from app.errors.chat_exceptions import ChatLengthException, ChatModelNotImplementedException
-from app.models.llms import LLMModels
+from app.models.chat_models import MessageHistory
+from app.models.llms import LLMModel, LLMModels
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.chat_config import ChatConfig
-from app.utils.chat.prompts import message_history_organizer
+from app.utils.chat.prompts import cutoff_message_histories, message_histories_to_list
 from app.utils.logger import api_logger
-from app.viewmodels.base_models import InitMessage, MessageToWebsocket, StreamProgress
+from app.viewmodels.base_models import InitMessage, MessageToWebsocket, SendInitToWebsocket, StreamProgress
 
 
 class SyncToAsyncGenerator:
@@ -58,17 +59,22 @@ class SendToWebsocket:
         send_tokens: bool = False,
         wait_next_query: bool = False,
     ) -> None:
+        def parse_method(message_history: MessageHistory) -> dict[str, Any]:
+            return SendInitToWebsocket.from_orm(message_history).dict()
+
         """Send initial message to websocket, providing current state of user"""
-        previous_chats = message_history_organizer(
-            user_chat_context=buffer.current_user_chat_context,
-            send_to_stream=False,
-        )
-        assert isinstance(previous_chats, list)
         await SendToWebsocket.message(
             websocket=buffer.websocket,
             msg=InitMessage(
                 chat_rooms=buffer.sorted_chat_rooms if send_chat_rooms else None,
-                previous_chats=previous_chats if send_previous_chats else None,
+                previous_chats=message_histories_to_list(
+                    parse_method=parse_method,
+                    user_message_histories=buffer.current_user_message_histories,
+                    ai_message_histories=buffer.current_ai_message_histories,
+                    system_message_histories=buffer.current_system_message_histories,
+                )
+                if send_previous_chats
+                else None,
                 models=LLMModels._member_names_ if send_models else None,
                 selected_model=buffer.current_user_chat_context.llm_model.name
                 if send_selected_model or send_previous_chats or send_models
@@ -107,8 +113,10 @@ class SendToWebsocket:
     async def stream(
         cls,
         buffer: BufferedUserContext,
-        stream_func: Callable,
-        stream_kwargs: dict,
+        stream_func: Callable[
+            [BufferedUserContext, list[MessageHistory], list[MessageHistory], list[MessageHistory], int],
+            Union[AsyncGenerator, Generator],
+        ],
         stream_progress: StreamProgress,
         finish: bool = True,
         is_user: bool = False,
@@ -116,6 +124,7 @@ class SendToWebsocket:
         model_name: Optional[str] = None,
     ) -> None:
         """Send SSE stream to websocket"""
+        current_model: LLMModel = buffer.current_llm_model.value
 
         async def hand_shake() -> None:
             # Send initial message
@@ -149,10 +158,34 @@ class SendToWebsocket:
                     )
                     stream_progress.buffer = ""
 
-        async def transmission() -> None:
+        async def transmission(
+            user_message_histories: list[MessageHistory],
+            ai_message_histories: list[MessageHistory],
+            system_message_histories: list[MessageHistory],
+            token_limit: int,
+        ) -> None:
+            user_message_histories, ai_message_histories = cutoff_message_histories(
+                ai_message_histories=ai_message_histories,
+                user_message_histories=user_message_histories,
+                system_message_histories=system_message_histories,
+                token_limit=token_limit,
+            )
             try:
                 # Use Python 3.10's pattern matching for cleaner type checking
-                match stream_func(**stream_kwargs):
+                match stream_func(
+                    buffer,
+                    user_message_histories,
+                    ai_message_histories,
+                    system_message_histories,
+                    (
+                        current_model.max_total_tokens
+                        - current_model.token_margin
+                        - int(getattr(current_model, "description_tokens", 0))
+                        - sum([m.tokens for m in ai_message_histories])
+                        - sum([m.tokens for m in user_message_histories])
+                        - sum([m.tokens for m in system_message_histories])
+                    ),
+                ):
                     case _stream if isinstance(_stream, (AsyncGenerator, AsyncIterator)):
                         await consumer(async_stream=_stream)
 
@@ -166,11 +199,14 @@ class SendToWebsocket:
                 api_logger.info(f"ChatLengthException: {e.msg}")
                 if e.msg is None:
                     return
-                buffer.current_user_chat_context.ensure_token_not_exceed(
-                    extra_token_margin=buffer.current_user_chat_context.get_tokens_of(stream_progress.response)
+                await transmission(
+                    ai_message_histories=ai_message_histories,
+                    user_message_histories=user_message_histories,
+                    system_message_histories=system_message_histories,
+                    token_limit=token_limit
+                    - buffer.current_user_chat_context.get_tokens_of(e.msg)
+                    - ChatConfig.extra_token_margin,
                 )
-                buffer.current_user_chat_context.clear_tokens(tokens_to_remove=ChatConfig.extra_token_margin)
-                await transmission()
 
         async def good_bye() -> None:
             await cls.message(
@@ -184,7 +220,12 @@ class SendToWebsocket:
 
         try:
             await hand_shake()
-            await transmission()
+            await transmission(
+                ai_message_histories=buffer.current_ai_message_histories,
+                user_message_histories=buffer.current_user_message_histories,
+                system_message_histories=buffer.current_system_message_histories,
+                token_limit=current_model.max_total_tokens,
+            )
 
         finally:
             await good_bye()

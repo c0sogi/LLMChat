@@ -46,7 +46,8 @@ class MessageHandler:
         user_token: int = buffer.current_user_chat_context.get_tokens_of(msg)
         if user_token > buffer.current_user_chat_context.token_per_request:  # if user message is too long
             raise ChatTooMuchTokenException(
-                msg=f"Message too long. Now {user_token} tokens, but {buffer.current_user_chat_context.token_per_request} tokens allowed."
+                msg=f"Message too long. Now {user_token} tokens, "
+                f"but {buffer.current_user_chat_context.token_per_request} tokens allowed."
             )
 
         await MessageManager.add_message_history_safely(
@@ -66,7 +67,6 @@ class MessageHandler:
                 await SendToWebsocket.stream(
                     buffer=buffer,
                     stream_func=agenerate_from_openai,
-                    stream_kwargs={"buffer": buffer},
                     stream_progress=stream_progress,
                     finish=False if translate else True,
                     model_name=current_model.name,
@@ -76,7 +76,6 @@ class MessageHandler:
                 await SendToWebsocket.stream(
                     buffer=buffer,
                     stream_func=generate_from_llama_cpp,
-                    stream_kwargs={"buffer": buffer},
                     stream_progress=stream_progress,
                     finish=False if translate else True,
                     model_name=current_model.name,

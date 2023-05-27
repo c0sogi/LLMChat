@@ -1,4 +1,3 @@
-from asyncio import gather
 from enum import Enum
 from functools import wraps
 from inspect import Parameter, iscoroutinefunction, signature
@@ -7,11 +6,11 @@ from uuid import uuid4
 
 from fastapi import WebSocket
 from app.database.schemas.auth import UserStatus
+from app.common.constants import CODEX_PROMPT, CONTEXT_QUESTION_TMPL_QUERY1, REDEX_PROMPT
 from app.errors.api_exceptions import InternalServerError
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.cache_manager import CacheManager
 from app.utils.chat.message_manager import MessageManager
-from app.utils.chat.prompts import CONTEXT_QUESTION_TMPL_QUERY1
 from app.utils.chat.vectorstore_manager import Document, VectorStoreManager
 from app.utils.chat.websocket_manager import SendToWebsocket
 from app.utils.chat.message_handler import MessageHandler
@@ -67,7 +66,7 @@ async def create_new_chat_room(
     await CacheManager.create_context(user_chat_context=default)
     if buffer is not None:
         buffer.insert_context(user_chat_context=default)
-        buffer.change_context_to(index=0)
+        await buffer.change_context_to(index=0)
     return default
 
 
@@ -86,21 +85,8 @@ async def delete_chat_room(
             buffer=buffer,
         )
     if buffer.current_chat_room_id == chat_room_id_to_delete:
-        buffer.change_context_to(index=0)
+        await buffer.change_context_to(index=0)
     return True
-
-
-async def get_contexts_sorted_from_recent_to_past(user_id: str, chat_room_ids: list[str]) -> list[UserChatContext]:
-    if len(chat_room_ids) == 0:
-        # create new chatroom
-        return [await create_new_chat_room(user_id=user_id)]
-    else:
-        # get latest chatroom
-        contexts: list[UserChatContext] = await gather(
-            *[CacheManager.read_context(user_id=user_id, chat_room_id=chat_room_id) for chat_room_id in chat_room_ids]
-        )
-        contexts.sort(key=lambda x: x.user_chat_profile.created_at, reverse=True)
-        return contexts
 
 
 async def command_handler(
@@ -479,14 +465,7 @@ class ChatCommands:
     async def codex(user_chat_context: UserChatContext) -> str:
         """Let GPT act as CODEX("COding DEsign eXpert")\n
         /codex"""
-        system_message = """Act as CODEX ("COding DEsign eXpert"), an expert coder with experience in multiple coding languages.
-Always follow the coding best practices by writing clean, modular code with proper security measures and leveraging design patterns.
-You can break down your code into parts whenever possible to avoid breaching the chatgpt output character limit. Write code part by part when I send "continue". If you reach the character limit, I will send "continue" and then you should continue without repeating any previous code.
-Do not assume anything from your side; please ask me a numbered list of essential questions before starting.
-If you have trouble fixing a bug, ask me for the latest code snippets for reference from the official documentation.
-I am using [MacOS], [VSCode] and prefer [brew] package manager.
-Start a conversation as "CODEX: Hi, what are we coding today?"
-        """
+        system_message = CODEX_PROMPT
         await MessageManager.clear_message_history_safely(user_chat_context=user_chat_context, role=ChatRoles.SYSTEM)
         await MessageManager.add_message_history_safely(
             user_chat_context=user_chat_context,
@@ -500,7 +479,7 @@ Start a conversation as "CODEX: Hi, what are we coding today?"
     async def redx(user_chat_context: UserChatContext) -> str:
         """Let GPT reduce your message as much as possible\n
         /redx"""
-        system_message = """compress the following text in a way that fits in a tweet (ideally) and such that you (GPT) can reconstruct the intention of the human who wrote text as close as possible to the original intention. This is for yourself. It does not need to be human readable or understandable. Abuse of language mixing, abbreviations, symbols (unicode and emoji), or any other encodings or internal representations is all permissible, as long as it, if pasted in a new inference cycle, will yield near-identical results as the original text: """
+        system_message = REDEX_PROMPT
         await MessageManager.clear_message_history_safely(user_chat_context=user_chat_context, role=ChatRoles.SYSTEM)
         await MessageManager.add_message_history_safely(
             user_chat_context=user_chat_context,
@@ -608,8 +587,8 @@ Start a conversation as "CODEX: Hi, what are we coding today?"
             )
             await MessageManager.set_message_history_safely(
                 user_chat_context=buffer.current_user_chat_context,
-                role=ChatRoles.USER,
                 new_content=query,
+                role=ChatRoles.USER,
                 index=-1,
             )
             return None, ResponseType.DO_NOTHING
@@ -642,6 +621,20 @@ Start a conversation as "CODEX: Hi, what are we coding today?"
     @staticmethod
     @CommandResponse.send_message_and_stop
     async def drop(buffer: BufferedUserContext) -> str:
+        """Drop the index from the redis vectorstore.\n
+        /drop"""
+        dropped_index: list[str] = []
+        if await VectorStoreManager.drop_index(index_name=buffer.user_id):
+            dropped_index.append(buffer.user_id)
+        if buffer.user.status is UserStatus.admin and await VectorStoreManager.drop_index(index_name=""):
+            dropped_index.append("shared")
+        if len(dropped_index) == 0:
+            return "No index dropped."
+        return f"Index dropped: {', '.join(dropped_index)}"
+
+    @staticmethod
+    @CommandResponse.send_message_and_stop
+    async def summarize(buffer: BufferedUserContext) -> str:
         """Drop the index from the redis vectorstore.\n
         /drop"""
         dropped_index: list[str] = []

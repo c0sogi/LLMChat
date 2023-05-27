@@ -130,7 +130,7 @@ class CreateChatRoom(BaseModel):  # stub
         orm_mode = True
 
 
-class SendToStream(BaseModel):
+class OpenAIChatMessage(BaseModel):
     role: str
     content: str
 

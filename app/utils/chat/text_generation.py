@@ -3,9 +3,12 @@ from concurrent.futures.process import BrokenProcessPool
 from typing import Any, AsyncGenerator, Generator, Optional
 
 import aiohttp
+import asyncio
 import openai
 from orjson import dumps as orjson_dumps
 from orjson import loads as orjson_loads
+from app.common.config import chat_config
+from app.models.chat_models import MessageHistory
 
 from app.shared import Shared
 from app.errors.chat_exceptions import (
@@ -16,13 +19,19 @@ from app.errors.chat_exceptions import (
 )
 from app.models.llms import LlamaCppModel, OpenAIModel
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.chat_config import ChatConfig
 from app.utils.chat.llama_cpp import llama_cpp_generation
-from app.utils.chat.prompts import message_history_organizer
+from app.utils.chat.prompts import message_histories_to_list, message_histories_to_str
 from app.utils.logger import api_logger
+from app.viewmodels.base_models import OpenAIChatMessage
 
 
-def generate_from_llama_cpp(buffer: BufferedUserContext) -> Generator:
+def generate_from_llama_cpp(
+    buffer: BufferedUserContext,
+    user_message_histories: list[MessageHistory],
+    ai_message_histories: list[MessageHistory],
+    system_message_histories: list[MessageHistory],
+    max_tokens: int,
+) -> Generator:
     llama_cpp_model = buffer.current_llm_model.value
     assert isinstance(llama_cpp_model, LlamaCppModel), type(llama_cpp_model)
 
@@ -35,6 +44,16 @@ def generate_from_llama_cpp(buffer: BufferedUserContext) -> Generator:
         future: Future[None] = process_pool_executor.submit(
             llama_cpp_generation,
             user_chat_context=buffer.current_user_chat_context,
+            prompt=message_histories_to_str(
+                user_role=buffer.current_user_chat_profile.user_role,
+                ai_role=buffer.current_user_chat_profile.ai_role,
+                system_role=buffer.current_user_chat_profile.system_role,
+                user_message_histories=user_message_histories,
+                ai_message_histories=ai_message_histories,
+                system_message_histories=system_message_histories,
+                description_for_prompt=llama_cpp_model.description,
+            ),
+            max_tokens=max_tokens,
             m_queue=m_queue,
             m_done=m_done,
         )
@@ -67,10 +86,17 @@ def generate_from_llama_cpp(buffer: BufferedUserContext) -> Generator:
         raise ChatConnectionException(msg="BrokenProcessPool")
 
 
-async def agenerate_from_openai(buffer: BufferedUserContext) -> AsyncGenerator[str, None]:
+async def agenerate_from_openai(
+    buffer: BufferedUserContext,
+    user_message_histories: list[MessageHistory],
+    ai_message_histories: list[MessageHistory],
+    system_message_histories: list[MessageHistory],
+    max_tokens: int,
+) -> AsyncGenerator[str, None]:
+    def parse_method(message_history: MessageHistory) -> dict[str, str]:
+        return OpenAIChatMessage.from_orm(message_history).dict()
+
     current_model = buffer.current_llm_model.value
-    messages = message_history_organizer(user_chat_context=buffer.current_user_chat_context)
-    assert isinstance(messages, list)
     assert isinstance(current_model, OpenAIModel)
 
     content_buffer: str = ""
@@ -78,7 +104,7 @@ async def agenerate_from_openai(buffer: BufferedUserContext) -> AsyncGenerator[s
     default_api_key: str | None = current_model.api_key
     api_key_to_use: Any = user_defined_api_key if user_defined_api_key is not None else default_api_key
 
-    async with aiohttp.ClientSession() as session:  # initialize client
+    async with aiohttp.ClientSession(timeout=chat_config.timeout) as session:  # initialize client
         try:
             async with session.post(
                 current_model.api_url,
@@ -89,23 +115,24 @@ async def agenerate_from_openai(buffer: BufferedUserContext) -> AsyncGenerator[s
                 data=orjson_dumps(
                     {
                         "model": current_model.name,
-                        "messages": messages,
+                        "messages": message_histories_to_list(
+                            parse_method=parse_method,
+                            user_message_histories=user_message_histories,
+                            ai_message_histories=ai_message_histories,
+                            system_message_histories=system_message_histories,
+                        ),
                         "temperature": buffer.current_user_chat_profile.temperature,
                         "top_p": buffer.current_user_chat_profile.top_p,
                         "n": 1,
                         "stream": True,
                         "presence_penalty": buffer.current_user_chat_profile.presence_penalty,
                         "frequency_penalty": buffer.current_user_chat_profile.frequency_penalty,
-                        "max_tokens": min(
-                            buffer.current_user_chat_context.left_tokens,
-                            current_model.max_tokens_per_request,
-                        ),
+                        "max_tokens": max_tokens,
                         "stop": None,
                         "logit_bias": {},
                         "user": buffer.user_id,
                     }
                 ),  # set json for openai api request
-                timeout=aiohttp.ClientTimeout(total=ChatConfig.wait_for_timeout),
             ) as streaming_response:
                 if streaming_response.status != 200:  # if status code is not 200
                     err_msg = orjson_loads(await streaming_response.text()).get("error")
@@ -119,7 +146,7 @@ async def agenerate_from_openai(buffer: BufferedUserContext) -> AsyncGenerator[s
                     stream_buffer += stream
                     if not end_of_chunk:
                         continue
-                    for match in ChatConfig.api_regex_pattern.finditer(stream_buffer.decode("utf-8")):
+                    for match in chat_config.api_regex_pattern.finditer(stream_buffer.decode("utf-8")):
                         json_data: dict = orjson_loads(match.group(1))
                         finish_reason: str | None = json_data["choices"][0]["finish_reason"]
                         delta_content: str | None = json_data["choices"][0]["delta"].get("content")
@@ -137,36 +164,45 @@ async def agenerate_from_openai(buffer: BufferedUserContext) -> AsyncGenerator[s
                     stream_buffer = b""
         except ChatLengthException:
             raise ChatLengthException(msg=content_buffer)
-        except (aiohttp.ServerTimeoutError, aiohttp.ClientPayloadError):
+        except (aiohttp.ServerTimeoutError, aiohttp.ClientPayloadError, asyncio.TimeoutError):
             pass
 
 
-def generate_from_openai(buffer: BufferedUserContext) -> Generator[str, None, None]:
-    assert isinstance(buffer.current_user_chat_context.llm_model.value, OpenAIModel)
-    user_defined_api_key: str | None = buffer.current_user_chat_context.optional_info.get("api_key")
-    default_api_key: str | None = buffer.current_user_chat_context.llm_model.value.api_key
-    api_key_to_use: Any = user_defined_api_key if user_defined_api_key is not None else default_api_key
+def generate_from_openai(
+    buffer: BufferedUserContext,
+    user_message_histories: list[MessageHistory],
+    ai_message_histories: list[MessageHistory],
+    system_message_histories: list[MessageHistory],
+    max_tokens: int,
+) -> Generator[str, None, None]:
+    def parse_method(message_history: MessageHistory) -> dict[str, str]:
+        return OpenAIChatMessage.from_orm(message_history).dict()
 
     current_model = buffer.current_llm_model.value
-    content_buffer: str = ""
-    messages = message_history_organizer(user_chat_context=buffer.current_user_chat_context)
-    assert isinstance(messages, list)
     assert isinstance(current_model, OpenAIModel)
+
+    content_buffer: str = ""
+    user_defined_api_key: str | None = buffer.current_user_chat_context.optional_info.get("api_key")
+    default_api_key: str | None = current_model.api_key
+    api_key_to_use: Any = user_defined_api_key if user_defined_api_key is not None else default_api_key
+
     try:
         for stream in openai.ChatCompletion.create(
             api_key=api_key_to_use,
             model=current_model.name,
-            messages=messages,
+            messages=message_histories_to_list(
+                parse_method=parse_method,
+                user_message_histories=buffer.current_user_message_histories,
+                ai_message_histories=buffer.current_ai_message_histories,
+                system_message_histories=buffer.current_system_message_histories,
+            ),
             temperature=buffer.current_user_chat_profile.temperature,
             top_p=buffer.current_user_chat_profile.top_p,
             n=1,
             stream=True,
             presence_penalty=buffer.current_user_chat_profile.presence_penalty,
             frequency_penalty=buffer.current_user_chat_profile.frequency_penalty,
-            max_tokens=min(
-                buffer.current_user_chat_context.left_tokens,
-                buffer.current_user_chat_context.llm_model.value.max_tokens_per_request,
-            ),
+            max_tokens=max_tokens,
             stop=None,
             logit_bias={},
             user=buffer.current_user_chat_context.user_id,

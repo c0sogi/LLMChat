@@ -1,93 +1,115 @@
 # flake8: noqa
 
 from itertools import zip_longest
-from typing import TYPE_CHECKING, Union
+from typing import Any, Callable, Optional
+
+from app.common.constants import ROLE_CONTENT_TMPL_CHAT1
+from app.errors.chat_exceptions import ChatTooMuchTokenException
+from app.models.chat_models import MessageHistory
 
 
-from app.utils.logger import api_logger
-from app.viewmodels.base_models import SendInitToWebsocket, SendToStream
-
-if TYPE_CHECKING:
-    from app.models.chat_models import UserChatContext
-
-CONTEXT_QUESTION_TMPL_QUERY1 = (
-    "Context information is below. \n"
-    "---------------------\n"
-    "{context}"
-    "\n---------------------\n"
-    "Given the context information and not prior knowledge, "
-    "answer the question: {question}\n"
-)
-
-CONTEXT_QUESTION_TMPL_QUERY2 = (
-    "Context information is below. \n"
-    "---------------------\n"
-    "{context}"
-    "\n---------------------\n"
-    "answer the question: {question}\n"
-)
-
-USER_AI_TMPL_CHAT1 = (
-    "The following is a friendly conversation between a {user} and an {ai}. "
-    "The {ai} is talkative and provides lots of specific details from its context. "
-    "If the {ai} does not know the answer to a question, it truthfully says it does not know.\n\n"
-    "Current conversation:\n\n"
-)
-
-ROLE_CONTENT_TMPL_CHAT1 = "### {role}: {content}\n"
-
-
-def message_history_organizer(
-    user_chat_context: "UserChatContext",
-    send_to_stream: bool = True,
-    return_as_string: bool = False,
-    chat_turn_prompt: str = ROLE_CONTENT_TMPL_CHAT1,
-) -> Union[list[dict], str]:  # organize message history for openai api
+def message_histories_to_list(
+    parse_method: Callable[[MessageHistory], Any],
+    user_message_histories: list[MessageHistory],
+    ai_message_histories: list[MessageHistory],
+    system_message_histories: Optional[list[MessageHistory]] = None,
+) -> list[Any]:
     message_histories: list[dict[str, str]] = []
-    if send_to_stream:
-        for system_history in user_chat_context.system_message_histories:
-            message_histories.append(SendToStream.from_orm(system_history).dict())  # append system message history
+    if system_message_histories:
+        for system_history in system_message_histories:
+            message_histories.append(parse_method(system_history))  # append system message history
     for user_message_history, ai_message_history in zip_longest(
-        user_chat_context.user_message_histories,
-        user_chat_context.ai_message_histories,
+        user_message_histories,
+        ai_message_histories,
     ):
-        message_histories.append(
-            SendToStream.from_orm(user_message_history).dict()
-            if send_to_stream
-            else SendInitToWebsocket.from_orm(user_message_history).dict()
-        ) if user_message_history is not None else ...  # append user message history
-        message_histories.append(
-            SendToStream.from_orm(ai_message_history).dict()
-            if send_to_stream
-            else SendInitToWebsocket.from_orm(ai_message_history).dict()
-        ) if ai_message_history is not None else ...  # append gpt message history
-    if return_as_string:
-        user_role: str = user_chat_context.user_chat_profile.user_role
-        ai_role: str = user_chat_context.user_chat_profile.ai_role
-        system_role: str = user_chat_context.user_chat_profile.system_role
-        prefix: str = ""
-        if hasattr(user_chat_context.llm_model.value, "description"):
-            if user_chat_context.llm_model.value.description is not None:  # type: ignore
-                prefix: str = user_chat_context.llm_model.value.description.format(  # type: ignore
-                    user=user_role.upper(),
-                    USER=user_role.upper(),
-                    ai=ai_role.upper(),
-                    AI=ai_role.upper(),
-                    system=system_role.upper(),
-                    SYSTEM=system_role.upper(),
-                )
+        if user_message_history is not None:
+            message_histories.append(parse_method(user_message_history))
+        if ai_message_history is not None:
+            message_histories.append(parse_method(ai_message_history))
+    return message_histories
 
-        for message_history in message_histories:
-            if message_history["role"] == system_role:
-                prefix += chat_turn_prompt.format(role=system_role.upper(), content=message_history["content"].strip())
-            elif message_history["role"] == user_role:
-                prefix += chat_turn_prompt.format(role=user_role.upper(), content=message_history["content"].strip())
-            elif message_history["role"] == ai_role:
-                prefix += chat_turn_prompt.format(role=ai_role.upper(), content=message_history["content"].strip())
-            else:
-                api_logger.error(f"Invalid message history: {message_history}")
-                raise Exception("Invalid message history")
-        prefix += chat_turn_prompt.format(role=ai_role.upper(), content="").strip() + " "
-        return prefix
+
+def message_histories_to_str(
+    user_role: str,
+    ai_role: str,
+    system_role: str,
+    user_message_histories: list[MessageHistory],
+    ai_message_histories: list[MessageHistory],
+    system_message_histories: Optional[list[MessageHistory]] = None,
+    chat_turn_prompt: str = ROLE_CONTENT_TMPL_CHAT1,
+    description_for_prompt: Optional[str] = None,
+):
+    def parse_method(message_history: MessageHistory) -> str:
+        return chat_turn_prompt.format(role=message_history.role.upper(), content=message_history.content.strip())
+
+    if description_for_prompt:
+        prefix: str = description_for_prompt.format(  # type: ignore
+            user=user_role.upper(),
+            USER=user_role.upper(),
+            ai=ai_role.upper(),
+            AI=ai_role.upper(),
+            system=system_role.upper(),
+            SYSTEM=system_role.upper(),
+        )
     else:
-        return message_histories  # return message histories to be used in openai api
+        prefix: str = ""
+
+    return (
+        prefix
+        + "".join(
+            message_histories_to_list(
+                parse_method=parse_method,
+                user_message_histories=user_message_histories,
+                ai_message_histories=ai_message_histories,
+                system_message_histories=system_message_histories,
+            )
+        )
+        + chat_turn_prompt.format(role=ai_role.upper(), content="").strip()
+        + " "
+    )
+
+
+def cutoff_message_histories(
+    user_message_histories: list[MessageHistory],
+    ai_message_histories: list[MessageHistory],
+    system_message_histories: list[MessageHistory],
+    token_limit: int,
+    extra_token_margin: Optional[int] = None,
+) -> tuple[list[MessageHistory], list[MessageHistory]]:
+    system_message_tokens: int = sum(
+        [system_message_history.tokens for system_message_history in system_message_histories]
+    )
+    if system_message_tokens > token_limit:
+        raise ChatTooMuchTokenException(msg="System messages exceed the token limit.")
+
+    token_limit -= system_message_tokens
+    user_results: list[MessageHistory] = []
+    ai_results: list[MessageHistory] = []
+
+    num_user_messages = len(user_message_histories)
+    num_ai_messages = len(ai_message_histories)
+    idx = 1
+
+    while (num_user_messages - idx >= 0 or num_ai_messages - idx >= 0) and token_limit > 0:
+        user_and_ai_tokens = 0
+        if num_user_messages - idx >= 0:
+            user_and_ai_tokens += user_message_histories[-idx].tokens
+        if num_ai_messages - idx >= 0:
+            user_and_ai_tokens += ai_message_histories[-idx].tokens
+
+        if user_and_ai_tokens <= token_limit:
+            if num_user_messages - idx >= 0:
+                user_results.append(user_message_histories[-idx])
+            if num_ai_messages - idx >= 0:
+                ai_results.append(ai_message_histories[-idx])
+            token_limit -= user_and_ai_tokens
+        else:
+            break
+        idx += 1
+
+    if extra_token_margin is not None:
+        deleted_tokens: int = 0
+        while user_results and ai_results and deleted_tokens < extra_token_margin:
+            deleted_tokens += user_results.pop().tokens + ai_results.pop().tokens
+
+    return list(reversed(user_results)), list(reversed(ai_results))

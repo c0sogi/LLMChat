@@ -1,4 +1,3 @@
-from asyncio import gather
 from app.utils.chat.cache_manager import CacheManager
 from app.models.chat_models import ChatRoles, MessageHistory, UserChatContext
 
@@ -12,7 +11,7 @@ class MessageManager:
         calculated_tokens_to_use: int | None = None,
         extra_token_margin: int = 0,
         update_cache: bool = True,
-    ) -> int:
+    ) -> None:
         if role is ChatRoles.AI:
             user_defined_role: str = user_chat_context.user_chat_profile.ai_role
             histories_to_update: list[MessageHistory] = user_chat_context.ai_message_histories
@@ -34,7 +33,7 @@ class MessageManager:
             model_name=user_chat_context.llm_model.value.name if role is ChatRoles.AI else None,
         )
         histories_to_update.append(message_history)
-        num_of_deleted_histories: int = user_chat_context.ensure_token_not_exceed(extra_token_margin=extra_token_margin)
+        # num_of_deleted_histories: int = user_chat_context.ensure_token_not_exceed(extra_token_margin=extra_token_margin)  # noqa: E501
         if update_cache:
             await CacheManager.append_message_history(
                 user_id=user_chat_context.user_id,
@@ -43,22 +42,22 @@ class MessageManager:
                 message_history=message_history,
             )
 
-            if num_of_deleted_histories > 0:
-                await gather(
-                    CacheManager.lpop_message_history(
-                        user_id=user_chat_context.user_id,
-                        chat_room_id=user_chat_context.chat_room_id,
-                        role=ChatRoles.AI,
-                        count=num_of_deleted_histories,
-                    ),
-                    CacheManager.lpop_message_history(
-                        user_id=user_chat_context.user_id,
-                        chat_room_id=user_chat_context.chat_room_id,
-                        role=ChatRoles.USER,
-                        count=num_of_deleted_histories,
-                    ),
-                )
-        return num_of_deleted_histories
+        #     if num_of_deleted_histories > 0:
+        #         await gather(
+        #             CacheManager.lpop_message_history(
+        #                 user_id=user_chat_context.user_id,
+        #                 chat_room_id=user_chat_context.chat_room_id,
+        #                 role=ChatRoles.AI,
+        #                 count=num_of_deleted_histories,
+        #             ),
+        #             CacheManager.lpop_message_history(
+        #                 user_id=user_chat_context.user_id,
+        #                 chat_room_id=user_chat_context.chat_room_id,
+        #                 role=ChatRoles.USER,
+        #                 count=num_of_deleted_histories,
+        #             ),
+        #         )
+        # return num_of_deleted_histories
 
     @staticmethod
     async def pop_message_history_safely(
@@ -111,9 +110,8 @@ class MessageManager:
         new_content: str,
         role: ChatRoles,
         index: int,
-        extra_token_margin: int = 0,
         update_cache: bool = True,
-    ) -> int | None:
+    ) -> None:
         try:
             if role is ChatRoles.AI:
                 histories_to_change: MessageHistory = user_chat_context.ai_message_histories[index]
@@ -127,7 +125,7 @@ class MessageManager:
             return None
         histories_to_change.content = new_content
         histories_to_change.tokens = user_chat_context.get_tokens_of(new_content)
-        num_of_deleted_histories: int = user_chat_context.ensure_token_not_exceed(extra_token_margin=extra_token_margin)
+        # num_of_deleted_histories: int = user_chat_context.ensure_token_not_exceed(extra_token_margin=extra_token_margin)  # noqa: E501
         if update_cache:
             await CacheManager.set_message_history(
                 user_id=user_chat_context.user_id,
@@ -136,22 +134,22 @@ class MessageManager:
                 message_history=histories_to_change,
                 index=index,
             )
-            if num_of_deleted_histories > 0:
-                await gather(
-                    CacheManager.lpop_message_history(
-                        user_id=user_chat_context.user_id,
-                        chat_room_id=user_chat_context.chat_room_id,
-                        role=ChatRoles.AI,
-                        count=num_of_deleted_histories,
-                    ),
-                    CacheManager.lpop_message_history(
-                        user_id=user_chat_context.user_id,
-                        chat_room_id=user_chat_context.chat_room_id,
-                        role=ChatRoles.USER,
-                        count=num_of_deleted_histories,
-                    ),
-                )
-        return num_of_deleted_histories
+        #     if num_of_deleted_histories > 0:
+        #         await gather(
+        #             CacheManager.lpop_message_history(
+        #                 user_id=user_chat_context.user_id,
+        #                 chat_room_id=user_chat_context.chat_room_id,
+        #                 role=ChatRoles.AI,
+        #                 count=num_of_deleted_histories,
+        #             ),
+        #             CacheManager.lpop_message_history(
+        #                 user_id=user_chat_context.user_id,
+        #                 chat_room_id=user_chat_context.chat_room_id,
+        #                 role=ChatRoles.USER,
+        #                 count=num_of_deleted_histories,
+        #             ),
+        #         )
+        # return num_of_deleted_histories
 
     @staticmethod
     async def clear_message_history_safely(

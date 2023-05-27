@@ -136,23 +136,51 @@ if __name__ == "__main__":
 
     from app.common.config import Config
 
-    sample_texts = """Neural network models can be quite powerful, effectively helping to identify patterns and uncover structure in a variety of different tasks, from language translation to pathology to playing games. At the same time, neural models (as well as other kinds of machine learning models) can contain problematic biases in many forms. For example, classifiers trained to detect rude, disrespectful, or unreasonable comments may be more likely to flag the sentence "I am gay" than "I am straight"; face classification models may not perform as well for women of color; speech transcription may have higher error rates for African Americans than White Americans.
-
-Many pre-trained machine learning models are widely available for developers to use -- for example, TensorFlow Hub recently launched its platform publicly. It's important that when developers use these models in their applications, they're aware of what biases they contain and how they might manifest in those applications.
-
-Human data encodes human biases by default. Being aware of this is a good start, and the conversation around how to handle it is ongoing. At Google, we are actively researching unintended bias analysis and mitigation strategies because we are committed to making products that work well for everyone. In this post, we'll examine a few text embedding models, suggest some tools for evaluating certain forms of bias, and discuss how these issues matter when building applications.
-
-Given a trained text embedding model, we can directly measure the associations the model has between words or phrases. Many of these associations are expected and are helpful for natural language tasks. However, some associations may be problematic or hurtful. For example, the ground-breaking paper by Bolukbasi et al. found that the vector-relationship between "man" and "woman" was similar to the relationship between "physician" and "registered nurse" or "shopkeeper" and "housewife" in the popular publicly-available word2vec embedding trained on Google News text.
-
-The Word Embedding Association Test (WEAT) was recently proposed by Caliskan et al. [5] as a way to examine the associations in word embeddings between concepts captured in the Implicit Association Test (IAT). We use the WEAT here as one way to explore some kinds of problematic associations.
-
-The WEAT test measures the degree to which a model associates sets of target words (e.g., African American names, European American names, flowers, insects) with sets of attribute words (e.g., "stable", "pleasant" or "unpleasant"). The association between two given words is defined as the cosine similarity between the embedding vectors for the words.
-
-For example, the target lists for the first WEAT test are types of flowers and insects, and the attributes are pleasant words (e.g., "love", "peace") and unpleasant words (e.g., "hatred," "ugly"). The overall test score is the degree to which flowers are more associated with the pleasant words, relative to insects. A high positive score (the score can range between 2.0 and -2.0) means that flowers are more associated with pleasant words, and a high negative score means that insects are more associated with pleasant words.
-
-While the first two WEAT tests proposed in Caliskan et al. measure associations that are of little social concern (except perhaps to entomologists), the remaining tests measure more problematic biases.
-
-We used the WEAT score to examine several word embedding models: word2vec and GloVe (previously reported in Caliskan et al.), and three newly-released models available on the TensorFlow Hub platform -- nnlm-en-dim50, nnlm-en-dim128, and universal-sentence-encoder. """
+    sample_texts = (
+        "Neural network models can be quite powerful, effectively helping to identify pat"
+        "terns and uncover structure in a variety of different tasks, from language trans"
+        "lation to pathology to playing games. At the same time, neural models (as well a"
+        "s other kinds of machine learning models) can contain problematic biases in many"
+        " forms. For example, classifiers trained to detect rude, disrespectful, or unrea"
+        'sonable comments may be more likely to flag the sentence "I am gay" than "I am s'
+        'traight"; face classification models may not perform as well for women of color;'
+        " speech transcription may have higher error rates for African Americans than Whi"
+        "te Americans.\n\nMany pre-trained machine learning models are widely available for"
+        " developers to use -- for example, TensorFlow Hub recently launched its platform"
+        " publicly. It's important that when developers use these models in their applica"
+        "tions, they're aware of what biases they contain and how they might manifest in "
+        "those applications.\n\nHuman data encodes human biases by default. Being aware of "
+        "this is a good start, and the conversation around how to handle it is ongoing. A"
+        "t Google, we are actively researching unintended bias analysis and mitigation st"
+        "rategies because we are committed to making products that work well for everyone"
+        ". In this post, we'll examine a few text embedding models, suggest some tools fo"
+        "r evaluating certain forms of bias, and discuss how these issues matter when bui"
+        "lding applications.\n\nGiven a trained text embedding model, we can directly measu"
+        "re the associations the model has between words or phrases. Many of these associ"
+        "ations are expected and are helpful for natural language tasks. However, some as"
+        "sociations may be problematic or hurtful. For example, the ground-breaking paper"
+        ' by Bolukbasi et al. found that the vector-relationship between "man" and "woman'
+        '" was similar to the relationship between "physician" and "registered nurse" or '
+        '"shopkeeper" and "housewife" in the popular publicly-available word2vec embeddin'
+        "g trained on Google News text.\n\nThe Word Embedding Association Test (WEAT) was r"
+        "ecently proposed by Caliskan et al. [5] as a way to examine the associations in "
+        "word embeddings between concepts captured in the Implicit Association Test (IAT)"
+        ". We use the WEAT here as one way to explore some kinds of problematic associati"
+        "ons.\n\nThe WEAT test measures the degree to which a model associates sets of targ"
+        "et words (e.g., African American names, European American names, flowers, insect"
+        's) with sets of attribute words (e.g., "stable", "pleasant" or "unpleasant"). Th'
+        "e association between two given words is defined as the cosine similarity betwee"
+        "n the embedding vectors for the words.\n\nFor example, the target lists for the fi"
+        "rst WEAT test are types of flowers and insects, and the attributes are pleasant "
+        'words (e.g., "love", "peace") and unpleasant words (e.g., "hatred," "ugly"). The'
+        " overall test score is the degree to which flowers are more associated with the "
+        "pleasant words, relative to insects. A high positive score (the score can range "
+        "between 2.0 and -2.0) means that flowers are more associated with pleasant words"
+        ", and a high negative score means that insects are more associated with pleasant"
+        " words.\n\nWhile the first two WEAT tests proposed in Caliskan et al. measure asso"
+        "ciations that are of little social concern (except perhaps to entomologists), th"
+        "e remaining tests measure more problematic biases.\n"
+    )
     sample_queries = [
         "Why Google researched unintended bias analysis and mitigation strategies?",
         "What is the WEAT test?",

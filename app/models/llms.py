@@ -2,9 +2,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 from app.common.config import OPENAI_API_KEY
+from app.common.constants import USER_AI_TMPL_CHAT1
 
 from app.models.llm_tokenizers import BaseTokenizer, LlamaTokenizer, OpenAITokenizer
-from app.utils.chat.prompts import USER_AI_TMPL_CHAT1
 
 
 @dataclass
@@ -72,7 +72,7 @@ class OpenAIModel(LLMModel):
 class LLMModels(Enum):  # gpt models for openai api
     gpt_3_5_turbo = OpenAIModel(
         name="gpt-3.5-turbo",
-        max_total_tokens=2048,
+        max_total_tokens=4096,
         max_tokens_per_request=2048,
         token_margin=8,
         tokenizer=OpenAITokenizer("gpt-3.5-turbo"),

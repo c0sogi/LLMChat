@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from os import environ
 from pathlib import Path
 from re import Pattern, compile
+from aiohttp import ClientTimeout
 from dotenv import load_dotenv
 from urllib import parse
 
@@ -171,12 +172,12 @@ class Config(metaclass=SingletonMetaClass):
 
 
 @dataclass
-class LocalConfig(Config, metaclass=SingletonMetaClass):
+class LocalConfig(Config):
     debug: bool = True
 
 
 @dataclass
-class ProdConfig(Config, metaclass=SingletonMetaClass):
+class ProdConfig(Config):
     db_echo: bool = False
     trusted_hosts: list = field(
         default_factory=lambda: [
@@ -195,7 +196,7 @@ class ProdConfig(Config, metaclass=SingletonMetaClass):
 
 
 @dataclass
-class TestConfig(Config, metaclass=SingletonMetaClass):
+class TestConfig(Config):
     test_mode: bool = True
     debug: bool = False
     mysql_database: str = MYSQL_TEST_DATABASE
@@ -213,5 +214,17 @@ class LoggingConfig:
     logging_format: str = "[%(asctime)s] %(name)s:%(levelname)s - %(message)s"
 
 
+@dataclass
+class ChatConfig:
+    api_url: str = "https://api.openai.com/v1/chat/completions"  # api url for openai
+    timeout: ClientTimeout = ClientTimeout(sock_connect=30.0, sock_read=20.0)
+    read_timeout: float = 30.0  # wait for this time before timeout
+    wait_for_reconnect: float = 3.0  # wait for this time before reconnecting
+    api_regex_pattern: Pattern = compile(r"data:\s*({.+?})\n\n")
+    extra_token_margin: int = 500  # number of tokens to remove when tokens exceed token limit
+    continue_message: str = "...[CONTINUED]"  # message to append when tokens exceed token limit
+
+
 config = Config.get()
 logging_config = LoggingConfig()
+chat_config = ChatConfig()

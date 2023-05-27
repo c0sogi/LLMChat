@@ -35,28 +35,28 @@ def create_app(config: Config) -> FastAPI:
     js_url_initializer(js_location="app/web/main.dart.js")
 
     # Admin
-    assert db.engine is not None
-    admin = Admin(
-        db.engine,
-        title="Admin Console",
-        auth_provider=MyAuthProvider(),
-        middlewares=[Middleware(SessionMiddleware, secret_key=JWT_SECRET)],
-    )
-    admin.add_view(UserAdminView(Users, icon="fa fa-users", label="Users"))
-    admin.add_view(ApiKeyAdminView(ApiKeys, icon="fa fa-key", label="API Keys"))
-    admin.add_view(ModelView(ApiWhiteLists, icon="fa fa-list", label="API White Lists"))
-    admin.mount_to(new_app)
-    admin.add_view(
-        DropDown(
-            "Links",
-            icon="fa fa-link",
-            views=[
-                Link("Index", url="/"),
-                Link("Docs", url="/docs"),
-                Link("Chat", url="/chat", target="_blank"),
-            ],
+    if db.engine is not None:
+        admin = Admin(
+            db.engine,
+            title="Admin Console",
+            auth_provider=MyAuthProvider(),
+            middlewares=[Middleware(SessionMiddleware, secret_key=JWT_SECRET)],
         )
-    )
+        admin.add_view(UserAdminView(Users, icon="fa fa-users", label="Users"))
+        admin.add_view(ApiKeyAdminView(ApiKeys, icon="fa fa-key", label="API Keys"))
+        admin.add_view(ModelView(ApiWhiteLists, icon="fa fa-list", label="API White Lists"))
+        admin.add_view(
+            DropDown(
+                "Links",
+                icon="fa fa-link",
+                views=[
+                    Link("Index", url="/"),
+                    Link("Docs", url="/docs"),
+                    Link("Chat", url="/chat", target="_blank"),
+                ],
+            )
+        )
+        admin.mount_to(new_app)
 
     # Middlewares
     """

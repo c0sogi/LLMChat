@@ -10,9 +10,7 @@ from pydantic import Field, root_validator
 
 
 from app.errors.chat_exceptions import ChatBreakException, ChatContinueException, ChatLengthException
-from app.utils.chat.chat_config import ChatConfig
 
-from app.utils.chat.prompts import message_history_organizer
 
 if TYPE_CHECKING:
     from app.models.chat_models import UserChatContext
@@ -126,6 +124,8 @@ def load_llama(
 
 def llama_cpp_generation(
     user_chat_context: "UserChatContext",
+    prompt: str,
+    max_tokens: int,
     m_queue: Queue,  # multiprocessing.managers.AutoProxy[Queue]
     m_done: Event,  # multiprocessing.managers.EventProxy
     is_fake: bool = False,
@@ -140,10 +140,6 @@ def llama_cpp_generation(
         ) + get_stops(user_chat_context.user_chat_profile.ai_role + ":")
 
         def get_generator() -> Iterator[Any]:
-            prompt = message_history_organizer(
-                user_chat_context=user_chat_context,
-                return_as_string=True,
-            )
             if echo:
                 stdout.write("[Info] Creating Response of prompt below:")
                 stdout.write(str(prompt))
@@ -155,9 +151,7 @@ def llama_cpp_generation(
                 return llm_client.create_completion(  # type: ignore
                     prompt=prompt,
                     suffix=llm.suffix,
-                    max_tokens=min(
-                        user_chat_context.left_tokens, user_chat_context.llm_model.value.max_tokens_per_request
-                    ),
+                    max_tokens=max_tokens,
                     temperature=user_chat_context.user_chat_profile.temperature,
                     top_p=user_chat_context.user_chat_profile.top_p,
                     logprobs=llm.logprobs,
@@ -191,22 +185,16 @@ def llama_cpp_generation(
                         stdout.write(text)
 
                     if finish_reason == "length":
-                        raise ChatLengthException(
-                            msg="[Warning] Incomplete model output due to max_tokens parameter or token limit"
-                        )  # raise exception for token limit
+                        raise ChatLengthException(msg=content_buffer)  # raise exception for token limit
                     content_buffer += text
                     m_queue.put(text)
                 if content_buffer.replace("\u200b", "").strip() == "":
                     stdout.write("[Warning] Empty model output. Retrying...")
                     raise ChatContinueException(msg="Empty model output")  # raise exception for empty output
-            except ChatLengthException:
-                user_chat_context.ensure_token_not_exceed()
-                user_chat_context.clear_tokens(tokens_to_remove=ChatConfig.extra_token_margin)
             except ValueError as e:
                 if "tokens exceed context window" in str(e):
-                    user_chat_context.ensure_token_not_exceed()
-                    user_chat_context.clear_tokens(tokens_to_remove=ChatConfig.extra_token_margin)
                     stdout.write("[Warning] Token limit exceeded. Retrying...")
+                    raise ChatLengthException(msg=content_buffer)  # raise exception for token limit
                 else:
                     stdout.write("[Warning] ValueError. Retrying...")
                     raise e
