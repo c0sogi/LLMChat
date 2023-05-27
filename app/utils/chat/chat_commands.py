@@ -1,20 +1,26 @@
 from enum import Enum
 from functools import wraps
 from inspect import Parameter, iscoroutinefunction, signature
+from time import time
 from typing import Any, Callable, Tuple
 from uuid import uuid4
 
 from fastapi import WebSocket
-from app.database.schemas.auth import UserStatus
+from fastapi.concurrency import run_in_threadpool
+
+from app.common.config import ChatConfig
 from app.common.constants import CODEX_PROMPT, CONTEXT_QUESTION_TMPL_QUERY1, REDEX_PROMPT
+from app.database.schemas.auth import UserStatus
 from app.errors.api_exceptions import InternalServerError
+from app.models.chat_models import ChatRoles, LLMModels, MessageHistory, UserChatContext
+from app.shared import Shared
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.cache_manager import CacheManager
+from app.utils.chat.message_handler import MessageHandler
 from app.utils.chat.message_manager import MessageManager
+from app.utils.chat.prompts import message_histories_to_str
 from app.utils.chat.vectorstore_manager import Document, VectorStoreManager
 from app.utils.chat.websocket_manager import SendToWebsocket
-from app.utils.chat.message_handler import MessageHandler
-from app.models.chat_models import ChatRoles, MessageHistory, LLMModels, UserChatContext
 
 
 class ResponseType(str, Enum):
@@ -79,7 +85,7 @@ async def delete_chat_room(
     if index is None:
         return False
     buffer.delete_context(index=index)
-    if buffer.buffer_size == 0:
+    if not buffer:
         await create_new_chat_room(
             user_id=buffer.user_id,
             buffer=buffer,
@@ -237,7 +243,7 @@ class ChatCommands:
             if iscoroutinefunction(callback):  # if callback is coroutine function
                 callback_response = await callback(*args_to_pass, **kwargs_to_pass)
             else:
-                callback_response = callback(*args_to_pass, **kwargs_to_pass)
+                callback_response = await run_in_threadpool(callback, *args_to_pass, **kwargs_to_pass)
             if isinstance(callback_response, tuple):
                 callback_response, response_type = callback_response
                 if response_type in (ResponseType.SEND_MESSAGE_AND_STOP, ResponseType.SEND_MESSAGE_AND_KEEP_GOING):
@@ -628,7 +634,7 @@ class ChatCommands:
             dropped_index.append(buffer.user_id)
         if buffer.user.status is UserStatus.admin and await VectorStoreManager.drop_index(index_name=""):
             dropped_index.append("shared")
-        if len(dropped_index) == 0:
+        if not dropped_index:
             return "No index dropped."
         return f"Index dropped: {', '.join(dropped_index)}"
 
@@ -637,11 +643,34 @@ class ChatCommands:
     async def summarize(buffer: BufferedUserContext) -> str:
         """Drop the index from the redis vectorstore.\n
         /drop"""
-        dropped_index: list[str] = []
-        if await VectorStoreManager.drop_index(index_name=buffer.user_id):
-            dropped_index.append(buffer.user_id)
-        if buffer.user.status is UserStatus.admin and await VectorStoreManager.drop_index(index_name=""):
-            dropped_index.append("shared")
-        if len(dropped_index) == 0:
-            return "No index dropped."
-        return f"Index dropped: {', '.join(dropped_index)}"
+        shared = Shared()
+        conversation: str = message_histories_to_str(
+            user_role=buffer.current_user_chat_profile.user_role,
+            ai_role=buffer.current_user_chat_profile.ai_role,
+            system_role=buffer.current_user_chat_profile.system_role,
+            user_message_histories=buffer.current_user_message_histories,
+            ai_message_histories=buffer.current_ai_message_histories,
+            system_message_histories=buffer.current_system_message_histories,
+        )
+        if buffer.current_user_chat_context.total_tokens < ChatConfig.summarization_token_limit:
+            summarization_method: str = "stuff"
+            summarize_chain = shared.stuff_summarize_chain
+        else:
+            summarization_method: str = "map reduce"
+            summarize_chain = shared.map_reduce_summarize_chain
+        start: float = time()
+        result = await summarize_chain.arun(shared.token_text_splitter.create_documents([conversation]))
+        end: float = time()
+        summarized_tokens: int = len(shared.token_text_splitter._tokenizer.encode(result))
+        return "\n".join(
+            (
+                "# Summarization complete!",
+                f"- original tokens: {buffer.current_user_chat_context.total_tokens}",
+                f"- summarization method: {summarization_method}",
+                f"- summarized tokens: {summarized_tokens}",
+                f"- summarization time: {end-start}s",
+                "```",
+                result,
+                "```",
+            )
+        )

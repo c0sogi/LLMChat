@@ -3,13 +3,6 @@
 from langchain import PromptTemplate
 
 
-def split_long_text(long_text: str, chars_per_line: int):
-    split_strings = [
-        repr(long_text[i : i + chars_per_line]) for i in range(0, len(long_text), chars_per_line)
-    ]  # noqa: E203
-    return "(" + "\n".join(split_strings) + ")"
-
-
 LONG_PROMPT = (
     "This year, the elves invested in a gift-wrapping machine. However, it i"
     "sn't programmed! An algorithm that aids it in the task must be developed. Many p"
@@ -283,7 +276,15 @@ CONVERSATION_EXAMPLE: list[dict[str, str]] = [
     },
 ]
 
+
 if __name__ == "__main__":
+
+    def split_long_text(long_text: str, chars_per_line: int):
+        split_strings = [
+            repr(long_text[i : i + chars_per_line]) for i in range(0, len(long_text), chars_per_line)
+        ]  # noqa: E203
+        return "(" + "\n".join(split_strings) + ")"
+
     while True:
         lines = []
         try:

@@ -1,29 +1,31 @@
-from typing import Any
-import orjson
 import os
 from time import sleep
-import yagmail
+from typing import Any
+
+import boto3
+import orjson
 import requests
+import yagmail
+from botocore.exceptions import ClientError
 from fastapi import APIRouter
 from fastapi.logger import logger
 from fastapi.responses import JSONResponse
 from starlette.background import BackgroundTasks
 from starlette.requests import Request
-from app.errors.api_exceptions import Responses_400
-from app.viewmodels.base_models import MessageOk, KakaoMsgBody, SendEmail
+
 from app.common.config import (
-    config,
-    KAKAO_RESTAPI_TOKEN,
-    KAKAO_IMAGE_URL,
     AWS_ACCESS_KEY,
-    AWS_SECRET_KEY,
     AWS_AUTHORIZED_EMAIL,
+    AWS_SECRET_KEY,
+    KAKAO_IMAGE_URL,
+    KAKAO_RESTAPI_TOKEN,
     WEATHERBIT_API_KEY,
+    config,
 )
-from app.utils.encoding_utils import encode_from_utf8
+from app.errors.api_exceptions import Responses_400
 from app.utils.api.weather import fetch_weather_data
-import boto3
-from botocore.exceptions import ClientError
+from app.utils.encoding_utils import encode_from_utf8
+from app.viewmodels.base_models import KakaoMsgBody, MessageOk, SendEmail
 
 router = APIRouter(prefix="/services")
 router.redirect_slashes = False
@@ -101,25 +103,38 @@ async def send_kakao(request: Request, body: KakaoMsgBody):
     return MessageOk()
 
 
-email_content = """
-<div style='margin-top:0cm;margin-right:0cm;margin-bottom:10.0pt;margin-left:0cm;line-height:115%;font-size:15px;font-family:"Calibri",sans-serif;border:none;border-bottom:solid #EEEEEE 1.0pt;padding:0cm 0cm 6.0pt 0cm;background:white;'>
-
-<p style='margin-top:0cm;margin-right:0cm;margin-bottom:11.25pt;margin-left:0cm;line-height:115%;font-size:15px;font-family:"Calibri",sans-serif;background:white;border:none;padding:0cm;'><span style='font-size:25px;font-family:"Helvetica Neue";color:#11171D;'>{}님! Aristoxeni ingenium consumptum videmus in musicis?</span></p>
-</div>
-
-<p style='margin-top:0cm;margin-right:0cm;margin-bottom:11.25pt;margin-left:0cm;line-height:17.25pt;font-size:15px;font-family:"Calibri",sans-serif;background:white;vertical-align:baseline;'><span style='font-size:14px;font-family:"Helvetica Neue";color:#11171D;'>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Quid nunc honeste dicit? Tum Torquatus: Prorsus, inquit, assentior; Duo Reges: constructio interrete. Iam in altera philosophiae parte. Sed haec omittamus; Haec para/doca illi, nos admirabilia dicamus. Nihil sane.</span></p>
-
-<p style='margin-top:0cm;margin-right:0cm;margin-bottom:10.0pt;margin-left:0cm;line-height:normal;font-size:15px;font-family:"Calibri",sans-serif;background:white;'><strong><span style='font-size:24px;font-family:"Helvetica Neue";color:#11171D;'>Expressa vero in iis aetatibus, quae iam confirmatae sunt.</span></strong></p>
-
-<p style='margin-top:0cm;margin-right:0cm;margin-bottom:11.25pt;margin-left:0cm;line-height:17.25pt;font-size:15px;font-family:"Calibri",sans-serif;background:white;vertical-align:baseline;'><span style='font-size:14px;font-family:"Helvetica Neue";color:#11171D;'>Sit sane ista voluptas. Non quam nostram quidem, inquit Pomponius iocans; An tu me de L. Sed haec omittamus; Cave putes quicquam esse verius.&nbsp;</span></p>
-
-<p style='margin-top:0cm;margin-right:0cm;margin-bottom:11.25pt;margin-left:0cm;line-height:17.25pt;font-size:15px;font-family:"Calibri",sans-serif;text-align:center;background:white;vertical-align:baseline;'><span style='font-size:14px;font-family:"Helvetica Neue";color:#11171D;'><img width="378" src="https://dl1gtqdymozzn.cloudfront.net/forAuthors/K6Sfkx4f2uH780YGTbEHvHcTX3itiTBtzDWeyswQevxp8jqVttfBgPu86ZtGC6owG.webp" alt="sample1.jpg" class="fr-fic fr-dii"></span></p>
-
-<p>
-<br>
-</p>
-
-"""
+email_content = (
+    "<div style='margin-top:0cm;margin-right:0cm;margin-bottom:10.0pt;margin-left:0cm"
+    ';line-height:115%;font-size:15px;font-family:"Calibri",sans-serif;border:none;bo'
+    "rder-bottom:solid #EEEEEE 1.0pt;padding:0cm 0cm 6.0pt 0cm;background:white;'>\n\n<"
+    "p style='margin-top:0cm;margin-right:0cm;margin-bottom:11.25pt;margin-left:0cm;l"
+    'ine-height:115%;font-size:15px;font-family:"Calibri",sans-serif;background:white'
+    ";border:none;padding:0cm;'><span style='font-size:25px;font-family:\"Helvetica Ne"
+    "ue\";color:#11171D;'>{}님! Aristoxeni ingenium consumptum videmus in musicis?</spa"
+    "n></p>\n</div>\n\n<p style='margin-top:0cm;margin-right:0cm;margin-bottom:11.25pt;m"
+    'argin-left:0cm;line-height:17.25pt;font-size:15px;font-family:"Calibri",sans-ser'
+    "if;background:white;vertical-align:baseline;'><span style='font-size:14px;font-f"
+    'amily:"Helvetica Neue";color:#11171D;\'>Lorem ipsum dolor sit amet, consectetur a'
+    "dipiscing elit. Quid nunc honeste dicit? Tum Torquatus: Prorsus, inquit, assenti"
+    "or; Duo Reges: constructio interrete. Iam in altera philosophiae parte. Sed haec"
+    " omittamus; Haec para/doca illi, nos admirabilia dicamus. Nihil sane.</span></p>"
+    "\n\n<p style='margin-top:0cm;margin-right:0cm;margin-bottom:10.0pt;margin-left:0cm"
+    ';line-height:normal;font-size:15px;font-family:"Calibri",sans-serif;background:w'
+    "hite;'><strong><span style='font-size:24px;font-family:\"Helvetica Neue\";color:#1"
+    "1171D;'>Expressa vero in iis aetatibus, quae iam confirmatae sunt.</span></stron"
+    "g></p>\n\n<p style='margin-top:0cm;margin-right:0cm;margin-bottom:11.25pt;margin-l"
+    'eft:0cm;line-height:17.25pt;font-size:15px;font-family:"Calibri",sans-serif;back'
+    "ground:white;vertical-align:baseline;'><span style='font-size:14px;font-family:\""
+    "Helvetica Neue\";color:#11171D;'>Sit sane ista voluptas. Non quam nostram quidem,"
+    " inquit Pomponius iocans; An tu me de L. Sed haec omittamus; Cave putes quicquam"
+    " esse verius.&nbsp;</span></p>\n\n<p style='margin-top:0cm;margin-right:0cm;margin"
+    '-bottom:11.25pt;margin-left:0cm;line-height:17.25pt;font-size:15px;font-family:"'
+    "Calibri\",sans-serif;text-align:center;background:white;vertical-align:baseline;'"
+    "><span style='font-size:14px;font-family:\"Helvetica Neue\";color:#11171D;'><img w"
+    'idth="378" src="https://dl1gtqdymozzn.cloudfront.net/forAuthors/K6Sfkx4f2uH780YG'
+    'TbEHvHcTX3itiTBtzDWeyswQevxp8jqVttfBgPu86ZtGC6owG.webp" alt="sample1.jpg" class='
+    '"fr-fic fr-dii"></span></p>\n\n<p>\n<br>\n</p>'
+)
 
 
 @router.post("/email/send_by_gmail")
@@ -171,18 +186,14 @@ async def email_by_ses():
     BODY_TEXT = "안녕하세요! 운영자 입니다.\r\n" "HTML 버전만 지원합니다!"
 
     # The HTML body of the email.
-    BODY_HTML = """<html>
-    <head></head>
-    <body>
-      <h1>안녕하세요! 반갑습니다.</h1>
-      <p>기업에서 대규모 이메일 솔루션을 구축한다는 것은 복잡하고 비용이 많이 드는 작업이 될 수 있습니다. 이를 위해서는 인프라를 구축하고, 네트워크를 구성하고, IP 주소를 준비하고, 발신자 평판을 보호해야 합니다. 타사 이메일 솔루션 대부분이 상당한 규모의 선수금을 요구하고 계약 협상을 진행해야 합니다.
-
-Amazon SES는 이러한 부담이 없으므로 몇 분 만에 이메일 발송을 시작할 수 있습니다. Amazon.com이 대규모의 자사 고객 기반을 지원하기 위해 구축한 정교한 이메일 인프라와 오랜 경험을 활용할 수 있습니다.</p>
-      <p>링크를 통해 확인하세요!
-        <a href='https://google.com'>Google</a></p>
-    </body>
-    </html>
-                """
+    BODY_HTML = (
+        "<html>\n    <head></head>\n    <body>\n      <h1>안녕하세요! 반갑습니다.</h1>\n      <p>기업에서 대"
+        "규모 이메일 솔루션을 구축한다는 것은 복잡하고 비용이 많이 드는 작업이 될 수 있습니다. 이를 위해서는 인프라를 구축하고, 네트워크를 구성하고,"
+        " IP 주소를 준비하고, 발신자 평판을 보호해야 합니다. 타사 이메일 솔루션 대부분이 상당한 규모의 선수금을 요구하고 계약 협상을 진행해야 합니"
+        "다.\n\nAmazon SES는 이러한 부담이 없으므로 몇 분 만에 이메일 발송을 시작할 수 있습니다. Amazon.com이 대규모의 자사 고객 기"
+        "반을 지원하기 위해 구축한 정교한 이메일 인프라와 오랜 경험을 활용할 수 있습니다.</p>\n      <p>링크를 통해 확인하세요!\n      "
+        "  <a href='https://google.com'>Google</a></p>\n    </body>"
+    )
 
     # The character encoding for the email.
     charset = "UTF-8"

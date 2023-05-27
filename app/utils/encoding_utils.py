@@ -90,7 +90,7 @@ class SecretConfigSetup:
 def encode_from_utf8(text: str) -> str:
     # Check if text contains any non-ASCII characters
     matches: list[Any] = findall(r"[^\x00-\x7F]+", text)
-    if len(matches) == 0:
+    if not matches:
         # Return text if it doesn't contain any non-ASCII characters
         return text
     else:

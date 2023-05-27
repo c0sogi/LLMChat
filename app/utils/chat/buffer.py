@@ -49,6 +49,9 @@ class BufferedUserContext:
     _sorted_ctxts: ContextList = field(init=False)
     _current_ctxt: UserChatContext = field(init=False)
 
+    def __len__(self):
+        return len(self._sorted_ctxts)
+
     async def init(self):
         self._sorted_ctxts = ContextList(
             initial_list=await self.initialize_callback(self.user.email),
@@ -85,10 +88,6 @@ class BufferedUserContext:
     @property
     def user_id(self) -> str:
         return self.user.email
-
-    @property
-    def buffer_size(self) -> int:
-        return len(self._sorted_ctxts)
 
     @property
     def current_chat_room_id(self) -> str:

@@ -125,6 +125,11 @@ class SendToWebsocket:
     ) -> None:
         """Send SSE stream to websocket"""
         current_model: LLMModel = buffer.current_llm_model.value
+        token_limit: int = (
+            current_model.max_total_tokens
+            - current_model.token_margin
+            - int(getattr(current_model, "description_tokens", 0))
+        )
 
         async def hand_shake() -> None:
             # Send initial message
@@ -162,8 +167,10 @@ class SendToWebsocket:
             user_message_histories: list[MessageHistory],
             ai_message_histories: list[MessageHistory],
             system_message_histories: list[MessageHistory],
-            token_limit: int,
+            response_in_progress: Optional[MessageHistory] = None,
         ) -> None:
+            if response_in_progress is not None:
+                ai_message_histories.append(response_in_progress)
             user_message_histories, ai_message_histories = cutoff_message_histories(
                 ai_message_histories=ai_message_histories,
                 user_message_histories=user_message_histories,
@@ -171,16 +178,13 @@ class SendToWebsocket:
                 token_limit=token_limit,
             )
             try:
-                # Use Python 3.10's pattern matching for cleaner type checking
                 match stream_func(
                     buffer,
                     user_message_histories,
                     ai_message_histories,
                     system_message_histories,
                     (
-                        current_model.max_total_tokens
-                        - current_model.token_margin
-                        - int(getattr(current_model, "description_tokens", 0))
+                        token_limit
                         - sum([m.tokens for m in ai_message_histories])
                         - sum([m.tokens for m in user_message_histories])
                         - sum([m.tokens for m in system_message_histories])
@@ -196,16 +200,23 @@ class SendToWebsocket:
                     case _:
                         raise ChatModelNotImplementedException(msg="Stream type is not AsyncGenerator or Generator.")
             except ChatLengthException as e:
-                api_logger.info(f"ChatLengthException: {e.msg}")
                 if e.msg is None:
                     return
+                if response_in_progress is not None:
+                    ai_message_histories.pop()
+                    new_content: str = response_in_progress.content + e.msg + ChatConfig.continue_message
+                else:
+                    new_content: str = e.msg + ChatConfig.continue_message
                 await transmission(
                     ai_message_histories=ai_message_histories,
                     user_message_histories=user_message_histories,
                     system_message_histories=system_message_histories,
-                    token_limit=token_limit
-                    - buffer.current_user_chat_context.get_tokens_of(e.msg)
-                    - ChatConfig.extra_token_margin,
+                    response_in_progress=MessageHistory(
+                        role=buffer.current_user_chat_profile.ai_role,
+                        content=new_content,
+                        tokens=buffer.current_user_chat_context.get_tokens_of(new_content),
+                        is_user=False,
+                    ),
                 )
 
         async def good_bye() -> None:
@@ -224,7 +235,6 @@ class SendToWebsocket:
                 ai_message_histories=buffer.current_ai_message_histories,
                 user_message_histories=buffer.current_user_message_histories,
                 system_message_histories=buffer.current_system_message_histories,
-                token_limit=current_model.max_total_tokens,
             )
 
         finally:
