@@ -26,7 +26,7 @@ from app.utils.chat.message_manager import MessageManager
 from app.utils.chat.vectorstore_manager import VectorStoreManager
 from app.utils.chat.websocket_manager import SendToWebsocket
 from app.utils.logger import api_logger
-from app.viewmodels.base_models import MessageFromWebsocket
+from app.viewmodels.base_models import MessageFromWebsocket, SummarizedResult
 
 
 async def initialize_callback(user_id: str) -> list[UserChatProfile]:
@@ -38,6 +38,57 @@ async def initialize_callback(user_id: str) -> list[UserChatProfile]:
         # get latest chatroom
         user_chat_profiles.sort(key=lambda profile: profile.created_at, reverse=True)
         return user_chat_profiles
+
+
+async def harvest_done_tasks(buffer: BufferedUserContext) -> None:
+    """
+    This function checks and handles the done tasks in buffer.task_list.
+    :param buffer: BufferedUserContext object
+    :return: None
+    """
+    harvested_tasks = set(task for task in buffer.task_list if task.done() and not task.cancelled())
+    update_tasks = []
+
+    for task in harvested_tasks:
+        try:
+            task_result = task.result()
+            if isinstance(task_result, SummarizedResult):
+                context_index = buffer.find_index_of_chatroom(task_result.chat_room_id)
+                if context_index is None:
+                    continue
+                role = ChatRoles.get_member(task_result.role)
+                context = await buffer._sorted_ctxts.at(context_index)
+                message_history_index = await buffer.find_index_of_message_history(
+                    user_chat_context=context,
+                    role=role,
+                    message_history_uuid=task_result.uuid,
+                )
+                if message_history_index is None:
+                    continue
+
+                update_tasks.append(
+                    MessageManager.set_message_history_safely(
+                        user_chat_context=context,
+                        summarized_content=task_result.content,
+                        index=message_history_index,
+                        role=role,
+                    )
+                )
+        except Exception as e:
+            api_logger.exception(f"Some error occurred while harvesting done tasks: {e}")
+
+    if update_tasks:
+        api_logger.info(f"Running update tasks: {update_tasks}")
+
+    try:
+        results = await asyncio.gather(*update_tasks, return_exceptions=True)
+        for result in results:
+            if isinstance(result, Exception):
+                api_logger.exception(f"Some error occurred while running update tasks: {result}")
+    except Exception as e:
+        api_logger.exception(f"Unexpected error occurred while running update tasks: {e}")
+
+    buffer.task_list = [task for task in buffer.task_list if task not in harvested_tasks]
 
 
 class ChatStreamManager:
@@ -134,7 +185,10 @@ class ChatStreamManager:
                     buffer=buffer,
                     send_tokens=True,
                 )
+
+                await harvest_done_tasks(buffer=buffer)
                 item: MessageFromWebsocket | str = await buffer.queue.get()
+                await harvest_done_tasks(buffer=buffer)
 
                 if isinstance(item, str):
                     await SendToWebsocket.message(

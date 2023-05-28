@@ -9,7 +9,6 @@ from uuid import uuid4
 from fastapi import WebSocket
 from fastapi.concurrency import run_in_threadpool
 
-from app.common.config import ChatConfig
 from app.common.constants import CODEX_PROMPT, QUERY_TMPL1, REDEX_PROMPT, CHAT_TURN_TMPL1
 from app.database.schemas.auth import UserStatus
 from app.errors.api_exceptions import InternalServerError
@@ -20,6 +19,7 @@ from app.utils.chat.cache_manager import CacheManager
 from app.utils.chat.message_handler import MessageHandler
 from app.utils.chat.message_manager import MessageManager
 from app.utils.chat.prompts import message_histories_to_str
+from app.utils.chat.text_generation import get_summarization
 from app.utils.chat.vectorstore_manager import Document, VectorStoreManager
 from app.utils.chat.websocket_manager import SendToWebsocket
 
@@ -436,9 +436,9 @@ class ChatCommands:
         if (
             await MessageManager.set_message_history_safely(
                 user_chat_context=user_chat_context,
-                new_content=new_message,
                 role=actual_role,
                 index=-1,
+                new_content=new_message,
             )
             is None
         ):  # if set message history failed
@@ -601,9 +601,9 @@ class ChatCommands:
             )
             await MessageManager.set_message_history_safely(
                 user_chat_context=buffer.current_user_chat_context,
-                new_content=query,
                 role=ChatRoles.USER,
                 index=-1,
+                new_content=query,
             )
             return None, ResponseType.DO_NOTHING
         else:
@@ -659,25 +659,19 @@ class ChatCommands:
             ai_message_histories=buffer.current_ai_message_histories,
             system_message_histories=buffer.current_system_message_histories,
         )
-        if buffer.current_user_chat_context.total_tokens < ChatConfig.summarization_token_limit:
-            summarization_method: str = "stuff"
-            summarize_chain = shared.stuff_summarize_chain
-        else:
-            summarization_method: str = "map reduce"
-            summarize_chain = shared.map_reduce_summarize_chain
+        to_summarize_tokens = buffer.current_user_chat_context.total_tokens
         start: float = time()
-        result = await summarize_chain.arun(shared.token_text_splitter.create_documents([conversation]))
+        summarized = await get_summarization(to_summarize=conversation, to_summarize_tokens=to_summarize_tokens)
+        summarized_tokens: int = len(shared.token_text_splitter._tokenizer.encode(summarized))
         end: float = time()
-        summarized_tokens: int = len(shared.token_text_splitter._tokenizer.encode(result))
         return "\n".join(
             (
                 "# Summarization complete!",
                 f"- original tokens: {buffer.current_user_chat_context.total_tokens}",
-                f"- summarization method: {summarization_method}",
                 f"- summarized tokens: {summarized_tokens}",
                 f"- summarization time: {end-start}s",
                 "```",
-                result,
+                summarized,
                 "```",
             )
         )

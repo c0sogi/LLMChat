@@ -1,5 +1,6 @@
 # flake8: noqa
 
+from copy import deepcopy
 from itertools import zip_longest
 from typing import Any, Callable, Optional
 
@@ -38,6 +39,10 @@ def message_histories_to_str(
     description_for_prompt: Optional[str] = None,
 ):
     def parse_method(message_history: MessageHistory) -> str:
+        if message_history.summarized is not None:
+            message_history = deepcopy(message_history)
+            if message_history.summarized is not None:
+                message_history.content = message_history.summarized
         return chat_turn_prompt.format(role=message_history.role, content=message_history.content.strip())
 
     if description_for_prompt:

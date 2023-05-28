@@ -1,5 +1,6 @@
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from concurrent.futures.process import BrokenProcessPool
+from copy import deepcopy
 from typing import Any, AsyncGenerator, Generator, Optional
 
 import aiohttp
@@ -7,7 +8,7 @@ import asyncio
 import openai
 from orjson import dumps as orjson_dumps
 from orjson import loads as orjson_loads
-from app.common.config import chat_config
+from app.common.config import ChatConfig, chat_config
 from app.models.chat_models import MessageHistory
 
 from app.shared import Shared
@@ -40,18 +41,20 @@ def generate_from_llama_cpp(
     m_done = shared.process_manager.Event()
     process_pool_executor: ProcessPoolExecutor = shared.process_pool_executor
     try:
+        prompt = message_histories_to_str(
+            user_chat_roles=buffer.current_user_chat_roles,
+            chat_turn_prompt=llama_cpp_model.chat_turn_prompt,
+            user_message_histories=user_message_histories,
+            ai_message_histories=ai_message_histories,
+            system_message_histories=system_message_histories,
+            description_for_prompt=llama_cpp_model.description,
+        )
+        api_logger.info(f"Sending this prompt to llama_cpp:\n{prompt}")
         future_exception: Optional[BaseException] = None
         future: Future[None] = process_pool_executor.submit(
             llama_cpp_generation,
             user_chat_context=buffer.current_user_chat_context,
-            prompt=message_histories_to_str(
-                user_chat_roles=buffer.current_user_chat_roles,
-                chat_turn_prompt=llama_cpp_model.chat_turn_prompt,
-                user_message_histories=user_message_histories,
-                ai_message_histories=ai_message_histories,
-                system_message_histories=system_message_histories,
-                description_for_prompt=llama_cpp_model.description,
-            ),
+            prompt=prompt,
             max_tokens=max_tokens,
             m_queue=m_queue,
             m_done=m_done,
@@ -93,6 +96,10 @@ async def agenerate_from_openai(
     max_tokens: int,
 ) -> AsyncGenerator[str, None]:
     def parse_method(message_history: MessageHistory) -> dict[str, str]:
+        if message_history.summarized is not None:
+            message_history = deepcopy(message_history)
+            if message_history.summarized is not None:
+                message_history.content = message_history.summarized
         return OpenAIChatMessage.from_orm(message_history).dict()
 
     current_model = buffer.current_llm_model.value
@@ -105,6 +112,13 @@ async def agenerate_from_openai(
 
     async with aiohttp.ClientSession(timeout=chat_config.timeout) as session:  # initialize client
         try:
+            messages = message_histories_to_list(
+                parse_method=parse_method,
+                user_message_histories=user_message_histories,
+                ai_message_histories=ai_message_histories,
+                system_message_histories=system_message_histories,
+            )
+            api_logger.info(f"Sending these messages to OpenAI:\n{messages}")
             async with session.post(
                 current_model.api_url,
                 headers={
@@ -114,12 +128,7 @@ async def agenerate_from_openai(
                 data=orjson_dumps(
                     {
                         "model": current_model.name,
-                        "messages": message_histories_to_list(
-                            parse_method=parse_method,
-                            user_message_histories=user_message_histories,
-                            ai_message_histories=ai_message_histories,
-                            system_message_histories=system_message_histories,
-                        ),
+                        "messages": messages,
                         "temperature": buffer.current_user_chat_profile.temperature,
                         "top_p": buffer.current_user_chat_profile.top_p,
                         "n": 1,
@@ -222,3 +231,20 @@ def generate_from_openai(
                 yield delta_content
     except ChatLengthException:
         raise ChatLengthException(msg=content_buffer)
+
+
+async def get_summarization(
+    to_summarize: str,
+    to_summarize_tokens: Optional[int] = None,
+) -> str:
+    shared = Shared()
+    if to_summarize_tokens is None:
+        to_summarize_tokens = len(shared.token_text_splitter._tokenizer.encode(to_summarize))
+
+    if to_summarize_tokens < ChatConfig.summarization_token_limit:
+        summarize_chain = shared.stuff_summarize_chain
+    else:
+        summarize_chain = shared.map_reduce_summarize_chain
+    result = await summarize_chain.arun(shared.token_text_splitter.create_documents([to_summarize]))
+    api_logger.info(f"Summarization result:\n {result}")
+    return result

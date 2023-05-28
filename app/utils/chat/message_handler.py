@@ -1,4 +1,6 @@
+import asyncio
 from copy import deepcopy
+from app.common.config import ChatConfig
 
 from app.errors.chat_exceptions import (
     ChatException,
@@ -17,11 +19,24 @@ from app.utils.chat.message_manager import MessageManager
 from app.utils.chat.text_generation import (  # noqa: F401
     agenerate_from_openai,
     generate_from_llama_cpp,
+    get_summarization,
 )
 from app.utils.chat.websocket_manager import SendToWebsocket
 from app.utils.date_utils import UTC
 from app.utils.logger import api_logger
-from app.viewmodels.base_models import StreamProgress
+from app.viewmodels.base_models import StreamProgress, SummarizedResult
+
+
+async def summarization_task(
+    user_id: str, chat_room_id: str, role: str, to_summarize: str, message_history_uuid: str
+) -> SummarizedResult:  # =
+    return SummarizedResult(
+        user_id=user_id,
+        chat_room_id=chat_room_id,
+        role=role,
+        content=await get_summarization(to_summarize),
+        uuid=message_history_uuid,
+    )
 
 
 class MessageHandler:
@@ -49,12 +64,26 @@ class MessageHandler:
                 msg=f"Message too long. Now {user_token} tokens, "
                 f"but {buffer.current_user_chat_context.token_per_request} tokens allowed."
             )
-
         await MessageManager.add_message_history_safely(
             user_chat_context=buffer.current_user_chat_context,
             content=msg,
             role=ChatRoles.USER,
         )
+        if (
+            ChatConfig.summarize_for_chat
+            and buffer.current_user_message_histories[-1].tokens > ChatConfig.summarization_threshold
+        ):
+            buffer.task_list.append(
+                asyncio.create_task(
+                    summarization_task(
+                        user_id=buffer.user_id,
+                        chat_room_id=buffer.current_chat_room_id,
+                        role="user",
+                        to_summarize=buffer.current_user_message_histories[-1].content,
+                        message_history_uuid=buffer.current_user_message_histories[-1].uuid,
+                    )
+                )
+            )  # =
 
     @classmethod
     async def ai(cls, translate: bool, buffer: BufferedUserContext) -> None:
@@ -90,6 +119,21 @@ class MessageHandler:
                 content=stream_progress.response,
                 role=ChatRoles.AI,
             )
+            if (
+                ChatConfig.summarize_for_chat
+                and buffer.current_ai_message_histories[-1].tokens > ChatConfig.summarization_threshold
+            ):
+                buffer.task_list.append(
+                    asyncio.create_task(
+                        summarization_task(
+                            user_id=buffer.user_id,
+                            chat_room_id=buffer.current_chat_room_id,
+                            role="ai",
+                            to_summarize=buffer.current_ai_message_histories[-1].content,
+                            message_history_uuid=buffer.current_ai_message_histories[-1].uuid,
+                        )
+                    )
+                )  # =
 
         except ChatException as chat_exception:
             buffer.current_user_chat_context.copy_from(backup_context)

@@ -167,3 +167,11 @@ class UserChatRoles(BaseModel):
     ai: str
     system: str
     user: str
+
+
+class SummarizedResult(BaseModel):
+    user_id: str
+    chat_room_id: str
+    role: str
+    content: str
+    uuid: str

@@ -5,7 +5,7 @@ from typing import Any, Awaitable, Callable
 from fastapi import WebSocket
 
 from app.database.schemas.auth import Users
-from app.models.chat_models import MessageHistory, UserChatContext, UserChatProfile, LLMModels
+from app.models.chat_models import ChatRoles, MessageHistory, UserChatContext, UserChatProfile, LLMModels
 from app.viewmodels.base_models import UserChatRoles
 
 
@@ -24,15 +24,15 @@ class ContextList:
     def __iter__(self):
         return iter(self.data)
 
-    async def at(self, index: int):
+    async def at(self, index: int) -> UserChatContext:
         if isinstance(self.data[index], UserChatProfile):
             self.data[index] = await self.read_callback(self.data[index])
         return self.data[index]
 
-    def insert(self, index: int, value: Any):
+    def insert(self, index: int, value: Any) -> None:
         self.data.insert(index, value)
 
-    def delete(self, index: int):
+    def delete(self, index: int) -> None:
         del self.data[index]
 
 
@@ -44,6 +44,7 @@ class BufferedUserContext:
     read_callback: Callable[[UserChatProfile], Awaitable[UserChatContext]]
     queue: asyncio.Queue = field(default_factory=asyncio.Queue)
     done: asyncio.Event = field(default_factory=asyncio.Event)
+    task_list: list[asyncio.Task[Any]] = field(default_factory=list)  # =
     _sorted_ctxts: ContextList = field(init=False)
     _current_ctxt: UserChatContext = field(init=False)
 
@@ -66,6 +67,27 @@ class BufferedUserContext:
     def find_index_of_chatroom(self, chat_room_id: str) -> int | None:
         try:
             return self.sorted_chat_room_ids.index(chat_room_id)
+        except ValueError:
+            return None
+
+    async def find_index_of_message_history(
+        self,
+        user_chat_context: UserChatContext,
+        role: ChatRoles,
+        message_history_uuid: str,
+    ) -> int | None:  # =
+        try:
+            if role is ChatRoles.USER:
+                message_histories = user_chat_context.user_message_histories
+            elif role is ChatRoles.AI:
+                message_histories = user_chat_context.ai_message_histories
+            elif role is ChatRoles.SYSTEM:
+                message_histories = user_chat_context.system_message_histories
+            else:
+                raise ValueError("role must be one of 'user', 'ai', 'system'")
+            for message_history_index, message_history in enumerate(message_histories):
+                if message_history.uuid == message_history_uuid:
+                    return message_history_index
         except ValueError:
             return None
 

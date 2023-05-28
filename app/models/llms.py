@@ -37,7 +37,7 @@ class LlamaCppModel(LLMModel):
     f16_kv: bool = True  # Use half-precision for key/value cache.
     logits_all: bool = False  # Return logits for all tokens, not just the last token.
     vocab_only: bool = False  # Only load the vocabulary, no weights.
-    use_mlock: bool = False  # Force system to keep model in RAM.
+    use_mlock: bool = True  # Force system to keep model in RAM.
     n_batch: int = 512  # Number of tokens to process in parallel. Should be a number between 1 and n_ctx.
     last_n_tokens_size: int = 64  # The number of tokens to look back when applying the repeat_penalty.
     use_mmap: bool = True  # Whether to use memory mapping for the model.

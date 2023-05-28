@@ -1,3 +1,4 @@
+from typing import Optional
 from app.utils.chat.cache_manager import CacheManager
 from app.models.chat_models import ChatRoles, MessageHistory, UserChatContext
 
@@ -106,9 +107,10 @@ class MessageManager:
     @staticmethod
     async def set_message_history_safely(
         user_chat_context: UserChatContext,
-        new_content: str,
         role: ChatRoles,
         index: int,
+        new_content: Optional[str] = None,
+        summarized_content: Optional[str] = None,  # =
         update_cache: bool = True,
     ) -> None:
         try:
@@ -122,8 +124,12 @@ class MessageManager:
                 raise ValueError(f"Invalid role: {role}")
         except IndexError:
             return None
-        histories_to_change.content = new_content
-        histories_to_change.tokens = user_chat_context.get_tokens_of(new_content)
+        if new_content is not None:  # =
+            histories_to_change.content = new_content
+            histories_to_change.tokens = user_chat_context.get_tokens_of(new_content)
+        if summarized_content is not None:  # =
+            histories_to_change.summarized = summarized_content
+            histories_to_change.summarized_tokens = user_chat_context.get_tokens_of(summarized_content)
         # num_of_deleted_histories: int = user_chat_context.ensure_token_not_exceed(extra_token_margin=extra_token_margin)  # noqa: E501
         if update_cache:
             await CacheManager.set_message_history(

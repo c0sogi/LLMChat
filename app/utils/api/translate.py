@@ -26,7 +26,7 @@ class Translator:
     async def translate(cls, text: str, src_lang: str, trg_lang: str) -> str:
         if cls.cached_function is not None:
             try:
-                api_logger.info(f"cached_function: {cls.cached_function}")
+                api_logger.info(f"Using cached translate function: {cls.cached_function}")
                 return await cls.cached_function(
                     text=text,
                     src_lang=src_lang,

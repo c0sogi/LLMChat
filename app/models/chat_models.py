@@ -1,7 +1,7 @@
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Union
+from typing import Optional, Union
 from uuid import uuid4
 
 from orjson import dumps as orjson_dumps
@@ -66,9 +66,16 @@ class MessageHistory:
     is_user: bool
     timestamp: int = field(default_factory=UTC.timestamp)
     uuid: str = field(default_factory=lambda: uuid4().hex)
-    model_name: str | None = None
+    model_name: Optional[str] = None
+    summarized: Optional[str] = None  # =
+    summarized_tokens: Optional[int] = None  # =
 
     def __repr__(self) -> str:
+        if self.summarized is not None:
+            return (
+                f'<{self.role} uuid="{self.uuid}" date="{self.datetime}Z" tokens="{self.tokens}" '
+                f'summarized="{self.summarized}">{self.content}</>'
+            )
         return f'<{self.role} uuid="{self.uuid}" date="{self.datetime}Z" tokens="{self.tokens}">{self.content}</>'
 
     @property

@@ -44,10 +44,12 @@
 - **LLAMA** - Suporting LocalLLM, `LlamaCpp`, with multiprocessing. 
 - **WebSocket Connection** - `Real-time`, two-way communication with the ChatGPT, and other LLM models, with Flutter frontend webapp.
 - **Vectorstore** - Using `Redis` and `Langchain`, store and retrieve vector embeddings for similarity search. It will help AI to generate more relevant responses.
+- **Auto summarization** - Using Langchain's summarize chain, summarize the conversation and store it in the database. It will help saving a lot of tokens.
 - **Concurrency** - Asynchronous programming with `async`/`await` syntax for concurrency and parallelism.
 - **Security** - Token validation and authentication to keep API secure.
 - **Database** - Manage database connections and execute `MySQL` queries. Easily perform Create, Read, Update, and Delete actions, with `sqlalchemy.asyncio`
 - **Cache** - Manage cache connections and execute `Redis` queries with aioredis. Easily perform Create, Read, Update, and Delete actions, with `aioredis`.
+
 
 ## Getting Started / Installation
 
@@ -136,7 +138,7 @@ The conversation continues in a loop until the connection is closed. During the 
 ```python
 class ChatStreamManager:
     @classmethod
-    async def begin_chat(cls, websocket: WebSocket, user_id: str) -> None:
+    async def begin_chat(cls, websocket: WebSocket, user: Users) -> None:
     ...
 ```
 
@@ -230,6 +232,26 @@ In the `commands.py` file, there are several important components:
 - `arguments_provider`: This function automatically supplies the arguments required by the command method based on the annotation type of the command method.
 
 
+# 📝 Auto Summarization
+### There is a way to save tokens by adding a task to the LLM that summarizes the message. The auto summarization task is a crucial feature that enhances the efficiency of chatbot. Let's break down the functionality of this feature:
+
+
+1. **Task Triggering**: This feature is activated whenever a user types a message or the AI responds with a message. At this point, an automatic summarization task is generated to condense the text content.
+
+2. **Task Storage**: The auto-summarization task is then stored in the `task_list` attribute of the `BufferUserChatContext`. This serves as a queue for managing tasks linked to the user's chat context.
+
+3. **Task Harvesting**: Following the completion of a user-AI question and answer cycle by the `MessageHandler`, the `harvest_done_tasks` function is invoked. This function collects the results of the summarization task, making sure nothing is left out.
+
+4. **Summarization Application**: After the harvesting process, the summarized results replace the actual message when our chatbot is requesting answers from language learning models (LLMs), such as OPENAI and LLAMA_CPP. By doing so, we're able to send much more succinct prompts than the initial lengthy message.
+
+5. **User Experience**: Importantly, from the user's perspective, they only see the original message. The summarized version of the message is not shown to them, maintaining transparency and avoiding potential confusion.
+
+6. **Simultaneous Tasks**: Another key feature of this auto-summarization task is that it doesn't impede other tasks. In other words, while the chatbot is busy summarizing the text, other tasks can still be carried out, thereby improving the overall efficiency of our chatbot.
+
+### By default, summarize chain only works for messages of 512 tokens or more. This can be turned on/off and the threshold set in `ChatConfig`.
+
+
+
 # 📚 LLM Models
 
 This repository contains different GPT LLM models, defined in `llms.py`. There are two main models: `LlamaCppModel` and `OpenAIModel`, inheriting from the base class `LLMModel`. Both models are designed for text generation. The `LLMModels` enum is a collection of these LLMs.
@@ -255,22 +277,7 @@ The default LLM model used by the user via `UserChatContext.construct_default` i
 `LlamaCppModel` reads a locally stored LlamaCpp-compatible model and generates text in a new process. For example, it looks like `./llama_models/ggml/wizard-vicuna-13B.ggml.q5_1.bin`. You can download the required model from Huggingface. When generating text with this model, a processpool is created, and the Llama model is immediately cached in RAM. This allocation remains in memory until the processpool is forcibly terminated, such as by shutting down the server. By creating a new processpool and working in a different process, existing server processes are not blocked, and other users can generate text with the model simultaneously! More details are defined in `llama_cpp.py`.
 
 ## 📝 Handling Exceptions
-Handle exceptions that may occur during text generation:
-For OpenAI API, the following handlers are defined as follows:
-```python
-try:
-    # Generate text from OpenAI API
-except ChatLengthException:
-    # Handle token limit exceeded
-except ChatContentFilterException:
-    # Handle content filter exception
-except ChatConnectionException:
-    # Handle connection error
-except httpx.TimeoutException:
-    # Handle timeout exception
-except Exception as exception:
-    # Handle unexpected exceptions
-```
+Handle exceptions that may occur during text generation. If a `ChatLengthException` is thrown, it automatically performs a routine to re-limit the message to within the number of tokens limited by the `cutoff_message_histories` function, and resend it. This ensures that the user has a smooth chat experience regardless of the token limit.
 
 # Behind the WebSocket Connection...
 
@@ -280,7 +287,7 @@ This project aims to create an API backend to enable the large language model ch
 
 The Cache Manager (`CacheManager`) is responsible for handling user context information and message histories. It stores these data in Redis, allowing for easy retrieval and modification. The manager provides several methods to interact with the cache, such as:
 
-- `read_context`: Reads the user's chat context from Redis.
+- `read_context_from_profile`: Reads the user's chat context from Redis, according to the user's profile.
 - `create_context`: Creates a new user chat context in Redis.
 - `reset_context`: Resets the user's chat context to default values.
 - `update_message_histories`: Updates the message histories for a specific role (user, ai, or system).
@@ -289,7 +296,6 @@ The Cache Manager (`CacheManager`) is responsible for handling user context info
 - `get_message_history`: Retrieves the message history for a specific role.
 - `delete_message_history`: Deletes the message history for a specific role.
 - `set_message_history`: Sets a specific message history for a role and index.
-- `get_all_chat_rooms`: Retrieves all chat rooms of an user from Redis.
 
 ## Message Manager
 
@@ -322,7 +328,7 @@ await CacheManager.create_context(user_chat_context=default_context)
 To safely add a message history to the user's chat context:
 
 ```python
-user_chat_context = await CacheManager.read_context(user_id=user_id, chat_room_id=chat_room_id)
+user_chat_context = await CacheManager.read_context_from_profile(user_chat_profile=UserChatProfile(user_id=user_id, chat_room_id=chat_room_id))
 content = "This is a sample message."
 role = ChatRoles.USER  # can be enum such as ChatRoles.USER, ChatRoles.AI, ChatRoles.SYSTEM
 await MessageManager.add_message_history_safely(user_chat_context, content, role)

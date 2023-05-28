@@ -223,6 +223,8 @@ class ChatConfig:
     api_regex_pattern: Pattern = compile(r"data:\s*({.+?})\n\n")
     extra_token_margin: int = 512  # number of tokens to remove when tokens exceed token limit
     continue_message: str = "...[CONTINUED]"  # message to append when tokens exceed token limit
+    summarize_for_chat: bool = True  # whether to summarize chat messages
+    summarization_threshold: int = 512  # token threshold for summarization. if message tokens exceed this, summarize
     summarization_openai_model: str = "gpt-3.5-turbo"
     summarization_token_limit: int = 2048  # token limit for summarization
     summarization_token_overlap: int = 100  # number of tokens to overlap between chunks
