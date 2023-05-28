@@ -10,6 +10,7 @@ from app.common.config import DEFAULT_LLM_MODEL
 
 from app.models.llms import LLMModels
 from app.utils.date_utils import UTC
+from app.viewmodels.base_models import UserChatRoles
 
 
 class ChatRoles(str, Enum):
@@ -81,9 +82,6 @@ class UserChatProfile:
     chat_room_id: str = field(default_factory=lambda: uuid4().hex)
     chat_room_name: str = field(default_factory=lambda: UTC.now_isoformat())
     created_at: int = field(default_factory=lambda: UTC.timestamp())
-    user_role: str = field(default=ChatRoles.USER.value)
-    ai_role: str = field(default=ChatRoles.AI.value)
-    system_role: str = field(default=ChatRoles.SYSTEM.value)
     temperature: float = 0.9
     top_p: float = 1.0
     presence_penalty: float = 0
@@ -159,6 +157,10 @@ class UserChatContext:
         return self.llm_model.value.max_tokens_per_request
 
     @property
+    def user_chat_roles(self) -> UserChatRoles:
+        return self.llm_model.value.user_chat_roles
+
+    @property
     def user_id(self) -> str:
         return self.user_chat_profile.user_id
 
@@ -180,9 +182,9 @@ class UserChatContext:
 - Your ID: `{self.user_id}`
 - This chatroom ID: `{self.chat_room_id}`
 - Your profile created at: `{time_string}`
-- User role: `{self.user_chat_profile.user_role}`
-- AI role: `{self.user_chat_profile.ai_role}`
-- System role: `{self.user_chat_profile.system_role}`
+- User role: `{self.user_chat_roles.user}`
+- AI role: `{self.user_chat_roles.ai}`
+- System role: `{self.user_chat_roles.system}`
 
 # LLM Info
 - Model Name: `{llm_model.name}`
@@ -220,7 +222,10 @@ class UserChatContext:
         ),
     ):
         return cls(
-            user_chat_profile=UserChatProfile(user_id=user_id, chat_room_id=chat_room_id),
+            user_chat_profile=UserChatProfile(
+                user_id=user_id,
+                chat_room_id=chat_room_id,
+            ),
             llm_model=llm_model,
         )
 

@@ -45,9 +45,8 @@ def generate_from_llama_cpp(
             llama_cpp_generation,
             user_chat_context=buffer.current_user_chat_context,
             prompt=message_histories_to_str(
-                user_role=buffer.current_user_chat_profile.user_role,
-                ai_role=buffer.current_user_chat_profile.ai_role,
-                system_role=buffer.current_user_chat_profile.system_role,
+                user_chat_roles=buffer.current_user_chat_roles,
+                chat_turn_prompt=llama_cpp_model.chat_turn_prompt,
                 user_message_histories=user_message_histories,
                 ai_message_histories=ai_message_histories,
                 system_message_histories=system_message_histories,
@@ -71,7 +70,7 @@ def generate_from_llama_cpp(
             if isinstance(generation, str):
                 yield generation
             elif isinstance(generation, BaseException):
-                api_logger.exception("An error occurred during llama_cpp_generation.")
+                api_logger.exception(f"An error occurred during llama_cpp_generation: {generation} {type(generation)}")
                 future_exception = generation
             else:
                 break

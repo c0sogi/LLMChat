@@ -15,7 +15,7 @@ LONG_PROMPT = (
     "s are also wrapped in wrapping paper on the top and bottom to prevent any gaps."
 )
 
-CONTEXT_QUESTION_TMPL_QUERY1 = (
+QUERY_TMPL1 = (
     "Context information is below. \n"
     "---------------------\n"
     "{context}"
@@ -24,7 +24,7 @@ CONTEXT_QUESTION_TMPL_QUERY1 = (
     "answer the question: {question}\n"
 )
 
-CONTEXT_QUESTION_TMPL_QUERY2 = (
+QUERY_TMPL2 = (
     "Context information is below. \n"
     "---------------------\n"
     "{context}"
@@ -32,14 +32,19 @@ CONTEXT_QUESTION_TMPL_QUERY2 = (
     "answer the question: {question}\n"
 )
 
-USER_AI_TMPL_CHAT1 = (
+DESCRIPTION_TMPL1 = (
     "The following is a friendly conversation between a {user} and an {ai}. "
     "The {ai} is talkative and provides lots of specific details from its context. "
     "If the {ai} does not know the answer to a question, it truthfully says it does not know.\n\n"
     "Current conversation:\n\n"
 )
 
-ROLE_CONTENT_TMPL_CHAT1 = "### {role}: {content}\n"
+DESCRIPTION_TMPL2 = (
+    "A chat between a curious human and an artificial intelligence assistant. "
+    "The assistant gives helpful, detailed, and polite answers to the human's questions."
+)
+
+CHAT_TURN_TMPL1 = "### {role}: {content}\n"
 
 
 MARKUP_SUMMARIZE_TEMPLATE = PromptTemplate(

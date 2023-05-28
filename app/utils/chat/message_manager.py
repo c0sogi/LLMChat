@@ -9,17 +9,16 @@ class MessageManager:
         content: str,
         role: ChatRoles,
         calculated_tokens_to_use: int | None = None,
-        extra_token_margin: int = 0,
         update_cache: bool = True,
     ) -> None:
         if role is ChatRoles.AI:
-            user_defined_role: str = user_chat_context.user_chat_profile.ai_role
+            user_defined_role: str = user_chat_context.user_chat_roles.ai
             histories_to_update: list[MessageHistory] = user_chat_context.ai_message_histories
         elif role is ChatRoles.USER:
-            user_defined_role: str = user_chat_context.user_chat_profile.user_role
+            user_defined_role: str = user_chat_context.user_chat_roles.user
             histories_to_update: list[MessageHistory] = user_chat_context.user_message_histories
         elif role is ChatRoles.SYSTEM:
-            user_defined_role: str = user_chat_context.user_chat_profile.system_role
+            user_defined_role: str = user_chat_context.user_chat_roles.system
             histories_to_update: list[MessageHistory] = user_chat_context.system_message_histories
         else:
             raise ValueError(f"Invalid role: {role}")

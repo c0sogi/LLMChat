@@ -1,5 +1,5 @@
 from asyncio import gather
-from dataclasses import asdict
+from dataclasses import asdict, fields
 from orjson import dumps as orjson_dumps
 from orjson import loads as orjson_loads
 from app.database.connection import cache
@@ -15,6 +15,7 @@ class CacheManager:
     )
     _list_fields: tuple[str] = tuple(f"{role.name.lower()}_message_histories" for role in ChatRoles)
 
+    # Helper methods
     @staticmethod
     def _generate_key(user_id: str, chat_room_id: str, field: str) -> str:
         return f"chat:{user_id}:{chat_room_id}:{field}"
@@ -27,8 +28,23 @@ class CacheManager:
     def _get_list_fields(cls, user_id: str, chat_room_id: str) -> dict[str, str]:
         return {field: cls._generate_key(user_id, chat_room_id, field) for field in cls._list_fields}
 
-    @staticmethod
-    async def fetch_chat_profiles(user_id: str) -> list[UserChatProfile]:
+    @classmethod
+    async def _load_chat_profile(cls, key: bytes) -> UserChatProfile | None:
+        """Loads chat profile from redis."""
+        try:
+            loaded = await cache.redis.get(key)
+            assert loaded is not None
+            kwargs = {
+                k: v for k, v in orjson_loads(loaded).items() if any(f.name == k for f in fields(UserChatProfile))
+            }
+            return UserChatProfile(**kwargs)
+        except Exception:
+            api_logger.error("Error reading profile from cache", exc_info=True)
+            return None
+
+    # Public methods
+    @classmethod
+    async def fetch_chat_profiles(cls, user_id: str) -> list[UserChatProfile]:
         """Fetches chat profile values from redis."""
         keys: list[bytes] = []
         cursor: int = 0  # Start with cursor 0.
@@ -38,56 +54,8 @@ class CacheManager:
             if cursor == 0:
                 break
         return [
-            UserChatProfile(**orjson_loads(profile))
-            for profile in await gather(*(cache.redis.get(key) for key in keys))
+            profile for profile in await gather(*(cls._load_chat_profile(key) for key in keys)) if profile is not None
         ]
-
-    @classmethod
-    async def read_context(cls, user_id: str, chat_room_id: str) -> UserChatContext:
-        stored_string: dict[str, str | None] = {
-            field: await cache.redis.get(key) for field, key in cls._get_string_fields(user_id, chat_room_id).items()
-        }
-        stored_list: dict[str, list | None] = {
-            field: await cache.redis.lrange(key, 0, -1)
-            for field, key in cls._get_list_fields(user_id, chat_room_id).items()
-        }
-
-        # if any of stored strings are None, create new context
-        if any([value is None for value in stored_string.values()]):
-            default: UserChatContext = UserChatContext.construct_default(
-                user_id=user_id,
-                chat_room_id=chat_room_id,
-            )
-            await cls.create_context(default)
-            return default
-        try:
-            for field, value in stored_string.items():
-                if value is not None:
-                    stored_string[field] = orjson_loads(value)
-            for field, value in stored_list.items():
-                if value is not None:
-                    stored_list[field] = [orjson_loads(v) for v in value]
-            return UserChatContext(
-                user_chat_profile=UserChatProfile(**stored_string["user_chat_profile"]),  # type: ignore
-                llm_model=LLMModels._member_map_[stored_string["llm_model"]],  # type: ignore
-                user_message_histories=[MessageHistory(**m) for m in stored_list["user_message_histories"]]
-                if stored_list["user_message_histories"] is not None
-                else [],
-                ai_message_histories=[MessageHistory(**m) for m in stored_list["ai_message_histories"]]
-                if stored_list["ai_message_histories"] is not None
-                else [],
-                system_message_histories=[MessageHistory(**m) for m in stored_list["system_message_histories"]]
-                if stored_list["system_message_histories"] is not None
-                else [],
-            )
-        except Exception:
-            api_logger.error("Error reading context from cache", exc_info=True)
-            default: UserChatContext = UserChatContext.construct_default(
-                user_id=user_id,
-                chat_room_id=chat_room_id,
-            )
-            await cls.create_context(default)
-            return default
 
     @classmethod
     async def read_context_from_profile(cls, user_chat_profile: UserChatProfile) -> UserChatContext:

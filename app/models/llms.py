@@ -2,9 +2,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 from app.common.config import OPENAI_API_KEY
-from app.common.constants import USER_AI_TMPL_CHAT1
+from app.common.constants import DESCRIPTION_TMPL2, CHAT_TURN_TMPL1, DESCRIPTION_TMPL1
 
 from app.models.llm_tokenizers import BaseTokenizer, LlamaTokenizer, OpenAITokenizer
+from app.viewmodels.base_models import UserChatRoles
 
 
 @dataclass
@@ -14,13 +15,20 @@ class LLMModel:
     max_tokens_per_request: int
     token_margin: int
     tokenizer: BaseTokenizer
+    user_chat_roles: UserChatRoles
 
 
 @dataclass
 class LlamaCppModel(LLMModel):
-    model_path: str  # The path to the Llama model file.
-    lora_base: Optional[str] = None  # The path to the Llama LoRA base model.
-    lora_path: Optional[str] = None  # The path to the Llama LoRA. If None, no LoRa is loaded.
+    model_path: str = field(default="./llama_models/ggml/YOUR_GGML.bin")  # The path to the Llama model file.
+    user_chat_roles: UserChatRoles = field(
+        default_factory=lambda: UserChatRoles(
+            ai="ASSISTANT",
+            system="SYSTEM",
+            user="USER",
+        ),
+    )
+    chat_turn_prompt: str = field(default=CHAT_TURN_TMPL1)  # The prompt to use for chat turns.
     n_parts: int = (
         -1
     )  # Number of parts to split the model into. If -1, the number of parts is automatically determined.
@@ -36,6 +44,8 @@ class LlamaCppModel(LLMModel):
     streaming: bool = True  # Whether to stream the results, token by token.
     cache: bool = True  # The size of the cache in bytes. Only used if cache is True.
     echo: bool = True  # Whether to echo the prompt.
+    lora_base: Optional[str] = None  # The path to the Llama LoRA base model.
+    lora_path: Optional[str] = None  # The path to the Llama LoRA. If None, no LoRa is loaded.
     cache_size: Optional[int] = 2 << 30  # The size of the cache in bytes. Only used if cache is True.
     n_threads: Optional[
         int
@@ -67,9 +77,17 @@ class LlamaCppModel(LLMModel):
 class OpenAIModel(LLMModel):
     api_url: str = "https://api.openai.com/v1/chat/completions"
     api_key: str | None = field(repr=False, default=None)
+    user_chat_roles: UserChatRoles = field(
+        default_factory=lambda: UserChatRoles(
+            ai="assistant",
+            system="system",
+            user="user",
+        ),
+    )
 
 
-class LLMModels(Enum):  # gpt models for openai api
+class LLMModels(Enum):
+    #  OpenAI models
     gpt_3_5_turbo = OpenAIModel(
         name="gpt-3.5-turbo",
         max_total_tokens=4096,
@@ -110,15 +128,7 @@ class LLMModels(Enum):  # gpt models for openai api
         api_key="arcalive",
     )
 
-    wizard_vicuna_7b_uncensored = LlamaCppModel(
-        name="Wizard-Vicuna-7B-Uncensored-GGML",
-        max_total_tokens=2048,  # context tokens (n_ctx)
-        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
-        token_margin=8,
-        tokenizer=LlamaTokenizer("ehartford/Wizard-Vicuna-7B-Uncensored"),
-        model_path="./llama_models/ggml/Wizard-Vicuna-7B-Uncensored.ggmlv2.q4_1.bin",
-        description=USER_AI_TMPL_CHAT1,
-    )
+    # Llama-cpp models
     wizard_vicuna_13b_uncensored = LlamaCppModel(
         name="Wizard-Vicuna-13B-Uncensored",
         max_total_tokens=2048,  # context tokens (n_ctx)
@@ -126,7 +136,7 @@ class LLMModels(Enum):  # gpt models for openai api
         token_margin=8,
         tokenizer=LlamaTokenizer("ehartford/Wizard-Vicuna-13B-Uncensored"),
         model_path="./llama_models/ggml/Wizard-Vicuna-13B-Uncensored.ggml.q5_1.bin",
-        description=USER_AI_TMPL_CHAT1,
+        description=DESCRIPTION_TMPL1,
     )
     gpt4_x_vicuna_13b = LlamaCppModel(
         name="gpt4-x-vicuna-13B-GGML",
@@ -135,16 +145,7 @@ class LLMModels(Enum):  # gpt models for openai api
         token_margin=8,
         tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
         model_path="./llama_models/ggml/gpt4-x-vicuna-13B.ggml.q4_0.bin",
-        description=USER_AI_TMPL_CHAT1,
-    )
-    wizard_mega_13b = LlamaCppModel(
-        name="wizard-mega-13B-GGML",
-        max_total_tokens=2048,  # context tokens (n_ctx)
-        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
-        token_margin=8,
-        tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
-        model_path="./llama_models/ggml/wizard-mega-13B.ggml.q4_0.bin",
-        description=USER_AI_TMPL_CHAT1,
+        description=DESCRIPTION_TMPL1,
     )
     manticore_13b_uncensored = LlamaCppModel(
         name="Manticore-13B-GGML",
@@ -153,12 +154,52 @@ class LLMModels(Enum):  # gpt models for openai api
         token_margin=8,
         tokenizer=LlamaTokenizer("openaccess-ai-collective/manticore-13b"),
         model_path="./llama_models/ggml/Manticore-13B.ggmlv2.q5_1.bin",
-        description=USER_AI_TMPL_CHAT1,
+        description=DESCRIPTION_TMPL1,
+    )
+    remon_13b = LlamaCppModel(
+        name="remon-13b",
+        max_total_tokens=2048,  # context tokens (n_ctx)
+        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
+        token_margin=8,
+        tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
+        model_path="./llama_models/ggml/remon-13B.ggmlv3.q5_1.bin",
+        description=DESCRIPTION_TMPL2,
+        user_chat_roles=UserChatRoles(
+            user="USER",
+            ai="LEMON",
+            system="system",
+        ),
+    )
+    wizard_lm_13b = LlamaCppModel(
+        name="wizardLM-13B-1.0-GGML",
+        max_total_tokens=2048,  # context tokens (n_ctx)
+        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
+        token_margin=8,
+        tokenizer=LlamaTokenizer("victor123/WizardLM-13B-1.0"),
+        model_path="./llama_models/ggml/WizardLM-13B-1.0.ggmlv3.q5_1.bin",
+        user_chat_roles=UserChatRoles(
+            user="Instruction",
+            ai="Response",
+            system="System",
+        ),
+    )
+    guanaco_13b = LlamaCppModel(
+        name="guanaco-13B-GGML",
+        max_total_tokens=2048,  # context tokens (n_ctx)
+        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
+        token_margin=8,
+        tokenizer=LlamaTokenizer("timdettmers/guanaco-65b-merged"),  # timdettmers/guanaco-13b
+        model_path="./llama_models/ggml/guanaco-13B.ggmlv3.q5_1.bin",
+        user_chat_roles=UserChatRoles(
+            user="Instruction",
+            ai="Response",
+            system="System",
+        ),
     )
 
     @classmethod
-    def find_model_by_name(cls, name) -> LLMModel | None:
+    def find_model_by_name(cls, name: str) -> LLMModel | None:
         for model in cls:
-            if model.value.name == name:
+            if model.value.name == name or model.name == name:
                 return model.value
         return None

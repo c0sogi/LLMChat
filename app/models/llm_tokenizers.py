@@ -1,7 +1,13 @@
 from abc import ABC, abstractmethod
+from typing import Type
+
 from tiktoken import Encoding, encoding_for_model
 from transformers import LlamaTokenizer as _LlamaTokenizer
+
+from app.utils.chat.llama_cpp import LlamaTokenizerAdapter
+
 from app.utils.logger import api_logger
+from app.shared import Shared
 
 
 class BaseTokenizer(ABC):
@@ -73,3 +79,31 @@ class LlamaTokenizer(BaseTokenizer):
                 raise e
             print("Tokenizer loaded:", self.model_name)
         return self._tokenizer
+
+
+class LlamaTokenizerSlow(BaseTokenizer):
+    def __init__(self, llama_cpp_model_name: str):
+        self.llama_cpp_model_name = llama_cpp_model_name
+
+    def encode(self, message: str, /) -> list[int]:
+        from app.models.llms import LLMModels
+        from app.models.llms import LlamaCppModel
+
+        llama_cpp_model = LLMModels.find_model_by_name(self.llama_cpp_model_name)
+        assert isinstance(llama_cpp_model, LlamaCppModel), type(llama_cpp_model)
+        return (
+            Shared()
+            .process_pool_executor.submit(
+                self.tokenizer.encode,
+                text=message,
+                llama_cpp_model=llama_cpp_model,
+            )
+            .result()
+        )
+
+    def tokens_of(self, message: str) -> int:
+        return len(self.encode(message))
+
+    @property
+    def tokenizer(self) -> Type[LlamaTokenizerAdapter]:
+        return LlamaTokenizerAdapter

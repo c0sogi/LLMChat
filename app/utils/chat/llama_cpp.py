@@ -5,7 +5,7 @@ from threading import Event
 from time import sleep
 from typing import TYPE_CHECKING, Any, Generator, Iterator
 from langchain import LlamaCpp
-from llama_cpp import Llama, LlamaCache, llama_free
+from llama_cpp import Llama, LlamaCache, llama_free, llama_n_ctx
 from pydantic import Field, root_validator
 
 
@@ -74,7 +74,7 @@ cached: dict[str, LlamaCppGpu] = {}
 
 
 def get_stops(s: str) -> list[str]:
-    return [s, s.upper(), s.lower(), s.capitalize()]
+    return list({s, s.upper(), s.lower(), s.capitalize()})
 
 
 def get_fake_response() -> Generator:
@@ -130,40 +130,57 @@ def llama_cpp_generation(
     m_done: Event,  # multiprocessing.managers.EventProxy
     is_fake: bool = False,
 ) -> None:
+    def get_generator() -> Iterator[Any]:
+        if echo:
+            stdout.write("[Info] Creating Response of prompt below:")
+            stdout.write(str(prompt))
+        assert isinstance(prompt, str)
+        if not is_fake:
+            llm: LlamaCppGpu = load_llama(llama_cpp_model=llama_cpp_model)
+            llm_client: Llama = llm.client
+            llm_client.verbose = echo
+            real_max_tokens: int = max_tokens
+
+            prompt_tokens: int = len(llm_client.tokenize(b" " + prompt.encode("utf-8")))
+            ctx_tokens: int = getattr(llm_client, "_n_ctx", llama_n_ctx(llm_client.ctx))  # type: ignore
+            assert isinstance(ctx_tokens, int)
+            if prompt_tokens + max_tokens > ctx_tokens:
+                stdout.write(
+                    (
+                        f"\n[Warning] Prompt tokens ({prompt_tokens}) + max tokens ({max_tokens})"
+                        f" > n_ctx ({ctx_tokens}). \n"
+                    )
+                )
+                real_max_tokens = ctx_tokens - prompt_tokens
+            else:
+                real_max_tokens = max_tokens
+            if real_max_tokens <= 0:
+                raise ChatLengthException()
+            return llm_client.create_completion(  # type: ignore
+                prompt=prompt,
+                suffix=llm.suffix,
+                max_tokens=real_max_tokens,
+                temperature=user_chat_context.user_chat_profile.temperature,
+                top_p=user_chat_context.user_chat_profile.top_p,
+                logprobs=llm.logprobs,
+                echo=echo,
+                stop=llm.stop + avoids if llm.stop is not None else avoids,
+                repeat_penalty=user_chat_context.user_chat_profile.frequency_penalty,
+                top_k=40,
+                stream=True,
+            )
+
+        else:
+            return get_fake_response()
+
     try:
         retry_count: int = 0
         content_buffer: str = ""
         llama_cpp_model: "LlamaCppModel" = user_chat_context.llm_model.value  # type: ignore
         echo: bool = llama_cpp_model.echo
         avoids: list[str] = get_stops(
-            user_chat_context.user_chat_profile.user_role + ":",
-        ) + get_stops(user_chat_context.user_chat_profile.ai_role + ":")
-
-        def get_generator() -> Iterator[Any]:
-            if echo:
-                stdout.write("[Info] Creating Response of prompt below:")
-                stdout.write(str(prompt))
-            assert isinstance(prompt, str)
-            if not is_fake:
-                llm: LlamaCppGpu = load_llama(llama_cpp_model=llama_cpp_model)
-                llm_client: Llama = llm.client
-                llm_client.verbose = echo
-                return llm_client.create_completion(  # type: ignore
-                    prompt=prompt,
-                    suffix=llm.suffix,
-                    max_tokens=max_tokens,
-                    temperature=user_chat_context.user_chat_profile.temperature,
-                    top_p=user_chat_context.user_chat_profile.top_p,
-                    logprobs=llm.logprobs,
-                    echo=echo,
-                    stop=llm.stop + avoids if llm.stop is not None else avoids,
-                    repeat_penalty=user_chat_context.user_chat_profile.frequency_penalty,
-                    top_k=40,
-                    stream=True,
-                )
-
-            else:
-                return get_fake_response()
+            user_chat_context.user_chat_roles.user + ":",
+        ) + get_stops(user_chat_context.user_chat_roles.ai + ":")
 
         while True:
             try:
@@ -174,20 +191,18 @@ def llama_cpp_generation(
                     elif retry_count > 10:
                         raise RecursionError(f"Exceeded retry limit {retry_count}")
                     finish_reason: str | None = generation["choices"][0]["finish_reason"]  # type: ignore
-                    text: str = generation["choices"][0]["text"]  # type: ignore
-                    if text.replace("\u200b", "") == "":
-                        continue
-                    if content_buffer == "":
-                        text = text.lstrip()
-                        if text == "":
-                            continue
-                    if echo:
-                        stdout.write(text)
+                    text: str | None = generation["choices"][0].get("text")  # type: ignore
 
                     if finish_reason == "length":
                         raise ChatLengthException(msg=content_buffer)  # raise exception for token limit
-                    content_buffer += text
-                    m_queue.put(text)
+                    if text is not None:
+                        if content_buffer == "":
+                            text = text.replace("\u200b", "").lstrip()
+                        if text != "":
+                            if echo:
+                                stdout.write(text)
+                            content_buffer += text
+                            m_queue.put(text)
                 if content_buffer.replace("\u200b", "").strip() == "":
                     stdout.write("[Warning] Empty model output. Retrying...")
                     raise ChatContinueException(msg="Empty model output")  # raise exception for empty output
@@ -243,3 +258,11 @@ def get_llama(llama_cpp_model: "LlamaCppModel") -> LlamaCppGpu:
         use_mmap=llama_cpp_model.use_mmap,
         streaming=llama_cpp_model.streaming,
     )
+
+
+class LlamaTokenizerAdapter:
+    @staticmethod
+    def encode(text: str, llama_cpp_model: "LlamaCppModel") -> list[int]:
+        llama = load_llama(llama_cpp_model=llama_cpp_model)
+        assert isinstance(llama.client, Llama)
+        return llama.client.tokenize(b" " + text.encode("utf-8"))

@@ -161,3 +161,9 @@ class InitMessage(BaseModel):
 class StreamProgress(BaseModel):
     response: str = ""
     buffer: str = ""
+
+
+class UserChatRoles(BaseModel):
+    ai: str
+    system: str
+    user: str

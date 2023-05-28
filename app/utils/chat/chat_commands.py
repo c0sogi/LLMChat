@@ -1,3 +1,4 @@
+from concurrent.futures import ProcessPoolExecutor
 from enum import Enum
 from functools import wraps
 from inspect import Parameter, iscoroutinefunction, signature
@@ -9,7 +10,7 @@ from fastapi import WebSocket
 from fastapi.concurrency import run_in_threadpool
 
 from app.common.config import ChatConfig
-from app.common.constants import CODEX_PROMPT, CONTEXT_QUESTION_TMPL_QUERY1, REDEX_PROMPT
+from app.common.constants import CODEX_PROMPT, QUERY_TMPL1, REDEX_PROMPT, CHAT_TURN_TMPL1
 from app.database.schemas.auth import UserStatus
 from app.errors.api_exceptions import InternalServerError
 from app.models.chat_models import ChatRoles, LLMModels, MessageHistory, UserChatContext
@@ -65,10 +66,17 @@ async def create_new_chat_room(
     new_chat_room_id: str | None = None,
     buffer: BufferedUserContext | None = None,
 ) -> UserChatContext:
-    default: UserChatContext = UserChatContext.construct_default(
-        user_id=user_id,
-        chat_room_id=new_chat_room_id if new_chat_room_id else uuid4().hex,
-    )
+    if buffer is not None:
+        default: UserChatContext = UserChatContext.construct_default(
+            user_id=user_id,
+            chat_room_id=new_chat_room_id if new_chat_room_id else uuid4().hex,
+            llm_model=buffer.current_llm_model,
+        )
+    else:
+        default: UserChatContext = UserChatContext.construct_default(
+            user_id=user_id,
+            chat_room_id=new_chat_room_id if new_chat_room_id else uuid4().hex,
+        )
     await CacheManager.create_context(user_chat_context=default)
     if buffer is not None:
         buffer.insert_context(user_chat_context=default)
@@ -581,7 +589,7 @@ class ChatCommands:
 
         if len(found_text_and_score[0]) > 0:
             found_text: str = "\n\n".join([document.page_content for document, _ in found_text_and_score[0]])
-            context_and_query: str = CONTEXT_QUESTION_TMPL_QUERY1.format(question=query, context=found_text)
+            context_and_query: str = QUERY_TMPL1.format(question=query, context=found_text)
             await MessageHandler.user(
                 msg=context_and_query,
                 translate=kwargs.get("translate", False),
@@ -641,13 +649,12 @@ class ChatCommands:
     @staticmethod
     @CommandResponse.send_message_and_stop
     async def summarize(buffer: BufferedUserContext) -> str:
-        """Drop the index from the redis vectorstore.\n
-        /drop"""
+        """Summarize the conversation\n
+        /summarize"""
         shared = Shared()
         conversation: str = message_histories_to_str(
-            user_role=buffer.current_user_chat_profile.user_role,
-            ai_role=buffer.current_user_chat_profile.ai_role,
-            system_role=buffer.current_user_chat_profile.system_role,
+            user_chat_roles=buffer.current_user_chat_roles,
+            chat_turn_prompt=CHAT_TURN_TMPL1,
             user_message_histories=buffer.current_user_message_histories,
             ai_message_histories=buffer.current_ai_message_histories,
             system_message_histories=buffer.current_system_message_histories,
@@ -674,3 +681,13 @@ class ChatCommands:
                 "```",
             )
         )
+
+    @staticmethod
+    @CommandResponse.send_message_and_stop
+    async def free() -> str:
+        """Free the process pool executor\n
+        /free"""
+        shared = Shared()
+        shared.process_pool_executor.shutdown(wait=True)
+        shared.process_pool_executor = ProcessPoolExecutor()
+        return "Process pool executor freed!"

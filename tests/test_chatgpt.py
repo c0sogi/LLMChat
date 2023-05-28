@@ -1,11 +1,13 @@
 import json
 import time
-from fastapi.testclient import TestClient
+
 import pytest
+from fastapi.testclient import TestClient
 from starlette.testclient import WebSocketTestSession
+
 from app.common.config import OPENAI_API_KEY
-from app.models.llms import LLMModels
 from app.models.chat_models import ChatRoles, MessageHistory, UserChatContext, UserChatProfile
+from app.models.llms import LLMModels
 from app.viewmodels.base_models import MessageFromWebsocket, MessageToWebsocket
 
 
@@ -21,7 +23,10 @@ async def test_chat_redis(cache_manager):
         user_id=user_id, chat_room_id=test_chat_room_id
     )
     new_context: UserChatContext = UserChatContext(
-        user_chat_profile=UserChatProfile(user_id=user_id, chat_room_id=test_chat_room_id, user_role="test_user"),
+        user_chat_profile=UserChatProfile(
+            user_id=user_id,
+            chat_room_id=test_chat_room_id,
+        ),
         llm_model=LLMModels.gpt_4,
     )
 
@@ -36,10 +41,7 @@ async def test_chat_redis(cache_manager):
     assert (
         new_context.user_chat_profile.chat_room_id
         == (
-            await cache_manager.read_context(
-                user_id=user_id,
-                chat_room_id=test_chat_room_id,
-            )
+            await cache_manager.read_context_from_profile(user_chat_profile=new_context.user_chat_profile)
         ).user_chat_profile.chat_room_id
     )
 
@@ -62,10 +64,7 @@ async def test_chat_redis(cache_manager):
     assert (
         default_context.user_chat_profile.chat_room_id
         == (
-            await cache_manager.read_context(
-                user_id=user_id,
-                chat_room_id=test_chat_room_id,
-            )
+            await cache_manager.read_context_from_profile(user_chat_profile=default_context.user_chat_profile)
         ).user_chat_profile.chat_room_id
     )
 

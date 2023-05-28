@@ -1,14 +1,12 @@
 import asyncio
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 from fastapi import WebSocket
 
 from app.database.schemas.auth import Users
-from app.models.chat_models import MessageHistory, UserChatContext, UserChatProfile
-
-if TYPE_CHECKING:
-    from app.models.llms import LLMModels
+from app.models.chat_models import MessageHistory, UserChatContext, UserChatProfile, LLMModels
+from app.viewmodels.base_models import UserChatRoles
 
 
 class ContextList:
@@ -75,6 +73,10 @@ class BufferedUserContext:
         self._current_ctxt = await self._sorted_ctxts.at(index)
 
     @property
+    def current_user_chat_roles(self) -> UserChatRoles:
+        return self._current_ctxt.llm_model.value.user_chat_roles
+
+    @property
     def sorted_chat_room_ids(self) -> list[str]:
         return [context_or_profile.chat_room_id for context_or_profile in self._sorted_ctxts]
 
@@ -94,7 +96,7 @@ class BufferedUserContext:
         return self._current_ctxt.chat_room_id
 
     @property
-    def current_llm_model(self) -> "LLMModels":
+    def current_llm_model(self) -> LLMModels:
         return self._current_ctxt.llm_model
 
     @property

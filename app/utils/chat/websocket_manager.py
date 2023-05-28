@@ -175,7 +175,7 @@ class SendToWebsocket:
                 ai_message_histories=ai_message_histories,
                 user_message_histories=user_message_histories,
                 system_message_histories=system_message_histories,
-                token_limit=token_limit,
+                token_limit=token_limit - ChatConfig.extra_token_margin,
             )
             try:
                 match stream_func(
@@ -212,7 +212,7 @@ class SendToWebsocket:
                     user_message_histories=user_message_histories,
                     system_message_histories=system_message_histories,
                     response_in_progress=MessageHistory(
-                        role=buffer.current_user_chat_profile.ai_role,
+                        role=buffer.current_user_chat_roles.ai,
                         content=new_content,
                         tokens=buffer.current_user_chat_context.get_tokens_of(new_content),
                         is_user=False,
