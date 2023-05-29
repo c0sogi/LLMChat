@@ -5,7 +5,7 @@ from typing import Any, AsyncGenerator, AsyncIterator, Callable, Generator, Iter
 from fastapi import WebSocket
 from app.common.config import ChatConfig
 
-from app.errors.chat_exceptions import ChatLengthException, ChatModelNotImplementedException
+from app.errors.chat_exceptions import ChatLengthException, ChatModelNotImplementedException, ChatTooMuchTokenException
 from app.models.chat_models import MessageHistory
 from app.models.llms import LLMModel, LLMModels
 from app.utils.chat.buffer import BufferedUserContext
@@ -125,11 +125,6 @@ class SendToWebsocket:
     ) -> None:
         """Send SSE stream to websocket"""
         current_model: LLMModel = buffer.current_llm_model.value
-        token_limit: int = (
-            current_model.max_total_tokens
-            - current_model.token_margin
-            - int(getattr(current_model, "description_tokens", 0))
-        )
 
         async def hand_shake() -> None:
             # Send initial message
@@ -167,6 +162,7 @@ class SendToWebsocket:
             user_message_histories: list[MessageHistory],
             ai_message_histories: list[MessageHistory],
             system_message_histories: list[MessageHistory],
+            token_limit: int,
             response_in_progress: Optional[MessageHistory] = None,
         ) -> None:
             if response_in_progress is not None:
@@ -199,7 +195,7 @@ class SendToWebsocket:
 
                     case _:
                         raise ChatModelNotImplementedException(msg="Stream type is not AsyncGenerator or Generator.")
-            except ChatLengthException as e:
+            except (ChatLengthException, ChatTooMuchTokenException) as e:
                 if e.msg is None:
                     return
                 if response_in_progress is not None:
@@ -211,6 +207,9 @@ class SendToWebsocket:
                     ai_message_histories=ai_message_histories,
                     user_message_histories=user_message_histories,
                     system_message_histories=system_message_histories,
+                    token_limit=token_limit
+                    if isinstance(e, ChatLengthException)
+                    else token_limit - current_model.token_margin,
                     response_in_progress=MessageHistory(
                         role=buffer.current_user_chat_roles.ai,
                         content=new_content,
@@ -235,6 +234,11 @@ class SendToWebsocket:
                 ai_message_histories=buffer.current_ai_message_histories,
                 user_message_histories=buffer.current_user_message_histories,
                 system_message_histories=buffer.current_system_message_histories,
+                token_limit=(
+                    current_model.max_total_tokens
+                    - current_model.token_margin
+                    - int(getattr(current_model, "description_tokens", 0))
+                ),
             )
 
         finally:

@@ -1,3 +1,4 @@
+from asyncio import gather
 from uuid import uuid4
 
 import pytest
@@ -13,8 +14,8 @@ async def test_embedding_single_index(config, test_logger):
 
     cache.start(config=config)
     test_logger.info("Testing embedding")
-    index_name: str = uuid4().hex
-    test_logger.info(f"Index name: {index_name}")
+    collection_name: str = uuid4().hex
+    test_logger.info(f"Collection name: {collection_name}")
     sample_text = (
         "Madam Speaker, Madam Vice President, our First Lady and Second Gentleman. Member"
         "s of Congress and the Cabinet. Justices of the Supreme Court. My fellow American"
@@ -70,11 +71,20 @@ async def test_embedding_single_index(config, test_logger):
             "ct Russia's economy and Putin's 'war fund'?"
         ),
     ]
-    empty = await VectorStoreManager.asimilarity_search(sample_queries, index_name=index_name, k=3)
-    assert len(empty[0]) == 0
-    await VectorStoreManager.create_documents(sample_text, index_name=index_name)
-    results: list[list[Document]] | None = await VectorStoreManager.asimilarity_search(
-        sample_queries, index_name=index_name, k=3
+    empty: list[list[Document]] = await gather(
+        *[
+            VectorStoreManager.asimilarity_search(sample_query, collection_name=collection_name, k=3)
+            for sample_query in sample_queries
+        ]
+    )
+    assert all(len(result) == 0 for result in empty)
+
+    await VectorStoreManager.create_documents(sample_text, collection_name=collection_name)
+    results: list[list[Document]] | None = await gather(
+        *[
+            VectorStoreManager.asimilarity_search(sample_query, collection_name=collection_name, k=3)
+            for sample_query in sample_queries
+        ]
     )
     assert results is not None
     for i, result in enumerate(results):
@@ -87,21 +97,66 @@ async def test_embedding_single_index(config, test_logger):
 async def test_embedding_multiple_index(config, test_logger):
     cache.start(config=config)
     test_logger.info("Testing embedding")
-    index_names: list[str] = [uuid4().hex for _ in range(2)]
-    test_logger.info(f"Index names: {index_names}")
+    collection_names: list[str] = [uuid4().hex for _ in range(2)]
+    test_logger.info(f"Collection names: {collection_names}")
     texts_1 = ["Monkey loves banana", "Apple is red"]
     texts_2 = ["Banana is yellow", "Apple is green"]
     queries = ["Monkey loves banana", "Apple is red"]
-    empty = await VectorStoreManager.asimilarity_search_multiple_index(queries, index_names=index_names, k=3)
-    assert len(empty[0]) == 0
+    empty: list[list[Document]] = await gather(
+        *[
+            VectorStoreManager.asimilarity_search_multiple_collections(query, collection_names=collection_names, k=3)
+            for query in queries
+        ]
+    )
+    assert all(len(result) == 0 for result in empty)
 
-    for index_name, texts in zip(index_names, [texts_1, texts_2]):
+    for collection_name, texts in zip(collection_names, [texts_1, texts_2]):
         for text in texts:
-            await VectorStoreManager.create_documents(text, index_name=index_name)
+            await VectorStoreManager.create_documents(text, collection_name=collection_name)
 
-    queries_results: list[
-        list[tuple[Document, float]]
-    ] = await VectorStoreManager.asimilarity_search_multiple_index_with_score(queries, index_names=index_names, k=3)
+    queries_results: list[list[tuple[Document, float]]] = await gather(
+        *[
+            VectorStoreManager.asimilarity_search_multiple_collections_with_score(
+                query, collection_names=collection_names, k=3
+            )
+            for query in queries
+        ]
+    )
+    for query, query_results in zip(queries, queries_results):
+        for doc, score in query_results:
+            test_logger.info(f"\n\n\n\nQuery={query}\nScore={score}\nContent={doc.page_content}")
+    test_logger.info(f"\n\n\n\n\n\nTesting embedding: {queries_results}")
+
+
+@pytest.mark.asyncio
+async def test_embedding_multiple_index_2(config, test_logger):
+    cache.start(config=config)
+    test_logger.info("Testing embedding")
+    collection_names: list[str] = [uuid4().hex for _ in range(2)]
+    test_logger.info(f"Collection names: {collection_names}")
+    texts_1 = ["Monkey loves banana", "Apple is red"]
+    texts_2 = ["Banana is yellow", "Apple is green"]
+    queries = ["Monkey loves banana", "Apple is red"]
+    empty: list[list[Document]] = await gather(
+        *[
+            VectorStoreManager.asimilarity_search_multiple_collections(query, collection_names=collection_names, k=3)
+            for query in queries
+        ]
+    )
+    assert all(len(result) == 0 for result in empty)
+
+    for collection_name, texts in zip(collection_names, [texts_1, texts_2]):
+        for text in texts:
+            await VectorStoreManager.create_documents(text, collection_name=collection_name)
+
+    queries_results: list[list[tuple[Document, float]]] = await gather(
+        *[
+            VectorStoreManager.amax_marginal_relevance_search_multiple_collections_with_score(
+                query, collection_names=collection_names, k=3
+            )
+            for query in queries
+        ]
+    )
     for query, query_results in zip(queries, queries_results):
         for doc, score in query_results:
             test_logger.info(f"\n\n\n\nQuery={query}\nScore={score}\nContent={doc.page_content}")

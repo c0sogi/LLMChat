@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Optional
 
 from fastapi import WebSocket
 
@@ -45,6 +45,7 @@ class BufferedUserContext:
     queue: asyncio.Queue = field(default_factory=asyncio.Queue)
     done: asyncio.Event = field(default_factory=asyncio.Event)
     task_list: list[asyncio.Task[Any]] = field(default_factory=list)  # =
+    last_user_message: Optional[str] = None
     _sorted_ctxts: ContextList = field(init=False)
     _current_ctxt: UserChatContext = field(init=False)
 

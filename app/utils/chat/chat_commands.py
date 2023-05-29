@@ -9,11 +9,13 @@ from uuid import uuid4
 from fastapi import WebSocket
 from fastapi.concurrency import run_in_threadpool
 
-from app.common.constants import CODEX_PROMPT, QUERY_TMPL1, REDEX_PROMPT, CHAT_TURN_TMPL1
+from app.common.config import config
+from app.common.constants import CHAT_TURN_TMPL1, CODEX_PROMPT, QUERY_TMPL1, REDEX_PROMPT
 from app.database.schemas.auth import UserStatus
 from app.errors.api_exceptions import InternalServerError
 from app.models.chat_models import ChatRoles, LLMModels, MessageHistory, UserChatContext
 from app.shared import Shared
+from app.utils.api.translate import Translator
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.cache_manager import CacheManager
 from app.utils.chat.message_handler import MessageHandler
@@ -580,19 +582,27 @@ class ChatCommands:
             return query, ResponseType.REPEAT_COMMAND
 
         k: int = 3
+        if kwargs.get("translate", False):
+            query = await Translator.translate(text=query, src_lang="ko", trg_lang="en")
+            await SendToWebsocket.message(
+                websocket=buffer.websocket,
+                msg=f"## 번역된 질문\n\n{query}\n\n## 생성된 답변\n\n",
+                chat_room_id=buffer.current_chat_room_id,
+                finish=False,
+                model_name=buffer.current_user_chat_context.llm_model.value.name,
+            )
         found_text_and_score: list[
-            list[Tuple[Document, float]]
-        ] = await VectorStoreManager.asimilarity_search_multiple_index_with_score(
-            queries=[query], index_names=[buffer.user_id, ""], k=k
+            Tuple[Document, float]
+        ] = await VectorStoreManager.asimilarity_search_multiple_collections_with_score(
+            query=query, collection_names=[buffer.user_id, config.shared_vectorestore_name], k=k
         )  # lower score is the better!
-        print(found_text_and_score)
 
-        if len(found_text_and_score[0]) > 0:
-            found_text: str = "\n\n".join([document.page_content for document, _ in found_text_and_score[0]])
+        if len(found_text_and_score) > 0:
+            found_text: str = "\n\n".join([document.page_content for document, _ in found_text_and_score])
             context_and_query: str = QUERY_TMPL1.format(question=query, context=found_text)
             await MessageHandler.user(
                 msg=context_and_query,
-                translate=kwargs.get("translate", False),
+                translate=False,
                 buffer=buffer,
             )
             await MessageHandler.ai(
@@ -621,7 +631,7 @@ class ChatCommands:
     async def embed(text_to_embed: str, /, buffer: BufferedUserContext) -> str:
         """Embed the text and save its vectors in the redis vectorstore.\n
         /embed <text_to_embed>"""
-        await VectorStoreManager.create_documents(text=text_to_embed, index_name=buffer.user_id)
+        await VectorStoreManager.create_documents(text=text_to_embed, collection_name=buffer.user_id)
         return "Embedding successful!"
 
     @staticmethod
@@ -629,7 +639,7 @@ class ChatCommands:
     async def share(text_to_embed: str, /) -> str:
         """Embed the text and save its vectors in the redis vectorstore. This index is shared for everyone.\n
         /share <text_to_embed>"""
-        await VectorStoreManager.create_documents(text=text_to_embed, index_name="")
+        await VectorStoreManager.create_documents(text=text_to_embed, collection_name=config.shared_vectorestore_name)
         return "Embedding successful! This data will be shared for everyone."
 
     @staticmethod
@@ -638,10 +648,12 @@ class ChatCommands:
         """Drop the index from the redis vectorstore.\n
         /drop"""
         dropped_index: list[str] = []
-        if await VectorStoreManager.drop_index(index_name=buffer.user_id):
+        if await VectorStoreManager.delete_collection(collection_name=buffer.user_id):
             dropped_index.append(buffer.user_id)
-        if buffer.user.status is UserStatus.admin and await VectorStoreManager.drop_index(index_name=""):
-            dropped_index.append("shared")
+        if buffer.user.status is UserStatus.admin and await VectorStoreManager.delete_collection(
+            collection_name=config.shared_vectorestore_name,
+        ):
+            dropped_index.append(config.shared_vectorestore_name)
         if not dropped_index:
             return "No index dropped."
         return f"Index dropped: {', '.join(dropped_index)}"

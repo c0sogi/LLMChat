@@ -32,6 +32,7 @@ pdf2image
 pexpect
 pluggy
 premailer
+psutil
 py
 pycparser
 pydantic
@@ -43,6 +44,7 @@ pytest
 pytest-asyncio
 python-dateutil
 python-dotenv
+qdrant_client
 redis
 requests
 s3transfer
@@ -52,6 +54,7 @@ sqlalchemy
 sqlalchemy-utils
 starlette
 starlette_admin
+tabulate
 tiktoken
 toml
 transformers

@@ -87,8 +87,8 @@ async def harvest_done_tasks(buffer: BufferedUserContext) -> None:
                 api_logger.exception(f"Some error occurred while running update tasks: {result}")
     except Exception as e:
         api_logger.exception(f"Unexpected error occurred while running update tasks: {e}")
-
-    buffer.task_list = [task for task in buffer.task_list if task not in harvested_tasks]
+    finally:
+        buffer.task_list = [task for task in buffer.task_list if task not in harvested_tasks]
 
 
 class ChatStreamManager:
@@ -173,7 +173,7 @@ class ChatStreamManager:
             elif received_bytes is not None:
                 await buffer.queue.put(
                     await VectorStoreManager.embed_file_to_vectorstore(
-                        file=received_bytes, filename=filename, index_name=buffer.current_user_chat_context.user_id
+                        file=received_bytes, filename=filename, collection_name=buffer.current_user_chat_context.user_id
                     )
                 )
 
@@ -213,6 +213,7 @@ class ChatStreamManager:
                             buffer=buffer,
                         )
                     else:
+                        buffer.last_user_message = item.msg
                         await MessageHandler.user(
                             msg=item.msg,
                             translate=item.translate,

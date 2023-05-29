@@ -3,6 +3,7 @@ version: '3.9'
 volumes:
   mysql:
   redis:
+  qdrant:
 
 
 networks:
@@ -57,8 +58,6 @@ services:
     volumes:
       - mysql:/var/lib/mysql
       # - ./my.cnf:/etc/mysql/conf.d/my.cnf
-    depends_on:
-      - proxy
     labels:
       - "traefik.enable=true"
       - "traefik.tcp.routers.db.rule=HostSNI(`*`)"
@@ -75,19 +74,21 @@ services:
       - REDIS_ARGS=--requirepass ${REDIS_PASSWORD} --maxmemory 100mb --maxmemory-policy allkeys-lru --appendonly yes
     volumes:
       - redis:/data
-    depends_on:
-      - proxy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.tcp.routers.cache.rule=HostSNI(`*`)"
-      - "traefik.tcp.services.cache.loadbalancer.server.port=6379"
-      - "traefik.tcp.routers.cache.entrypoints=redis"
     networks:
       reverse-proxy-public:
         ipv4_address: 172.16.0.12 # static IP
 
+  vectorstore:
+    image: qdrant/qdrant
+    restart: always
+    volumes:
+      - qdrant:/qdrant/storage
+    networks:
+      reverse-proxy-public:
+        ipv4_address: 172.16.0.13 # static IP
+
   api:
-    image: cosogi/chatgpt-webapp-server-api:latest
+    image: cosogi/llmchat:230531
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api.rule=HostRegexp(`${HOST_MAIN}`, `{subdomain:[a-z]+}.${HOST_MAIN}`, `${HOST_IP}`)"
@@ -104,8 +105,9 @@ services:
       - proxy
       - db
       - cache
+      - vectorstore
     volumes:
       - .:/app
     networks:
       reverse-proxy-public:
-        ipv4_address: 172.16.0.13 # static IP
+        ipv4_address: 172.16.0.14 # static IP

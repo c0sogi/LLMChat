@@ -3,6 +3,7 @@ version: '3.9'
 volumes:
   mysql:
   redis:
+  qdrant:
 
 
 networks:
@@ -64,8 +65,21 @@ services:
     networks:
       reverse-proxy-public:
         ipv4_address: 172.16.0.12 # static IP
+
+  vectorstore:
+    image: qdrant/qdrant
+    restart: always
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant:/qdrant/storage
+    networks:
+      reverse-proxy-public:
+        ipv4_address: 172.16.0.13 # static IP
+
   api:
-    image: cosogi/chatgpt-webapp-server-api:latest
+    image: cosogi/llmchat:230531
     restart: always
     env_file:
       - .env
@@ -83,4 +97,4 @@ services:
       - .:/app
     networks:
       reverse-proxy-public:
-        ipv4_address: 172.16.0.13 # static IP
+        ipv4_address: 172.16.0.14 # static IP

@@ -2,8 +2,8 @@ from asyncio import current_task
 from collections.abc import Iterable
 from typing import Any, AsyncGenerator, Callable, Optional, Type
 
-from langchain.embeddings.base import Embeddings
-from redis.asyncio import Redis as AsyncRedisType
+from qdrant_client import QdrantClient
+from redis.asyncio import Redis, from_url
 from sqlalchemy import Delete, Result, ScalarResult, Select, TextClause, Update, create_engine, text
 from sqlalchemy.engine.base import Connection, Engine
 from sqlalchemy.ext.asyncio import (
@@ -16,9 +16,9 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy_utils import create_database, database_exists
 
 from app.common.config import Config, SingletonMetaClass, logging_config
-from app.shared import Shared
 from app.errors.api_exceptions import Responses_500
-from app.utils.langchain.redis_vectorstore import Redis as RedisVectorStore
+from app.shared import Shared
+from app.utils.langchain.qdrant_vectorstore import Qdrant
 from app.utils.logger import CustomLogger
 
 from . import Base, DeclarativeMeta
@@ -338,50 +338,49 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         return (await self.run_in_session(self._scalars)(session, stmt=stmt)).one_or_none()
 
 
-class RedisFactory(metaclass=SingletonMetaClass):
+class CacheFactory(metaclass=SingletonMetaClass):
     def __init__(self):
-        self._vectorstore: RedisVectorStore | None = None
+        self._vectorstore: Optional[Qdrant] = None
         self.is_test_mode: bool = False
         self.is_initiated: bool = False
 
     def start(
         self,
         config: Config,
-        content_key: str = "content",
-        metadata_key: str = "metadata",
-        vector_key: str = "content_vector",
     ) -> None:
         if self.is_initiated:
             return
         self.is_test_mode = True if config.test_mode else False
-        embeddings: Embeddings = Shared().openai_embeddings
-        self._vectorstore = RedisVectorStore(  # type: ignore
-            redis_url=config.redis_url,
-            embedding_function=embeddings.embed_query,
-            content_key=content_key,
-            metadata_key=metadata_key,
-            vector_key=vector_key,
-            is_async=True,
+        self._redis = from_url(url=config.redis_url)
+        self._vectorstore = Qdrant(
+            client=QdrantClient(
+                host=config.qdrant_host,
+                port=config.qdrant_port,
+                grpc_port=config.qdrant_grpc_port,
+                prefer_grpc=True,
+            ),
+            collection_name=config.shared_vectorestore_name,
+            embeddings=Shared().openai_embeddings,
         )
         self.is_initiated = True
 
     async def close(self) -> None:
-        if self._vectorstore is not None:
-            assert isinstance(self._vectorstore.client, AsyncRedisType)
-            await self._vectorstore.client.close()
+        if self._redis is not None:
+            assert isinstance(self._redis, Redis)
+            await self._redis.close()
         self.is_initiated = False
 
     @property
-    def redis(self) -> AsyncRedisType:
+    def redis(self) -> Redis:
         try:
-            assert self._vectorstore is not None
-            assert isinstance(self._vectorstore.client, AsyncRedisType)
+            assert self._redis is not None
+            assert isinstance(self._redis, Redis)
         except AssertionError:
             raise Responses_500.cache_not_initialized
-        return self._vectorstore.client
+        return self._redis
 
     @property
-    def vectorstore(self) -> RedisVectorStore:
+    def vectorstore(self) -> Qdrant:
         try:
             assert self._vectorstore is not None
         except AssertionError:
@@ -390,4 +389,4 @@ class RedisFactory(metaclass=SingletonMetaClass):
 
 
 db: SQLAlchemy = SQLAlchemy()
-cache: RedisFactory = RedisFactory()
+cache: CacheFactory = CacheFactory()

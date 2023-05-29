@@ -218,7 +218,7 @@ When running the `begin_chat` function, if a user uploads a file containing text
 
 ```python
 @classmethod
-async def embed_file_to_vectorstore(cls, file: bytes, filename: str, index_name: str) -> str:
+async def embed_file_to_vectorstore(cls, file: bytes, filename: str, collection_name: str) -> str:
     # if user uploads file, embed it
     ...
 ```
@@ -449,7 +449,7 @@ This module `app.database.connection` provides an easy-to-use interface for mana
 First, import the required classes from the module:
 
 ```python
-from app.database.connection import MySQL, SQLAlchemy, RedisFactory
+from app.database.connection import MySQL, SQLAlchemy, CacheFactory
 ```
 
 Next, create an instance of the `SQLAlchemy` class and configure it with your database settings:
@@ -476,10 +476,10 @@ async def create_user(session, username, password):
 await create_user("JohnDoe", "password123")
 ```
 
-To use Redis caching, create an instance of the `RedisFactory` class and configure it with your Redis settings:
+To use Redis caching, create an instance of the `CacheFactory` class and configure it with your Redis settings:
 
 ```python
-cache = RedisFactory()
+cache = CacheFactory()
 cache.start(config)
 ```
 

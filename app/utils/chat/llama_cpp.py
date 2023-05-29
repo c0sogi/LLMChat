@@ -155,7 +155,7 @@ def llama_cpp_generation(
             else:
                 real_max_tokens = max_tokens
             if real_max_tokens <= 0:
-                raise ChatLengthException()
+                raise ChatLengthException(msg=content_buffer)
             return llm_client.create_completion(  # type: ignore
                 prompt=prompt,
                 suffix=llm.suffix,

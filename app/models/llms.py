@@ -190,9 +190,10 @@ class LLMModels(Enum):
         token_margin=8,
         tokenizer=LlamaTokenizer("timdettmers/guanaco-65b-merged"),  # timdettmers/guanaco-13b
         model_path="./llama_models/ggml/guanaco-13B.ggmlv3.q5_1.bin",
+        description=DESCRIPTION_TMPL2,
         user_chat_roles=UserChatRoles(
-            user="Instruction",
-            ai="Response",
+            user="Human",
+            ai="Assistant",
             system="System",
         ),
     )

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from os import environ
 from pathlib import Path
 from re import Pattern, compile
+from typing import Optional
 from aiohttp import ClientTimeout
 from dotenv import load_dotenv
 from urllib import parse
@@ -35,7 +36,6 @@ TOKEN_EXPIRE_HOURS: int = 168
 MAX_API_KEY: int = 3
 MAX_API_WHITELIST: int = 10
 BASE_DIR: Path = Path(__file__).parents[2]
-EMBEDDING_VECTOR_DIMENSION: int = 1536
 
 # MySQL Variables
 MYSQL_ROOT_PASSWORD: str = environ["MYSQL_ROOT_PASSWORD"]
@@ -57,24 +57,29 @@ JWT_ALGORITHM: str = "HS256"
 
 
 # Optional Service Variables
+EMBEDDING_VECTOR_DIMENSION: int = 1536
+EMBEDDING_TOKEN_CHUNK_SIZE: int = int(environ.get("EMBEDDING_TOKEN_CHUNK_SIZE", 512))
+EMBEDDING_TOKEN_CHUNK_OVERLAP: int = int(environ.get("EMBEDDING_TOKEN_CHUNK_OVERLAP", 128))
+SUMMARIZE_FOR_CHAT: bool = environ.get("SUMMARIZE_FOR_CHAT", "True").lower() == "true"
+SUMMARIZATION_THRESHOLD: int = int(environ.get("SUMMARIZATION_THRESHOLD", 512))
 DEFAULT_LLM_MODEL: str = environ.get("DEFAULT_LLM_MODEL", "gpt_3_5_turbo")
-OPENAI_API_KEY: str | None = environ.get("OPENAI_API_KEY")
-RAPID_API_KEY: str | None = environ.get("RAPID_API_KEY")
-GOOGLE_TRANSLATE_API_KEY: str | None = environ.get("GOOGLE_TRANSLATE_API_KEY")
-PAPAGO_CLIENT_ID: str | None = environ.get("PAPAGO_CLIENT_ID")
-PAPAGO_CLIENT_SECRET: str | None = environ.get("PAPAGO_CLIENT_SECRET")
-CUSTOM_TRANSLATE_URL: str | None = environ.get("CUSTOM_TRANSLATE_URL")
-AWS_ACCESS_KEY: str | None = environ.get("AWS_ACCESS_KEY")
-AWS_SECRET_KEY: str | None = environ.get("AWS_SECRET_KEY")
-AWS_AUTHORIZED_EMAIL: str | None = environ.get("AWS_AUTHORIZED_EMAIL")
-SAMPLE_JWT_TOKEN: str | None = environ.get("SAMPLE_JWT_TOKEN")
-SAMPLE_ACCESS_KEY: str | None = environ.get("SAMPLE_ACCESS_KEY")
-SAMPLE_SECRET_KEY: str | None = environ.get("SAMPLE_SECRET_KEY")
-KAKAO_RESTAPI_TOKEN: str | None = environ.get("KAKAO_RESTAPI_TOKEN")
-WEATHERBIT_API_KEY: str | None = environ.get("WEATHERBIT_API_KEY")
-KAKAO_IMAGE_URL: str | None = (
-    "http://k.kakaocdn.net/dn/wwWjr/btrYVhCnZDF/2bgXDJth2LyIajIjILhLK0/kakaolink40_original.png"
-)
+OPENAI_API_KEY: Optional[str] = environ.get("OPENAI_API_KEY")
+RAPID_API_KEY: Optional[str] = environ.get("RAPID_API_KEY")
+GOOGLE_TRANSLATE_API_KEY: Optional[str] = environ.get("GOOGLE_TRANSLATE_API_KEY")
+PAPAGO_CLIENT_ID: Optional[str] = environ.get("PAPAGO_CLIENT_ID")
+PAPAGO_CLIENT_SECRET: Optional[str] = environ.get("PAPAGO_CLIENT_SECRET")
+CUSTOM_TRANSLATE_URL: Optional[str] = environ.get("CUSTOM_TRANSLATE_URL")
+AWS_ACCESS_KEY: Optional[str] = environ.get("AWS_ACCESS_KEY")
+AWS_SECRET_KEY: Optional[str] = environ.get("AWS_SECRET_KEY")
+AWS_AUTHORIZED_EMAIL: Optional[str] = environ.get("AWS_AUTHORIZED_EMAIL")
+SAMPLE_JWT_TOKEN: Optional[str] = environ.get("SAMPLE_JWT_TOKEN")
+SAMPLE_ACCESS_KEY: Optional[str] = environ.get("SAMPLE_ACCESS_KEY")
+SAMPLE_SECRET_KEY: Optional[str] = environ.get("SAMPLE_SECRET_KEY")
+KAKAO_RESTAPI_TOKEN: Optional[str] = environ.get("KAKAO_RESTAPI_TOKEN")
+WEATHERBIT_API_KEY: Optional[str] = environ.get("WEATHERBIT_API_KEY")
+KAKAO_IMAGE_URL: Optional[
+    str
+] = "http://k.kakaocdn.net/dn/wwWjr/btrYVhCnZDF/2bgXDJth2LyIajIjILhLK0/kakaolink40_original.png"
 
 """
 400 Bad Request
@@ -113,6 +118,10 @@ class Config(metaclass=SingletonMetaClass):
     redis_port: int = REDIS_PORT
     redis_database: int = REDIS_DATABASE
     redis_password: str = REDIS_PASSWORD
+    qdrant_host: str = "vectorstore"
+    qdrant_port: int = 6333
+    qdrant_grpc_port: int = 6334
+    shared_vectorestore_name: str = "SharedCollection"
     trusted_hosts: list[str] = field(default_factory=lambda: ["*"])
     allowed_sites: list[str] = field(default_factory=lambda: ["*"])
 
@@ -121,6 +130,7 @@ class Config(metaclass=SingletonMetaClass):
             self.port = 8001
             self.mysql_host = "localhost"
             self.redis_host = "localhost"
+            self.qdrant_host = "localhost"
         self.mysql_root_url = self.database_url_format.format(
             dialect="mysql",
             driver="pymysql",
@@ -149,7 +159,7 @@ class Config(metaclass=SingletonMetaClass):
 
     @staticmethod
     def get(
-        option: str | None = None,
+        option: Optional[str] = None,
     ) -> LocalConfig | ProdConfig | TestConfig:
         if environ.get("PYTEST_RUNNING") is not None:
             return TestConfig()
@@ -202,6 +212,7 @@ class TestConfig(Config):
     mysql_database: str = MYSQL_TEST_DATABASE
     mysql_host: str = "localhost"
     redis_host: str = "localhost"
+    qdrant_host: str = "localhost"
     port: int = 8001
 
 
@@ -209,8 +220,8 @@ class TestConfig(Config):
 class LoggingConfig:
     logger_level: int = logging.DEBUG
     console_log_level: int = logging.INFO
-    file_log_level: int | None = logging.DEBUG
-    file_log_name: str | None = "./logs/debug.log"
+    file_log_level: Optional[int] = logging.DEBUG
+    file_log_name: Optional[str] = "./logs/debug.log"
     logging_format: str = "[%(asctime)s] %(name)s:%(levelname)s - %(message)s"
 
 
@@ -223,8 +234,10 @@ class ChatConfig:
     api_regex_pattern: Pattern = compile(r"data:\s*({.+?})\n\n")
     extra_token_margin: int = 512  # number of tokens to remove when tokens exceed token limit
     continue_message: str = "...[CONTINUED]"  # message to append when tokens exceed token limit
-    summarize_for_chat: bool = True  # whether to summarize chat messages
-    summarization_threshold: int = 512  # token threshold for summarization. if message tokens exceed this, summarize
+    summarize_for_chat: bool = SUMMARIZE_FOR_CHAT  # whether to summarize chat messages
+    summarization_threshold: int = (
+        SUMMARIZATION_THRESHOLD  # token threshold for summarization. if message tokens exceed this, summarize
+    )
     summarization_openai_model: str = "gpt-3.5-turbo"
     summarization_token_limit: int = 2048  # token limit for summarization
     summarization_token_overlap: int = 100  # number of tokens to overlap between chunks
