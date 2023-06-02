@@ -73,7 +73,9 @@ def generate_from_llama_cpp(
             if isinstance(generation, str):
                 yield generation
             elif isinstance(generation, BaseException):
-                api_logger.exception(f"An error occurred during llama_cpp_generation: {generation} {type(generation)}")
+                api_logger.exception(
+                    f"An error occurred during llama_cpp_generation: {generation} {type(generation)}"
+                )
                 future_exception = generation
             else:
                 break
@@ -106,11 +108,17 @@ async def agenerate_from_openai(
     assert isinstance(current_model, OpenAIModel)
 
     content_buffer: str = ""
-    user_defined_api_key: str | None = buffer.current_user_chat_context.optional_info.get("api_key")
+    user_defined_api_key: str | None = (
+        buffer.current_user_chat_context.optional_info.get("api_key")
+    )
     default_api_key: str | None = current_model.api_key
-    api_key_to_use: Any = user_defined_api_key if user_defined_api_key is not None else default_api_key
+    api_key_to_use: Any = (
+        user_defined_api_key if user_defined_api_key is not None else default_api_key
+    )
 
-    async with aiohttp.ClientSession(timeout=chat_config.timeout) as session:  # initialize client
+    async with aiohttp.ClientSession(
+        timeout=chat_config.timeout
+    ) as session:  # initialize client
         try:
             messages = message_histories_to_list(
                 parse_method=parse_method,
@@ -143,7 +151,9 @@ async def agenerate_from_openai(
                 ),  # set json for openai api request
             ) as streaming_response:
                 if streaming_response.status != 200:  # if status code is not 200
-                    error: Any = orjson_loads(await streaming_response.text()).get("error")
+                    error: Any = orjson_loads(await streaming_response.text()).get(
+                        "error"
+                    )
                     api_logger.error(f"OpenAI Server Error: {error}")
                     if isinstance(error, dict):
                         error_msg = str(error.get("message"))
@@ -164,10 +174,16 @@ async def agenerate_from_openai(
                     stream_buffer += stream
                     if not end_of_chunk:
                         continue
-                    for match in chat_config.api_regex_pattern.finditer(stream_buffer.decode("utf-8")):
+                    for match in chat_config.api_regex_pattern.finditer(
+                        stream_buffer.decode("utf-8")
+                    ):
                         json_data: dict = orjson_loads(match.group(1))
-                        finish_reason: str | None = json_data["choices"][0]["finish_reason"]
-                        delta_content: str | None = json_data["choices"][0]["delta"].get("content")
+                        finish_reason: str | None = json_data["choices"][0][
+                            "finish_reason"
+                        ]
+                        delta_content: str | None = json_data["choices"][0][
+                            "delta"
+                        ].get("content")
                         if finish_reason == "length":
                             raise ChatLengthException(
                                 msg=(
@@ -187,7 +203,11 @@ async def agenerate_from_openai(
             raise ChatTooMuchTokenException(msg=content_buffer)
         except ChatLengthException:
             raise ChatLengthException(msg=content_buffer)
-        except (aiohttp.ServerTimeoutError, aiohttp.ClientPayloadError, asyncio.TimeoutError):
+        except (
+            aiohttp.ServerTimeoutError,
+            aiohttp.ClientPayloadError,
+            asyncio.TimeoutError,
+        ):
             pass
 
 
@@ -254,12 +274,16 @@ async def get_summarization(
 ) -> str:
     shared = Shared()
     if to_summarize_tokens is None:
-        to_summarize_tokens = len(shared.token_text_splitter._tokenizer.encode(to_summarize))
+        to_summarize_tokens = len(
+            shared.token_text_splitter._tokenizer.encode(to_summarize)
+        )
 
     if to_summarize_tokens < ChatConfig.summarization_token_limit:
         summarize_chain = shared.stuff_summarize_chain
     else:
         summarize_chain = shared.map_reduce_summarize_chain
-    result = await summarize_chain.arun(shared.token_text_splitter.create_documents([to_summarize]))
+    result = await summarize_chain.arun(
+        shared.token_text_splitter.create_documents([to_summarize])
+    )
     api_logger.info(f"Summarization result:\n {result}")
     return result

@@ -12,13 +12,15 @@ from langchain.chat_models import ChatOpenAI
 from langchain.text_splitter import TokenTextSplitter
 
 from app.common.config import OPENAI_API_KEY, ChatConfig, SingletonMetaClass, config
-from app.common.constants import MARKUP_SUMMARIZE_TEMPLATE
+from app.common.constants import SummarizationTemplates
 
 
 @dataclass
 class Shared(metaclass=SingletonMetaClass):
     process_manager: SyncManager = field(default_factory=Manager)
-    process_pool_executor: ProcessPoolExecutor = field(default_factory=ProcessPoolExecutor)
+    process_pool_executor: ProcessPoolExecutor = field(
+        default_factory=ProcessPoolExecutor
+    )
     openai_embeddings: OpenAIEmbeddings = field(init=False)
     openai_llm: ChatOpenAI = field(init=False)
     map_reduce_summarize_chain: MapReduceDocumentsChain = field(init=False)
@@ -39,13 +41,13 @@ class Shared(metaclass=SingletonMetaClass):
             self.openai_llm,
             chain_type="map_reduce",
             map_prompt=stuff_prompt.PROMPT,
-            combine_prompt=MARKUP_SUMMARIZE_TEMPLATE,
+            combine_prompt=SummarizationTemplates.TEXT__MARKUP.value,
             verbose=config.debug,
         )
         self.stuff_summarize_chain = load_summarize_chain(  # type: ignore
             self.openai_llm,
             chain_type="stuff",
-            prompt=MARKUP_SUMMARIZE_TEMPLATE,
+            prompt=SummarizationTemplates.TEXT__MARKUP.value,
             verbose=config.debug,
         )
         self.token_text_splitter = TokenTextSplitter(

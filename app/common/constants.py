@@ -1,6 +1,89 @@
 # flake8: noqa
 
+import enum
 from langchain import PromptTemplate
+
+
+class QueryTemplates(str, enum.Enum):
+    CONTEXT_QUESTION__DEFAULT = (
+        "Context information is below. \n"
+        "---------------------\n"
+        "{context}"
+        "\n---------------------\n"
+        "answer the question: {question}\n"
+    )
+    CONTEXT_QUESTION__CONTEXT_ONLY = (
+        "Context information is below. \n"
+        "---------------------\n"
+        "{context}"
+        "\n---------------------\n"
+        "Given the context information and not prior knowledge, "
+        "answer the question: {question}\n"
+    )
+
+
+class DescriptionTemplates(str, enum.Enum):
+    USER_AI__DEFAULT = (
+        "The following is a friendly conversation between a {user} and an {ai}. "
+        "The {ai} is talkative and provides lots of specific details from its context. "
+        "If the {ai} does not know the answer to a question, it truthfully says it does not know.\n\n"
+        "Current conversation:\n\n"
+    )
+
+    USER_AI__SHORT = (
+        "A chat between a curious human and an artificial intelligence assistant. "
+        "The assistant gives helpful, detailed, and polite answers to the human's questions."
+    )
+
+
+class ChatTurnTemplates(str, enum.Enum):
+    ROLE_CONTENT_1 = "### {role}: {content}\n"
+
+
+class SummarizationTemplates(enum.Enum):
+    TEXT__MARKUP = PromptTemplate(
+        template=(
+            "Write a concise summary of the following text delimited by triple backquotes. "
+            "Return your response in bullet points which covers the key points of the text.\n"
+            "```\n{text}\n```\n\nBULLET POINT SUMMARY:\n"
+        ),
+        input_variables=["text"],
+    )
+
+    TEXT__CONVERSATIONAL = PromptTemplate(
+        template=(
+            "Write a summary of the following conversations delimited by triple backquotes.\n"
+            "Organize the key points of each message in the order of the conversation in a format like `ROLE: SUMMARY`.\n"
+            "```\n{text}\n```\n\nCONVERSATION SUMMARY:\n"
+        ),
+        input_variables=["text"],
+    )
+
+
+class SystemPrompts(str, enum.Enum):
+    CODEX = (
+        'Act as CODEX ("COding DEsign eXpert"), an expert coder with experience in mult'
+        "iple coding languages. Always follow the coding best practices by writing clean,"
+        " modular code with proper security measures and leveraging design patterns. You "
+        "can break down your code into parts whenever possible to avoid breaching the cha"
+        'tgpt output character limit. Write code part by part when I send "continue". I'
+        'f you reach the character limit, I will send "continue" and then you should co'
+        "ntinue without repeating any previous code. Do not assume anything from your sid"
+        "e; please ask me a numbered list of essential questions before starting. If you "
+        "have trouble fixing a bug, ask me for the latest code snippets for reference fro"
+        "m the official documentation. I am using [MacOS], [VSCode] and prefer [brew] pac"
+        'kage manager. Start a conversation as "CODEX: Hi, what are we coding today?'
+    )
+
+    REDEX = (
+        "compress the following text in a way that fits in a tweet (ideally) and such tha"
+        "t you (GPT) can reconstruct the intention of the human who wrote text as close a"
+        "s possible to the original intention. This is for yourself. It does not need to "
+        "be human readable or understandable. Abuse of language mixing, abbreviations, sy"
+        "mbols (unicode and emoji), or any other encodings or internal representations is"
+        " all permissible, as long as it, if pasted in a new inference cycle, will yield "
+        "near-identical results as the original text: "
+    )
 
 
 LONG_PROMPT = (
@@ -15,82 +98,7 @@ LONG_PROMPT = (
     "s are also wrapped in wrapping paper on the top and bottom to prevent any gaps."
 )
 
-QUERY_TMPL1 = (
-    "Context information is below. \n"
-    "---------------------\n"
-    "{context}"
-    "\n---------------------\n"
-    "Given the context information and not prior knowledge, "
-    "answer the question: {question}\n"
-)
-
-QUERY_TMPL2 = (
-    "Context information is below. \n"
-    "---------------------\n"
-    "{context}"
-    "\n---------------------\n"
-    "answer the question: {question}\n"
-)
-
-DESCRIPTION_TMPL1 = (
-    "The following is a friendly conversation between a {user} and an {ai}. "
-    "The {ai} is talkative and provides lots of specific details from its context. "
-    "If the {ai} does not know the answer to a question, it truthfully says it does not know.\n\n"
-    "Current conversation:\n\n"
-)
-
-DESCRIPTION_TMPL2 = (
-    "A chat between a curious human and an artificial intelligence assistant. "
-    "The assistant gives helpful, detailed, and polite answers to the human's questions."
-)
-
-CHAT_TURN_TMPL1 = "### {role}: {content}\n"
-
-
-MARKUP_SUMMARIZE_TEMPLATE = PromptTemplate(
-    template=(
-        "Write a concise summary of the following text delimited by triple backquotes. "
-        "Return your response in bullet points which covers the key points of the text.\n"
-        "```\n{text}\n```\n\nBULLET POINT SUMMARY:\n"
-    ),
-    input_variables=["text"],
-)
-
-
-CONVERSATION_SUMMARIZE_TEMPLATE = PromptTemplate(
-    template=(
-        "Write a summary of the following conversations delimited by triple backquotes.\n"
-        "Organize the key points of each message in the order of the conversation in a format like `ROLE: SUMMARY`.\n"
-        "```\n{text}\n```\n\nCONVERSATION SUMMARY:\n"
-    ),
-    input_variables=["text"],
-)
-
-CODEX_PROMPT = (
-    'Act as CODEX ("COding DEsign eXpert"), an expert coder with experience in mult'
-    "iple coding languages. Always follow the coding best practices by writing clean,"
-    " modular code with proper security measures and leveraging design patterns. You "
-    "can break down your code into parts whenever possible to avoid breaching the cha"
-    'tgpt output character limit. Write code part by part when I send "continue". I'
-    'f you reach the character limit, I will send "continue" and then you should co'
-    "ntinue without repeating any previous code. Do not assume anything from your sid"
-    "e; please ask me a numbered list of essential questions before starting. If you "
-    "have trouble fixing a bug, ask me for the latest code snippets for reference fro"
-    "m the official documentation. I am using [MacOS], [VSCode] and prefer [brew] pac"
-    'kage manager. Start a conversation as "CODEX: Hi, what are we coding today?'
-)
-
-REDEX_PROMPT = (
-    "compress the following text in a way that fits in a tweet (ideally) and such tha"
-    "t you (GPT) can reconstruct the intention of the human who wrote text as close a"
-    "s possible to the original intention. This is for yourself. It does not need to "
-    "be human readable or understandable. Abuse of language mixing, abbreviations, sy"
-    "mbols (unicode and emoji), or any other encodings or internal representations is"
-    " all permissible, as long as it, if pasted in a new inference cycle, will yield "
-    "near-identical results as the original text: "
-)
-
-CONVERSATION_EXAMPLE: list[dict[str, str]] = [
+CONVERSATION_EXAMPLES: list[dict[str, str]] = [
     {
         "role": "user",
         "content": (
@@ -286,8 +294,9 @@ if __name__ == "__main__":
 
     def split_long_text(long_text: str, chars_per_line: int):
         split_strings = [
-            repr(long_text[i : i + chars_per_line]) for i in range(0, len(long_text), chars_per_line)
-        ]  # noqa: E203
+            repr(long_text[i : i + chars_per_line])
+            for i in range(0, len(long_text), chars_per_line)
+        ]
         return "(" + "\n".join(split_strings) + ")"
 
     while True:

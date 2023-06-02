@@ -1,8 +1,9 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+from re import sub
+from typing import Optional, Union
 from app.common.config import OPENAI_API_KEY
-from app.common.constants import DESCRIPTION_TMPL2, CHAT_TURN_TMPL1, DESCRIPTION_TMPL1
+from app.common.constants import ChatTurnTemplates, DescriptionTemplates
 
 from app.models.llm_tokenizers import BaseTokenizer, LlamaTokenizer, OpenAITokenizer
 from app.viewmodels.base_models import UserChatRoles
@@ -20,7 +21,9 @@ class LLMModel:
 
 @dataclass
 class LlamaCppModel(LLMModel):
-    model_path: str = field(default="./llama_models/ggml/YOUR_GGML.bin")  # The path to the Llama model file.
+    model_path: str = field(
+        default="./llama_models/ggml/YOUR_GGML.bin"
+    )  # The path to the Llama model file.
     user_chat_roles: UserChatRoles = field(
         default_factory=lambda: UserChatRoles(
             ai="ASSISTANT",
@@ -28,40 +31,77 @@ class LlamaCppModel(LLMModel):
             user="USER",
         ),
     )
-    chat_turn_prompt: str = field(default=CHAT_TURN_TMPL1)  # The prompt to use for chat turns.
+    chat_turn_prompt: ChatTurnTemplates = field(
+        default=ChatTurnTemplates.ROLE_CONTENT_1
+    )  # The prompt to use for chat turns.
     n_parts: int = (
         -1
     )  # Number of parts to split the model into. If -1, the number of parts is automatically determined.
-    n_gpu_layers: int = 30  # Number of layers to keep on the GPU. If 0, all layers are kept on the GPU.
+    n_gpu_layers: int = (
+        30  # Number of layers to keep on the GPU. If 0, all layers are kept on the GPU.
+    )
     seed: int = -1  # Seed. If -1, a random seed is used.
     f16_kv: bool = True  # Use half-precision for key/value cache.
     logits_all: bool = False  # Return logits for all tokens, not just the last token.
     vocab_only: bool = False  # Only load the vocabulary, no weights.
     use_mlock: bool = True  # Force system to keep model in RAM.
     n_batch: int = 512  # Number of tokens to process in parallel. Should be a number between 1 and n_ctx.
-    last_n_tokens_size: int = 64  # The number of tokens to look back when applying the repeat_penalty.
+    last_n_tokens_size: int = (
+        64  # The number of tokens to look back when applying the repeat_penalty.
+    )
     use_mmap: bool = True  # Whether to use memory mapping for the model.
     streaming: bool = True  # Whether to stream the results, token by token.
     cache: bool = True  # The size of the cache in bytes. Only used if cache is True.
     echo: bool = True  # Whether to echo the prompt.
     lora_base: Optional[str] = None  # The path to the Llama LoRA base model.
-    lora_path: Optional[str] = None  # The path to the Llama LoRA. If None, no LoRa is loaded.
-    cache_size: Optional[int] = 2 << 30  # The size of the cache in bytes. Only used if cache is True.
+    lora_path: Optional[
+        str
+    ] = None  # The path to the Llama LoRA. If None, no LoRa is loaded.
+    cache_size: Optional[int] = (
+        2 << 30
+    )  # The size of the cache in bytes. Only used if cache is True.
     n_threads: Optional[
         int
     ] = None  # Number of threads to use. If None, the number of threads is automatically determined.
-    suffix: Optional[str] = None  # A suffix to append to the generated text. If None, no suffix is appended.
+    suffix: Optional[
+        str
+    ] = None  # A suffix to append to the generated text. If None, no suffix is appended.
     temperature: Optional[float] = 0.8  # The temperature to use for sampling.
     top_p: Optional[float] = 0.95  # The top-p value to use for sampling.
-    logprobs: Optional[int] = None  # The number of logprobs to return. If None, no logprobs are returned.
+    logprobs: Optional[
+        int
+    ] = None  # The number of logprobs to return. If None, no logprobs are returned.
     stop: Optional[list[str]] = field(
         default_factory=lambda: []
     )  # A list of strings to stop generation when encountered.
     repeat_penalty: Optional[float] = 1.1  # The penalty to apply to repeated tokens.
     top_k: Optional[int] = 40  # The top-k value to use for sampling.
-    description: Optional[str] = None  # A prefix to prepend to the generated text. If None, no prefix is prepended.
+    description: Optional[
+        Union[DescriptionTemplates, str]
+    ] = None  # A prefix to prepend to the generated text. If None, no prefix is prepended.
 
     def __post_init__(self):
+        if self.description is not None:
+            if isinstance(self.description, DescriptionTemplates):
+                template = self.description.value
+            elif isinstance(self.description, str):
+                template = self.description
+            else:
+                return
+            user_chat_roles = self.user_chat_roles
+            self.description = sub(
+                r"\{(\{\w+\})\}",
+                lambda match: match.group(1),
+                template,
+            ).format(
+                user=user_chat_roles.user,
+                USER=user_chat_roles.user,
+                ai=user_chat_roles.ai,
+                AI=user_chat_roles.ai,
+                char=user_chat_roles.ai,
+                system=user_chat_roles.system,
+                SYSTEM=user_chat_roles.system,
+            )
         self._description_tokens = None
 
     @property
@@ -136,7 +176,7 @@ class LLMModels(Enum):
         token_margin=8,
         tokenizer=LlamaTokenizer("ehartford/Wizard-Vicuna-13B-Uncensored"),
         model_path="./llama_models/ggml/Wizard-Vicuna-13B-Uncensored.ggml.q5_1.bin",
-        description=DESCRIPTION_TMPL1,
+        description=DescriptionTemplates.USER_AI__DEFAULT,
     )
     gpt4_x_vicuna_13b = LlamaCppModel(
         name="gpt4-x-vicuna-13B-GGML",
@@ -145,7 +185,7 @@ class LLMModels(Enum):
         token_margin=8,
         tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
         model_path="./llama_models/ggml/gpt4-x-vicuna-13B.ggml.q4_0.bin",
-        description=DESCRIPTION_TMPL1,
+        description=DescriptionTemplates.USER_AI__DEFAULT,
     )
     manticore_13b_uncensored = LlamaCppModel(
         name="Manticore-13B-GGML",
@@ -154,7 +194,6 @@ class LLMModels(Enum):
         token_margin=8,
         tokenizer=LlamaTokenizer("openaccess-ai-collective/manticore-13b"),
         model_path="./llama_models/ggml/Manticore-13B.ggmlv2.q5_1.bin",
-        description=DESCRIPTION_TMPL1,
     )
     remon_13b = LlamaCppModel(
         name="remon-13b",
@@ -163,7 +202,7 @@ class LLMModels(Enum):
         token_margin=8,
         tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
         model_path="./llama_models/ggml/remon-13B.ggmlv3.q5_1.bin",
-        description=DESCRIPTION_TMPL2,
+        description=DescriptionTemplates.USER_AI__SHORT,
         user_chat_roles=UserChatRoles(
             user="USER",
             ai="LEMON",
@@ -188,9 +227,11 @@ class LLMModels(Enum):
         max_total_tokens=2048,  # context tokens (n_ctx)
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
-        tokenizer=LlamaTokenizer("timdettmers/guanaco-65b-merged"),  # timdettmers/guanaco-13b
+        tokenizer=LlamaTokenizer(
+            "timdettmers/guanaco-65b-merged"
+        ),  # timdettmers/guanaco-13b
         model_path="./llama_models/ggml/guanaco-13B.ggmlv3.q5_1.bin",
-        description=DESCRIPTION_TMPL2,
+        description=DescriptionTemplates.USER_AI__SHORT,
         user_chat_roles=UserChatRoles(
             user="Human",
             ai="Assistant",

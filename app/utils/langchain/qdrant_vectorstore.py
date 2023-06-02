@@ -58,6 +58,7 @@ class Qdrant(_Qdrant):
         texts: Iterable[str],
         collection_name: Optional[str] = None,
         metadatas: Optional[List[dict]] = None,
+        batch_size: int = 64,
         **kwargs: Any,
     ) -> List[str]:
         """Run more texts through the embeddings and add to the vectorstore.
@@ -71,31 +72,44 @@ class Qdrant(_Qdrant):
         """
         from qdrant_client import grpc
         from qdrant_client.conversions.conversion import payload_to_grpc
+        from itertools import islice
 
         grpc_points = self.client.async_grpc_points
-        texts = list(texts)  # otherwise iterable might be exhausted after id calculation
-        ids = [md5(text.encode("utf-8")).hexdigest() for text in texts]
-        vectors = self._embed_texts(texts)
-        payloads = self._build_payloads(
-            texts=texts,
-            metadatas=metadatas,
-            content_payload_key=self.content_payload_key,
-            metadata_payload_key=self.metadata_payload_key,
-        )
-        points = [
-            grpc.PointStruct(  # type: ignore
-                id=grpc.PointId(uuid=id),  # type: ignore
-                vectors=grpc.Vectors(vector=grpc.Vector(data=vector)),  # type: ignore
-                payload=payload_to_grpc(payload),
+
+        ids = []
+        texts_iterator = iter(texts)
+        metadatas_iterator = iter(metadatas or [])
+        while batch_texts := list(islice(texts_iterator, batch_size)):
+            # Take the corresponding metadata for each text in a batch
+            batch_metadatas = list(islice(metadatas_iterator, batch_size)) or None
+
+            batch_ids = [md5(text.encode("utf-8")).hexdigest() for text in batch_texts]
+            points = [
+                grpc.PointStruct(  # type: ignore
+                    id=grpc.PointId(uuid=id),  # type: ignore
+                    vectors=grpc.Vectors(vector=grpc.Vector(data=vector)),  # type: ignore
+                    payload=payload_to_grpc(payload),
+                )
+                for id, vector, payload in zip(
+                    batch_ids,
+                    self._embed_texts(batch_texts),
+                    self._build_payloads(
+                        batch_texts,
+                        batch_metadatas,
+                        self.content_payload_key,
+                        self.metadata_payload_key,
+                    ),
+                )
+            ]
+            await grpc_points.Upsert(
+                grpc.UpsertPoints(  # type: ignore
+                    collection_name=collection_name
+                    if collection_name is not None
+                    else self.collection_name,
+                    points=points,
+                )
             )
-            for id, vector, payload in zip(ids, vectors, payloads)  # type: ignore
-        ]
-        await grpc_points.Upsert(
-            grpc.UpsertPoints(  # type: ignore
-                collection_name=collection_name if collection_name is not None else self.collection_name,
-                points=points,
-            )
-        )
+            ids.extend(batch_ids)
 
         return ids
 
@@ -122,14 +136,18 @@ class Qdrant(_Qdrant):
         if filter is not None:
             search_filter = grpc.Filter(  # type: ignore
                 must=[
-                    condition for key, value in filter.items() for condition in self._build_condition_grpc(key, value)
+                    condition
+                    for key, value in filter.items()
+                    for condition in self._build_condition_grpc(key, value)
                 ]
             )
         else:
             search_filter = None
         response = await grpc_points.Search(
             grpc.SearchPoints(  # type: ignore
-                collection_name=collection_name if collection_name is not None else self.collection_name,
+                collection_name=collection_name
+                if collection_name is not None
+                else self.collection_name,
                 vector=self._embed_query(query),
                 filter=search_filter,
                 with_payload=grpc.WithPayloadSelector(enable=True),  # type: ignore
@@ -139,7 +157,9 @@ class Qdrant(_Qdrant):
 
         return [
             (
-                self._document_from_scored_point_grpc(result, self.content_payload_key, self.metadata_payload_key),
+                self._document_from_scored_point_grpc(
+                    result, self.content_payload_key, self.metadata_payload_key
+                ),
                 result.score,
             )
             for result in response.result  # type: ignore
@@ -165,7 +185,9 @@ class Qdrant(_Qdrant):
         """
         results = await self.asimilarity_search_with_score(
             query=query,
-            collection_name=collection_name if collection_name is not None else self.collection_name,
+            collection_name=collection_name
+            if collection_name is not None
+            else self.collection_name,
             k=k,
             filter=filter,
         )
@@ -206,7 +228,9 @@ class Qdrant(_Qdrant):
 
         response = await grpc_points.Search(
             grpc.SearchPoints(  # type: ignore
-                collection_name=collection_name if collection_name is not None else self.collection_name,
+                collection_name=collection_name
+                if collection_name is not None
+                else self.collection_name,
                 vector=embedding,
                 with_payload=grpc.WithPayloadSelector(enable=True),  # type: ignore
                 with_vectors=grpc.WithVectorsSelector(enable=True),  # type: ignore
@@ -214,14 +238,18 @@ class Qdrant(_Qdrant):
             )
         )
         # print("scores:", [result.score for result in response.result])
-        embeddings: list[rest.VectorStruct] = [GrpcToRest.convert_vectors(result.vectors) for result in response.result]
+        embeddings: list[rest.VectorStruct] = [
+            GrpcToRest.convert_vectors(result.vectors) for result in response.result
+        ]
         mmr_selected: list[int] = maximal_marginal_relevance(
             np.array(embedding), embeddings, k=k, lambda_mult=lambda_mult
         )
         return [
             (
                 self._document_from_scored_point_grpc(
-                    response.result[i], self.content_payload_key, self.metadata_payload_key
+                    response.result[i],
+                    self.content_payload_key,
+                    self.metadata_payload_key,
                 ),
                 response.result[i].score,
             )
@@ -263,14 +291,20 @@ class Qdrant(_Qdrant):
 
         return out
 
-    def _qdrant_filter_from_dict_grpc(self, filter: Optional[MetadataFilter]) -> Optional[grpc.Filter]:
+    def _qdrant_filter_from_dict_grpc(
+        self, filter: Optional[MetadataFilter]
+    ) -> Optional[grpc.Filter]:
         from qdrant_client import grpc
 
         if not filter:
             return None
 
         return grpc.Filter(  # type: ignore
-            must=[condition for key, value in filter.items() for condition in self._build_condition_grpc(key, value)]
+            must=[
+                condition
+                for key, value in filter.items()
+                for condition in self._build_condition_grpc(key, value)
+            ]
         )
 
     @staticmethod

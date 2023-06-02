@@ -123,9 +123,15 @@ class UserChatContext:
         return cls(
             user_chat_profile=UserChatProfile(**stored["user_chat_profile"]),
             llm_model=LLMModels._member_map_[stored["llm_model"].replace(".", "_").replace("-", "_")],  # type: ignore
-            user_message_histories=[MessageHistory(**m) for m in stored["user_message_histories"]],
-            ai_message_histories=[MessageHistory(**m) for m in stored["ai_message_histories"]],
-            system_message_histories=[MessageHistory(**m) for m in stored["system_message_histories"]],
+            user_message_histories=[
+                MessageHistory(**m) for m in stored["user_message_histories"]
+            ],
+            ai_message_histories=[
+                MessageHistory(**m) for m in stored["ai_message_histories"]
+            ],
+            system_message_histories=[
+                MessageHistory(**m) for m in stored["system_message_histories"]
+            ],
         )
 
     def json(self) -> dict:
@@ -134,7 +140,9 @@ class UserChatContext:
             "llm_model": self.llm_model.name,
             "user_message_histories": [m.__dict__ for m in self.user_message_histories],
             "ai_message_histories": [m.__dict__ for m in self.ai_message_histories],
-            "system_message_histories": [m.__dict__ for m in self.system_message_histories],
+            "system_message_histories": [
+                m.__dict__ for m in self.system_message_histories
+            ],
         }
 
     def to_stringified_json(self) -> str:
@@ -152,12 +160,16 @@ class UserChatContext:
             self.llm_model.value.max_total_tokens
             - self.total_tokens
             - self.llm_model.value.token_margin
-            - int(getattr(self.llm_model.value, "description_tokens", 0))
         )
 
     @property
     def total_tokens(self) -> int:
-        return self.user_message_tokens + self.ai_message_tokens + self.system_message_tokens
+        return (
+            self.user_message_tokens
+            + self.ai_message_tokens
+            + self.system_message_tokens
+            + int(getattr(self.llm_model.value, "description_tokens", 0))
+        )
 
     @property
     def token_per_request(self) -> int:

@@ -96,7 +96,7 @@ def _check_index_exists(client: RedisType, index_name: str) -> bool:
     """Check if Redis index exists."""
     try:
         client.ft(index_name).info()
-    except:  # noqa: E722
+    except:
         api_logger.info("Index does not exist")
         return False
     api_logger.info("Index already exists")
@@ -107,7 +107,7 @@ async def _acheck_index_exists(client: AsyncRedisType, index_name: str) -> bool:
     """Check if Redis index exists, asynchronously."""
     try:
         await client.ft(index_name).info()
-    except:  # noqa: E722
+    except:
         api_logger.info("Index does not exist")
         return False
     api_logger.info("Index exists!")
@@ -648,7 +648,7 @@ class Redis(VectorStore):
             client.ft(index_name).dropindex(delete_documents)
             api_logger.info("Drop index")
             return True
-        except:  # noqa: E722
+        except:
             # Index not exist
             return False
 
@@ -682,7 +682,7 @@ class Redis(VectorStore):
             await client.ft(index_name).dropindex(delete_documents)
             api_logger.info("Drop index")
             return True
-        except:  # noqa: E722
+        except:
             # Index not exist
             return False
 

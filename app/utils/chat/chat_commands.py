@@ -10,7 +10,11 @@ from fastapi import WebSocket
 from fastapi.concurrency import run_in_threadpool
 
 from app.common.config import config
-from app.common.constants import CHAT_TURN_TMPL1, CODEX_PROMPT, QUERY_TMPL1, REDEX_PROMPT
+from app.common.constants import (
+    ChatTurnTemplates,
+    SystemPrompts,
+    QueryTemplates,
+)
 from app.database.schemas.auth import UserStatus
 from app.errors.api_exceptions import InternalServerError
 from app.models.chat_models import ChatRoles, LLMModels, MessageHistory, UserChatContext
@@ -46,7 +50,9 @@ class CommandResponse:
                 return (result, enum_type)
 
             @wraps(func)
-            async def async_wrapper(*args: Any, **kwargs: Any) -> Tuple[Any, ResponseType]:
+            async def async_wrapper(
+                *args: Any, **kwargs: Any
+            ) -> Tuple[Any, ResponseType]:
                 result = await func(*args, **kwargs)
                 return (result, enum_type)
 
@@ -90,8 +96,12 @@ async def delete_chat_room(
     chat_room_id_to_delete: str,
     buffer: BufferedUserContext,
 ) -> bool:
-    await CacheManager.delete_chat_room(user_id=buffer.user_id, chat_room_id=chat_room_id_to_delete)
-    index: int | None = buffer.find_index_of_chatroom(chat_room_id=chat_room_id_to_delete)
+    await CacheManager.delete_chat_room(
+        user_id=buffer.user_id, chat_room_id=chat_room_id_to_delete
+    )
+    index: int | None = buffer.find_index_of_chatroom(
+        chat_room_id=chat_room_id_to_delete
+    )
     if index is None:
         return False
     buffer.delete_context(index=index)
@@ -146,7 +156,9 @@ async def command_handler(
     elif response_type is ResponseType.REPEAT_COMMAND:
         splitted: list[str] = callback_response.split(" ")
         await command_handler(
-            callback_name=splitted[0][1:] if splitted[0].startswith("/") else splitted[0],
+            callback_name=splitted[0][1:]
+            if splitted[0].startswith("/")
+            else splitted[0],
             callback_args=splitted[1:],
             translate=translate,
             buffer=buffer,
@@ -182,11 +194,17 @@ def arguments_provider(
                     if param.annotation is Parameter.empty:
                         kwargs_to_pass[param.name] = available_args.pop(0)
                     else:
-                        kwargs_to_pass[param.name] = param.annotation(available_args.pop(0))
+                        kwargs_to_pass[param.name] = param.annotation(
+                            available_args.pop(0)
+                        )
                 except IndexError:
-                    raise IndexError(f"Required argument {param.name} is missing in available_args")
+                    raise IndexError(
+                        f"Required argument {param.name} is missing in available_args"
+                    )
                 except Exception:
-                    raise TypeError(f"Required argument {param.name} is missing in available_annotated")
+                    raise TypeError(
+                        f"Required argument {param.name} is missing in available_annotated"
+                    )
         elif param.kind == Parameter.POSITIONAL_ONLY:
             if len(available_args) > 0:
                 if param.annotation is str:
@@ -198,11 +216,15 @@ def arguments_provider(
                     try:
                         args_to_pass.append(param.annotation(available_args.pop(0)))
                     except Exception:
-                        raise TypeError(f"Required argument {param.name} is missing in available_annotated")
+                        raise TypeError(
+                            f"Required argument {param.name} is missing in available_annotated"
+                        )
             elif param.default is not Parameter.empty:
                 args_to_pass.append(param.default)
             else:
-                raise IndexError(f"Required argument {param.name} is missing in available_args")
+                raise IndexError(
+                    f"Required argument {param.name} is missing in available_args"
+                )
     return args_to_pass, kwargs_to_pass
 
 
@@ -223,7 +245,9 @@ class ChatCommands:
             )
             return None, ResponseType.DO_NOTHING
         else:
-            callback: Callable = getattr(cls, callback_name, cls.not_existing_callback)  # get callback function
+            callback: Callable = getattr(
+                cls, callback_name, cls.not_existing_callback
+            )  # get callback function
         try:
             args_to_pass, kwargs_to_pass = arguments_provider(
                 func=callback,
@@ -233,7 +257,8 @@ class ChatCommands:
                     WebSocket: buffer.websocket,
                     BufferedUserContext: buffer,
                 },
-                available_kwargs=buffer.current_user_chat_context.optional_info | kwargs,
+                available_kwargs=buffer.current_user_chat_context.optional_info
+                | kwargs,
             )
         except TypeError:
             await SendToWebsocket.message(
@@ -253,10 +278,15 @@ class ChatCommands:
             if iscoroutinefunction(callback):  # if callback is coroutine function
                 callback_response = await callback(*args_to_pass, **kwargs_to_pass)
             else:
-                callback_response = await run_in_threadpool(callback, *args_to_pass, **kwargs_to_pass)
+                callback_response = await run_in_threadpool(
+                    callback, *args_to_pass, **kwargs_to_pass
+                )
             if isinstance(callback_response, tuple):
                 callback_response, response_type = callback_response
-                if response_type in (ResponseType.SEND_MESSAGE_AND_STOP, ResponseType.SEND_MESSAGE_AND_KEEP_GOING):
+                if response_type in (
+                    ResponseType.SEND_MESSAGE_AND_STOP,
+                    ResponseType.SEND_MESSAGE_AND_KEEP_GOING,
+                ):
                     await SendToWebsocket.message(
                         websocket=buffer.websocket,
                         msg=callback_response,
@@ -285,7 +315,9 @@ class ChatCommands:
     @CommandResponse.send_message_and_stop
     def help(cls) -> str:
         docs: list[str] = [
-            getattr(cls, callback_name).__doc__ for callback_name in dir(cls) if not callback_name.startswith("_")
+            getattr(cls, callback_name).__doc__
+            for callback_name in dir(cls)
+            if not callback_name.startswith("_")
         ]
         return "\n\n".join([doc for doc in docs if doc is not None])
 
@@ -334,14 +366,18 @@ class ChatCommands:
 
     @staticmethod
     @CommandResponse.send_message_and_stop
-    def test(user_chat_context: UserChatContext) -> str:  # test command showing user_chat_context
+    def test(
+        user_chat_context: UserChatContext,
+    ) -> str:  # test command showing user_chat_context
         """Test command showing user_chat_context\n
         /test"""
         return str(user_chat_context)
 
     @staticmethod
     @CommandResponse.send_message_and_stop
-    async def reset(user_chat_context: UserChatContext) -> str:  # reset user_chat_context
+    async def reset(
+        user_chat_context: UserChatContext,
+    ) -> str:  # reset user_chat_context
         """Reset user_chat_context\n
         /reset"""
         user_chat_context.reset()
@@ -355,7 +391,9 @@ class ChatCommands:
 
     @staticmethod
     @CommandResponse.send_message_and_stop
-    async def system(system_message: str, /, user_chat_context: UserChatContext) -> str:  # add system message
+    async def system(
+        system_message: str, /, user_chat_context: UserChatContext
+    ) -> str:  # add system message
         """Add system message\n
         /system <system_message>"""
         await MessageManager.add_message_history_safely(
@@ -367,7 +405,9 @@ class ChatCommands:
 
     @staticmethod
     @CommandResponse.send_message_and_stop
-    async def settemperature(temp_to_change: float, user_chat_context: UserChatContext) -> str:  # set temperature of ai
+    async def settemperature(
+        temp_to_change: float, user_chat_context: UserChatContext
+    ) -> str:  # set temperature of ai
         """Set temperature of ai\n
         /settemperature <temp_to_change>"""
         try:
@@ -375,22 +415,28 @@ class ChatCommands:
         except AssertionError:  # if temperature is not between 0 and 1
             return "Temperature must be between 0 and 1"
         else:
-            previous_temperature: str = str(user_chat_context.user_chat_profile.temperature)
-            user_chat_context.user_chat_profile.temperature = temp_to_change
-            await CacheManager.update_profile_and_model(user_chat_context)  # update user_chat_context
-            return (
-                f"I've changed temperature from {previous_temperature} to {temp_to_change}."  # return success message
+            previous_temperature: str = str(
+                user_chat_context.user_chat_profile.temperature
             )
+            user_chat_context.user_chat_profile.temperature = temp_to_change
+            await CacheManager.update_profile_and_model(
+                user_chat_context
+            )  # update user_chat_context
+            return f"I've changed temperature from {previous_temperature} to {temp_to_change}."  # return success msg
 
     @classmethod
-    async def temp(cls, temp_to_change: float, user_chat_context: UserChatContext) -> str:  # alias for settemperature
+    async def temp(
+        cls, temp_to_change: float, user_chat_context: UserChatContext
+    ) -> str:  # alias for settemperature
         """Alias for settemperature\n
         /temp <temp_to_change>"""
         return await cls.settemperature(temp_to_change, user_chat_context)
 
     @staticmethod
     @CommandResponse.send_message_and_stop
-    async def settopp(top_p_to_change: float, user_chat_context: UserChatContext) -> str:  # set top_p of ai
+    async def settopp(
+        top_p_to_change: float, user_chat_context: UserChatContext
+    ) -> str:  # set top_p of ai
         """Set top_p of ai\n
         /settopp <top_p_to_change>"""
         try:
@@ -400,11 +446,15 @@ class ChatCommands:
         else:
             previous_top_p: str = str(user_chat_context.user_chat_profile.top_p)
             user_chat_context.user_chat_profile.top_p = top_p_to_change  # set top_p
-            await CacheManager.update_profile_and_model(user_chat_context)  # update user_chat_context
+            await CacheManager.update_profile_and_model(
+                user_chat_context
+            )  # update user_chat_context
             return f"I've changed top_p from {previous_top_p} to {top_p_to_change}."  # return success message
 
     @classmethod
-    async def topp(cls, top_p_to_change: float, user_chat_context: UserChatContext) -> str:  # alias for settopp
+    async def topp(
+        cls, top_p_to_change: float, user_chat_context: UserChatContext
+    ) -> str:  # alias for settopp
         """Alias for settopp\n
         /topp <top_p_to_change>"""
         return await cls.settopp(top_p_to_change, user_chat_context)
@@ -418,9 +468,11 @@ class ChatCommands:
             actual_role: ChatRoles = ChatRoles.get_member(role)
         except ValueError:
             return "Role must be one of user, system, ai"  # return fail message
-        last_message_history: MessageHistory | None = await MessageManager.pop_message_history_safely(
-            user_chat_context=user_chat_context,
-            role=actual_role,
+        last_message_history: MessageHistory | None = (
+            await MessageManager.pop_message_history_safely(
+                user_chat_context=user_chat_context,
+                role=actual_role,
+            )
         )  # type: ignore
         if last_message_history is None:  # if last_message_history is None
             return f"There is no {role} message to pop."  # return fail message
@@ -428,7 +480,9 @@ class ChatCommands:
 
     @staticmethod
     @CommandResponse.send_message_and_stop
-    async def setlastmessage(role, new_message: str, /, user_chat_context: UserChatContext) -> str:
+    async def setlastmessage(
+        role, new_message: str, /, user_chat_context: UserChatContext
+    ) -> str:
         """Set last message (user or system or ai)\n
         /setlastmessage <user|system|ai> <new_message>"""
         try:
@@ -454,19 +508,27 @@ class ChatCommands:
         return await cls.poplastmessage(role, user_chat_context)
 
     @classmethod
-    async def set(cls, role, new_message: str, /, user_chat_context: UserChatContext) -> str:
+    async def set(
+        cls, role, new_message: str, /, user_chat_context: UserChatContext
+    ) -> str:
         """Alias for setlastmessage\n
         /set <user|system|ai> <new_message>"""
         return await cls.setlastmessage(role, new_message, user_chat_context)
 
     @staticmethod
-    async def retry(user_chat_context: UserChatContext) -> Tuple[str | None, ResponseType]:
+    async def retry(
+        user_chat_context: UserChatContext,
+    ) -> Tuple[str | None, ResponseType]:
         """Retry last message\n
         /retry"""
         if len(user_chat_context.user_message_histories) < 1:
             return "There is no message to retry.", ResponseType.SEND_MESSAGE_AND_STOP
-        if len(user_chat_context.user_message_histories) == len(user_chat_context.ai_message_histories):
-            await MessageManager.pop_message_history_safely(user_chat_context=user_chat_context, role=ChatRoles.AI)
+        if len(user_chat_context.user_message_histories) == len(
+            user_chat_context.ai_message_histories
+        ):
+            await MessageManager.pop_message_history_safely(
+                user_chat_context=user_chat_context, role=ChatRoles.AI
+            )
         return None, ResponseType.HANDLE_AI
 
     @staticmethod
@@ -481,8 +543,10 @@ class ChatCommands:
     async def codex(user_chat_context: UserChatContext) -> str:
         """Let GPT act as CODEX("COding DEsign eXpert")\n
         /codex"""
-        system_message = CODEX_PROMPT
-        await MessageManager.clear_message_history_safely(user_chat_context=user_chat_context, role=ChatRoles.SYSTEM)
+        system_message = SystemPrompts.CODEX.value
+        await MessageManager.clear_message_history_safely(
+            user_chat_context=user_chat_context, role=ChatRoles.SYSTEM
+        )
         await MessageManager.add_message_history_safely(
             user_chat_context=user_chat_context,
             role=ChatRoles.SYSTEM,
@@ -495,8 +559,10 @@ class ChatCommands:
     async def redx(user_chat_context: UserChatContext) -> str:
         """Let GPT reduce your message as much as possible\n
         /redx"""
-        system_message = REDEX_PROMPT
-        await MessageManager.clear_message_history_safely(user_chat_context=user_chat_context, role=ChatRoles.SYSTEM)
+        system_message = SystemPrompts.REDEX.value
+        await MessageManager.clear_message_history_safely(
+            user_chat_context=user_chat_context, role=ChatRoles.SYSTEM
+        )
         await MessageManager.add_message_history_safely(
             user_chat_context=user_chat_context,
             role=ChatRoles.SYSTEM,
@@ -513,7 +579,9 @@ class ChatCommands:
 
     @staticmethod
     @CommandResponse.do_nothing
-    async def sendtowebsocket(msg: str, /, websocket: WebSocket, user_chat_context: UserChatContext) -> None:
+    async def sendtowebsocket(
+        msg: str, /, websocket: WebSocket, user_chat_context: UserChatContext
+    ) -> None:
         """Send all messages to websocket\n
         /sendtowebsocket"""
         await SendToWebsocket.message(
@@ -549,7 +617,9 @@ class ChatCommands:
 
     @staticmethod
     @CommandResponse.send_message_and_stop
-    def addoptionalinfo(key: str, value: str, user_chat_context: UserChatContext) -> str:
+    def addoptionalinfo(
+        key: str, value: str, user_chat_context: UserChatContext
+    ) -> str:
         """Add optional info to buffer\n
         /addoptionalinfo <key> <value>"""
         user_chat_context.optional_info[key] = " ".join(value)
@@ -562,7 +632,9 @@ class ChatCommands:
         return cls.addoptionalinfo(key, value, user_chat_context=user_chat_context)
 
     @staticmethod
-    async def testchaining(chain_size: int, buffer: BufferedUserContext) -> Tuple[str, ResponseType]:
+    async def testchaining(
+        chain_size: int, buffer: BufferedUserContext
+    ) -> Tuple[str, ResponseType]:
         """Test chains of commands\n
         /testchaining <size_of_chain>"""
         if chain_size <= 0:
@@ -575,7 +647,9 @@ class ChatCommands:
         return f"/testchaining {chain_size-1}", ResponseType.REPEAT_COMMAND
 
     @staticmethod
-    async def query(query: str, /, buffer: BufferedUserContext, **kwargs) -> Tuple[str | None, ResponseType]:
+    async def query(
+        query: str, /, buffer: BufferedUserContext, **kwargs
+    ) -> Tuple[str | None, ResponseType]:
         """Query from redis vectorstore\n
         /query <query>"""
         if query.startswith("/"):
@@ -594,12 +668,20 @@ class ChatCommands:
         found_text_and_score: list[
             Tuple[Document, float]
         ] = await VectorStoreManager.asimilarity_search_multiple_collections_with_score(
-            query=query, collection_names=[buffer.user_id, config.shared_vectorestore_name], k=k
+            query=query,
+            collection_names=[buffer.user_id, config.shared_vectorestore_name],
+            k=k,
         )  # lower score is the better!
 
         if len(found_text_and_score) > 0:
-            found_text: str = "\n\n".join([document.page_content for document, _ in found_text_and_score])
-            context_and_query: str = QUERY_TMPL1.format(question=query, context=found_text)
+            found_text: str = "\n\n".join(
+                [document.page_content for document, _ in found_text_and_score]
+            )
+            context_and_query: str = (
+                QueryTemplates.CONTEXT_QUESTION__CONTEXT_ONLY.value.format(
+                    question=query, context=found_text
+                )
+            )
             await MessageHandler.user(
                 msg=context_and_query,
                 translate=False,
@@ -631,7 +713,9 @@ class ChatCommands:
     async def embed(text_to_embed: str, /, buffer: BufferedUserContext) -> str:
         """Embed the text and save its vectors in the redis vectorstore.\n
         /embed <text_to_embed>"""
-        await VectorStoreManager.create_documents(text=text_to_embed, collection_name=buffer.user_id)
+        await VectorStoreManager.create_documents(
+            text=text_to_embed, collection_name=buffer.user_id
+        )
         return "Embedding successful!"
 
     @staticmethod
@@ -639,7 +723,9 @@ class ChatCommands:
     async def share(text_to_embed: str, /) -> str:
         """Embed the text and save its vectors in the redis vectorstore. This index is shared for everyone.\n
         /share <text_to_embed>"""
-        await VectorStoreManager.create_documents(text=text_to_embed, collection_name=config.shared_vectorestore_name)
+        await VectorStoreManager.create_documents(
+            text=text_to_embed, collection_name=config.shared_vectorestore_name
+        )
         return "Embedding successful! This data will be shared for everyone."
 
     @staticmethod
@@ -650,8 +736,11 @@ class ChatCommands:
         dropped_index: list[str] = []
         if await VectorStoreManager.delete_collection(collection_name=buffer.user_id):
             dropped_index.append(buffer.user_id)
-        if buffer.user.status is UserStatus.admin and await VectorStoreManager.delete_collection(
-            collection_name=config.shared_vectorestore_name,
+        if (
+            buffer.user.status is UserStatus.admin
+            and await VectorStoreManager.delete_collection(
+                collection_name=config.shared_vectorestore_name,
+            )
         ):
             dropped_index.append(config.shared_vectorestore_name)
         if not dropped_index:
@@ -666,15 +755,19 @@ class ChatCommands:
         shared = Shared()
         conversation: str = message_histories_to_str(
             user_chat_roles=buffer.current_user_chat_roles,
-            chat_turn_prompt=CHAT_TURN_TMPL1,
+            chat_turn_prompt=ChatTurnTemplates.ROLE_CONTENT_1,
             user_message_histories=buffer.current_user_message_histories,
             ai_message_histories=buffer.current_ai_message_histories,
             system_message_histories=buffer.current_system_message_histories,
         )
         to_summarize_tokens = buffer.current_user_chat_context.total_tokens
         start: float = time()
-        summarized = await get_summarization(to_summarize=conversation, to_summarize_tokens=to_summarize_tokens)
-        summarized_tokens: int = len(shared.token_text_splitter._tokenizer.encode(summarized))
+        summarized = await get_summarization(
+            to_summarize=conversation, to_summarize_tokens=to_summarize_tokens
+        )
+        summarized_tokens: int = len(
+            shared.token_text_splitter._tokenizer.encode(summarized)
+        )
         end: float = time()
         return "\n".join(
             (
