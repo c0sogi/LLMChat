@@ -15,21 +15,7 @@ networks:
         - subnet: 172.16.0.0/24 # subnet for traefik and other services
 
 services:
-  proxy:
-    image: traefik:latest
-    command:
-      - "--entrypoints.web.address=:8000"
-      - "--providers.docker"
-      - "--api.insecure=true"
-    ports:
-      - "8000:8000"
-      - "8080:8080"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./letsencrypt:/letsencrypt
-    networks:
-      reverse-proxy-public:
-        ipv4_address: 172.16.0.10 # static IP
+  # No need to use traefik for local development
 
   db:
     image: mysql:latest
@@ -45,8 +31,6 @@ services:
       TZ: "Asia/Seoul"
     volumes:
       - mysql:/var/lib/mysql
-    depends_on:
-      - proxy
     networks:
       reverse-proxy-public:
         ipv4_address: 172.16.0.11 # static IP
@@ -60,8 +44,6 @@ services:
       - "6379:6379"
     volumes:
       - redis:/data
-    depends_on:
-      - proxy
     networks:
       reverse-proxy-public:
         ipv4_address: 172.16.0.12 # static IP
@@ -79,22 +61,36 @@ services:
         ipv4_address: 172.16.0.13 # static IP
 
   api:
-    image: cosogi/llmchat:230531
+    image: cosogi/llmchat:230610
     restart: always
     env_file:
       - .env
-    # build: .
+    command:
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+    ports:
+      - "8000:8000"
     depends_on:
-      - proxy
       - db
       - cache
-    labels:
-      - "traefik.http.routers.api.rule=HOST(`localhost`, `${HOST_MAIN}`)"
-      - "traefik.http.routers.api.entrypoints=web"
-      - "traefik.http.services.api.loadbalancer.server.scheme=http"
-      - "traefik.http.services.api.loadbalancer.server.port=8000"
     volumes:
       - .:/app
     networks:
       reverse-proxy-public:
         ipv4_address: 172.16.0.14 # static IP
+
+  search-api:
+    image: searxng/searxng:latest
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+      JWT_SECRET: "${JWT_SECRET}"
+    volumes:
+      - ./searxng:/etc/searxng
+    networks:
+      reverse-proxy-public:
+        ipv4_address: 172.16.0.15 # static IP

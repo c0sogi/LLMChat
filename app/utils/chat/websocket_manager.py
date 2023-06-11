@@ -1,17 +1,38 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, AsyncGenerator, AsyncIterator, Callable, Generator, Iterator, Optional, Union
+from typing import (
+    Any,
+    AsyncGenerator,
+    AsyncIterator,
+    Callable,
+    Generator,
+    Iterator,
+    Optional,
+    Union,
+)
 
 from fastapi import WebSocket
 from app.common.config import ChatConfig
 
-from app.errors.chat_exceptions import ChatLengthException, ChatModelNotImplementedException, ChatTooMuchTokenException
+from app.errors.chat_exceptions import (
+    ChatLengthException,
+    ChatModelNotImplementedException,
+    ChatTooMuchTokenException,
+)
 from app.models.chat_models import MessageHistory
 from app.models.llms import LLMModel, LLMModels
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.prompts import cutoff_message_histories, message_histories_to_list
+from app.utils.chat.prompts import (
+    cutoff_message_histories,
+    init_parse_method,
+    message_histories_to_list,
+)
 from app.utils.logger import api_logger
-from app.viewmodels.base_models import InitMessage, MessageToWebsocket, SendInitToWebsocket, StreamProgress
+from app.viewmodels.base_models import (
+    InitMessage,
+    MessageToWebsocket,
+    StreamProgress,
+)
 
 
 class SyncToAsyncGenerator:
@@ -33,7 +54,9 @@ class SyncToAsyncGenerator:
         while True:
             try:
                 # Use 'self' as a sentinel value to avoid raising StopIteration
-                value = await asyncio.get_running_loop().run_in_executor(executor, next, it, self)
+                value = await asyncio.get_running_loop().run_in_executor(
+                    executor, next, it, self
+                )
                 if value is self:  # Check if the iterator is exhausted
                     await self._queue.put(self)  # Notify of completion
                     break
@@ -44,7 +67,9 @@ class SyncToAsyncGenerator:
                 break
             except Exception as e:
                 # Other exceptions are unexpected and should propagate up
-                api_logger.exception(f"Unexpected exception in SyncToAsyncGenerator: {e}")
+                api_logger.exception(
+                    f"Unexpected exception in SyncToAsyncGenerator: {e}"
+                )
                 raise e
 
 
@@ -59,19 +84,16 @@ class SendToWebsocket:
         send_tokens: bool = False,
         wait_next_query: bool = False,
     ) -> None:
-        def parse_method(message_history: MessageHistory) -> dict[str, Any]:
-            return SendInitToWebsocket.from_orm(message_history).dict()
-
         """Send initial message to websocket, providing current state of user"""
         await SendToWebsocket.message(
             websocket=buffer.websocket,
             msg=InitMessage(
                 chat_rooms=buffer.sorted_chat_rooms if send_chat_rooms else None,
                 previous_chats=message_histories_to_list(
-                    parse_method=parse_method,
+                    user_chat_roles=buffer.current_user_chat_roles,
+                    parse_method=init_parse_method,
                     user_message_histories=buffer.current_user_message_histories,
                     ai_message_histories=buffer.current_ai_message_histories,
-                    system_message_histories=buffer.current_system_message_histories,
                 )
                 if send_previous_chats
                 else None,
@@ -79,7 +101,9 @@ class SendToWebsocket:
                 selected_model=buffer.current_user_chat_context.llm_model.name
                 if send_selected_model or send_previous_chats or send_models
                 else None,
-                tokens=buffer.current_user_chat_context.total_tokens if send_tokens else None,
+                tokens=buffer.current_user_chat_context.total_tokens
+                if send_tokens
+                else None,
                 wait_next_query=wait_next_query,
             ).json(),
             chat_room_id=buffer.current_chat_room_id,
@@ -90,12 +114,13 @@ class SendToWebsocket:
     @staticmethod
     async def message(
         websocket: WebSocket,
-        chat_room_id: str,
+        chat_room_id: Optional[str] = None,
         finish: bool = True,
         is_user: bool = False,
         init: bool = False,
         msg: Optional[str] = None,
         model_name: Optional[str] = None,
+        uuid: Optional[str] = None,
     ) -> None:
         """Send whole message to websocket"""
         await websocket.send_json(  # send stream message
@@ -106,6 +131,7 @@ class SendToWebsocket:
                 is_user=is_user,
                 init=init,
                 model_name=model_name,
+                uuid=uuid,
             ).dict()
         )
 
@@ -114,7 +140,13 @@ class SendToWebsocket:
         cls,
         buffer: BufferedUserContext,
         stream_func: Callable[
-            [BufferedUserContext, list[MessageHistory], list[MessageHistory], list[MessageHistory], int],
+            [
+                BufferedUserContext,
+                list[MessageHistory],
+                list[MessageHistory],
+                list[MessageHistory],
+                int,
+            ],
             Union[AsyncGenerator, Generator],
         ],
         stream_progress: StreamProgress,
@@ -135,6 +167,7 @@ class SendToWebsocket:
                 finish=False,
                 is_user=is_user,
                 model_name=model_name,
+                uuid=stream_progress.uuid,
             )
 
         async def consumer(async_stream: AsyncIterator) -> None:
@@ -143,7 +176,9 @@ class SendToWebsocket:
             iteration: int = 0
             async for delta in async_stream:  # stream from api
                 if buffer.done.is_set():
-                    raise InterruptedError(stream_progress.response + stream_progress.buffer)
+                    raise InterruptedError(
+                        stream_progress.response + stream_progress.buffer
+                    )
                 stream_progress.buffer += delta
                 iteration += 1
                 if iteration % chunk_size == 0:
@@ -151,10 +186,10 @@ class SendToWebsocket:
                     await cls.message(
                         websocket=buffer.websocket,
                         msg=stream_progress.buffer,
-                        chat_room_id=buffer.current_chat_room_id,
+                        chat_room_id=None,
                         finish=False,
                         is_user=is_user,
-                        model_name=model_name,
+                        model_name=None,
                     )
                     stream_progress.buffer = ""
 
@@ -186,21 +221,32 @@ class SendToWebsocket:
                         - sum([m.tokens for m in system_message_histories])
                     ),
                 ):
-                    case _stream if isinstance(_stream, (AsyncGenerator, AsyncIterator)):
+                    case _stream if isinstance(
+                        _stream, (AsyncGenerator, AsyncIterator)
+                    ):
                         await consumer(async_stream=_stream)
 
                     case _stream if isinstance(_stream, (Generator, Iterator)):
                         async_stream = SyncToAsyncGenerator(sync_gen=_stream)
-                        await asyncio.gather(consumer(async_stream=async_stream), async_stream.run(executor=None))
+                        await asyncio.gather(
+                            consumer(async_stream=async_stream),
+                            async_stream.run(executor=None),
+                        )
 
                     case _:
-                        raise ChatModelNotImplementedException(msg="Stream type is not AsyncGenerator or Generator.")
+                        raise ChatModelNotImplementedException(
+                            msg="Stream type is not AsyncGenerator or Generator."
+                        )
             except (ChatLengthException, ChatTooMuchTokenException) as e:
                 if e.msg is None:
                     return
                 if response_in_progress is not None:
                     ai_message_histories.pop()
-                    new_content: str = response_in_progress.content + e.msg + ChatConfig.continue_message
+                    new_content: str = (
+                        response_in_progress.content
+                        + e.msg
+                        + ChatConfig.continue_message
+                    )
                 else:
                     new_content: str = e.msg + ChatConfig.continue_message
                 await transmission(
@@ -213,7 +259,9 @@ class SendToWebsocket:
                     response_in_progress=MessageHistory(
                         role=buffer.current_user_chat_roles.ai,
                         content=new_content,
-                        tokens=buffer.current_user_chat_context.get_tokens_of(new_content),
+                        tokens=buffer.current_user_chat_context.get_tokens_of(
+                            new_content
+                        ),
                         is_user=False,
                     ),
                 )
@@ -225,7 +273,7 @@ class SendToWebsocket:
                 chat_room_id=buffer.current_chat_room_id,
                 finish=finish,
                 is_user=is_user,
-                model_name=model_name,
+                model_name=None,
             )
 
         try:
@@ -237,7 +285,8 @@ class SendToWebsocket:
                 token_limit=(
                     current_model.max_total_tokens
                     - current_model.token_margin
-                    - int(getattr(current_model, "description_tokens", 0))
+                    - current_model.prefix_tokens
+                    - current_model.suffix_tokens
                 ),
             )
 

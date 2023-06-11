@@ -7,9 +7,13 @@ from typing import TYPE_CHECKING, Any, Generator, Iterator
 from langchain import LlamaCpp
 from llama_cpp import Llama, LlamaCache, llama_free, llama_n_ctx
 from pydantic import Field, root_validator
+import gc
 
-
-from app.errors.chat_exceptions import ChatBreakException, ChatContinueException, ChatLengthException
+from app.errors.chat_exceptions import (
+    ChatBreakException,
+    ChatContinueException,
+    ChatLengthException,
+)
 
 
 if TYPE_CHECKING:
@@ -84,7 +88,9 @@ def get_fake_response() -> Generator:
             "object": "text_completion",
             "created": 12345,
             "model": "./fake_models/ggml/fake-llama-13B.ggml.q4_2.bin",
-            "choices": [{"text": str(i), "index": 0, "logprobs": None, "finish_reason": None}],
+            "choices": [
+                {"text": str(i), "index": 0, "logprobs": None, "finish_reason": None}
+            ],
         }
         sleep(1)
 
@@ -97,7 +103,9 @@ def load_llama(
         model_name: str = llama_cpp_model.name
         if cache_only_single_model:
             # Free all cached models except the current one
-            for cached_model_name in [key for key in cached.keys() if key != model_name]:
+            for cached_model_name in [
+                key for key in cached.keys() if key != model_name
+            ]:
                 stdout.write(f">>> Freeing LlamaCpp model: {cached_model_name}")
                 client = cached[cached_model_name].client
                 assert isinstance(client, Llama)
@@ -105,8 +113,14 @@ def load_llama(
                     llama_free(client.ctx)
                 client.set_cache(None)
                 client.reset()
-                cached.pop(cached_model_name)
+                del client
+                gc.collect()
                 stdout.write(f">>> Freed LlamaCpp model: {cached_model_name}")
+            for cached_model_name in [
+                key for key in cached.keys() if key != model_name
+            ]:  # double check for memory deallocation
+                cached.pop(cached_model_name)
+                gc.collect()
         if model_name not in cached:
             # Load the current model
             stdout.write(f"Loading LlamaCpp model: {model_name}")
@@ -194,22 +208,26 @@ def llama_cpp_generation(
                     text: str | None = generation["choices"][0].get("text")  # type: ignore
 
                     if finish_reason == "length":
-                        raise ChatLengthException(msg=content_buffer)  # raise exception for token limit
-                    if text is not None:
-                        if content_buffer == "":
-                            text = text.replace("\u200b", "").lstrip()
-                        if text != "":
-                            if echo:
-                                stdout.write(text)
-                            content_buffer += text
-                            m_queue.put(text)
+                        raise ChatLengthException(msg=content_buffer)
+                    if text is None:
+                        continue
+                    if content_buffer == "":
+                        text = text.replace("\u200b", "").lstrip()
+                    if text == "":
+                        continue
+                    if echo:
+                        stdout.write(text)
+                    content_buffer += text
+                    m_queue.put(text)
                 if content_buffer.replace("\u200b", "").strip() == "":
                     stdout.write("[Warning] Empty model output. Retrying...")
-                    raise ChatContinueException(msg="Empty model output")  # raise exception for empty output
+                    raise ChatContinueException(msg="Empty model output")
             except ValueError as e:
                 if "tokens exceed context window" in str(e):
                     stdout.write("[Warning] Token limit exceeded. Retrying...")
-                    raise ChatLengthException(msg=content_buffer)  # raise exception for token limit
+                    raise ChatLengthException(
+                        msg=content_buffer
+                    )  # raise exception for token limit
                 else:
                     stdout.write("[Warning] ValueError. Retrying...")
                     raise e

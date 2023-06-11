@@ -2,7 +2,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from re import sub
 from typing import Optional, Union
-from app.common.config import OPENAI_API_KEY
+
+from langchain import PromptTemplate
+from app.common.config import OPENAI_API_KEY, ChatConfig
 from app.common.constants import ChatTurnTemplates, DescriptionTemplates
 
 from app.models.llm_tokenizers import BaseTokenizer, LlamaTokenizer, OpenAITokenizer
@@ -17,6 +19,94 @@ class LLMModel:
     token_margin: int
     tokenizer: BaseTokenizer
     user_chat_roles: UserChatRoles
+    prefix_template: Optional[
+        Union[PromptTemplate, str]
+    ] = None  # A prefix to prepend to the generated text. If None, no prefix is prepended.
+    suffix_template: Optional[
+        Union[PromptTemplate, str]
+    ] = None  # A suffix to prepend to the generated text. If None, no suffix is prepended.
+
+    @staticmethod
+    def _prepare_format(
+        input_variables: list[str],
+        predefined_format: dict[str, str],
+    ) -> dict[str, str | None]:
+        return dict(
+            zip(
+                input_variables,
+                map(
+                    predefined_format.get,
+                    input_variables,
+                ),
+            )
+        )
+
+    def __post_init__(self):
+        user_chat_roles = self.user_chat_roles
+        predefined_format = {
+            "user": user_chat_roles.user,
+            "USER": user_chat_roles.user,
+            "ai": user_chat_roles.ai,
+            "AI": user_chat_roles.ai,
+            "char": user_chat_roles.ai,
+            "system": user_chat_roles.system,
+            "SYSTEM": user_chat_roles.system,
+        }
+        # If the global prefix is None, then use the prefix template
+        if ChatConfig.global_prefix is None:
+            if isinstance(self.prefix_template, PromptTemplate):
+                # format the template with the predefined format, only for input variables
+                self.prefix = self.prefix_template.format(
+                    **self._prepare_format(
+                        self.prefix_template.input_variables, predefined_format
+                    )
+                )
+            elif isinstance(self.prefix_template, str):
+                self.prefix = self.prefix_template.format(**predefined_format)
+            else:
+                self.prefix = None
+        else:
+            self.prefix = ChatConfig.global_prefix
+
+        # If the global suffix is None, then use the suffix template
+        if ChatConfig.global_suffix is None:
+            if isinstance(self.suffix_template, PromptTemplate):
+                # format the template with the predefined format, only for input variables
+                self.suffix = self.suffix_template.format(
+                    **self._prepare_format(
+                        self.suffix_template.input_variables, predefined_format
+                    )
+                )
+            elif isinstance(self.suffix_template, str):
+                self.suffix = self.suffix_template.format(**predefined_format)
+            else:
+                self.suffix = None
+        else:
+            self.suffix = ChatConfig.global_suffix
+        self._prefix_tokens: Optional[int] = None
+        self._suffix_tokens: Optional[int] = None
+
+    @property
+    def prefix_tokens(self) -> int:
+        # Lazy load the prefix tokens
+        if self.prefix is None:
+            return 0
+        if self._prefix_tokens is None:
+            self._prefix_tokens = (
+                self.tokenizer.tokens_of(self.prefix) + self.token_margin
+            )
+        return self._prefix_tokens
+
+    @property
+    def suffix_tokens(self) -> int:
+        # Lazy load the suffix tokens
+        if self.suffix is None:
+            return 0
+        if self._suffix_tokens is None:
+            self._suffix_tokens = (
+                self.tokenizer.tokens_of(self.suffix) + self.token_margin
+            )
+        return self._suffix_tokens
 
 
 @dataclass
@@ -31,8 +121,11 @@ class LlamaCppModel(LLMModel):
             user="USER",
         ),
     )
-    chat_turn_prompt: ChatTurnTemplates = field(
-        default=ChatTurnTemplates.ROLE_CONTENT_1
+    prefix_template: PromptTemplate = field(
+        default_factory=lambda: DescriptionTemplates.USER_AI__DEFAULT,
+    )
+    chat_turn_prompt: PromptTemplate = field(
+        default_factory=lambda: ChatTurnTemplates.ROLE_CONTENT_1
     )  # The prompt to use for chat turns.
     n_parts: int = (
         -1
@@ -51,7 +144,7 @@ class LlamaCppModel(LLMModel):
     )
     use_mmap: bool = True  # Whether to use memory mapping for the model.
     streaming: bool = True  # Whether to stream the results, token by token.
-    cache: bool = True  # The size of the cache in bytes. Only used if cache is True.
+    cache: bool = False  # The size of the cache in bytes. Only used if cache is True.
     echo: bool = True  # Whether to echo the prompt.
     lora_base: Optional[str] = None  # The path to the Llama LoRA base model.
     lora_path: Optional[
@@ -76,41 +169,6 @@ class LlamaCppModel(LLMModel):
     )  # A list of strings to stop generation when encountered.
     repeat_penalty: Optional[float] = 1.1  # The penalty to apply to repeated tokens.
     top_k: Optional[int] = 40  # The top-k value to use for sampling.
-    description: Optional[
-        Union[DescriptionTemplates, str]
-    ] = None  # A prefix to prepend to the generated text. If None, no prefix is prepended.
-
-    def __post_init__(self):
-        if self.description is not None:
-            if isinstance(self.description, DescriptionTemplates):
-                template = self.description.value
-            elif isinstance(self.description, str):
-                template = self.description
-            else:
-                return
-            user_chat_roles = self.user_chat_roles
-            self.description = sub(
-                r"\{(\{\w+\})\}",
-                lambda match: match.group(1),
-                template,
-            ).format(
-                user=user_chat_roles.user,
-                USER=user_chat_roles.user,
-                ai=user_chat_roles.ai,
-                AI=user_chat_roles.ai,
-                char=user_chat_roles.ai,
-                system=user_chat_roles.system,
-                SYSTEM=user_chat_roles.system,
-            )
-        self._description_tokens = None
-
-    @property
-    def description_tokens(self) -> int:
-        if self.description is None:
-            return 0
-        if self._description_tokens is None:
-            self._description_tokens = self.tokenizer.tokens_of(self.description)
-        return self._description_tokens
 
 
 @dataclass
@@ -136,6 +194,14 @@ class LLMModels(Enum):
         tokenizer=OpenAITokenizer("gpt-3.5-turbo"),
         api_url="https://api.openai.com/v1/chat/completions",
         api_key=OPENAI_API_KEY,
+        # prefix_template=PromptTemplate(
+        #     template="You'll be roleplaying with the user, so respond to their comments as if they're annoying you.",
+        #     input_variables=[],
+        # ),  # Example of a prefix template
+        # suffix_template=PromptTemplate(
+        #     template="You must respond to the user in Korean.",
+        #     input_variables=[],
+        # ),  # Example of a suffix template
     )
 
     gpt_4 = OpenAIModel(
@@ -175,8 +241,8 @@ class LLMModels(Enum):
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
         tokenizer=LlamaTokenizer("ehartford/Wizard-Vicuna-13B-Uncensored"),
-        model_path="./llama_models/ggml/Wizard-Vicuna-13B-Uncensored.ggml.q5_1.bin",
-        description=DescriptionTemplates.USER_AI__DEFAULT,
+        model_path="./llama_models/ggml/Wizard-Vicuna-13B-Uncensored.ggmlv3.q5_1.bin",
+        prefix_template=DescriptionTemplates.USER_AI__DEFAULT,
     )
     gpt4_x_vicuna_13b = LlamaCppModel(
         name="gpt4-x-vicuna-13B-GGML",
@@ -185,7 +251,7 @@ class LLMModels(Enum):
         token_margin=8,
         tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
         model_path="./llama_models/ggml/gpt4-x-vicuna-13B.ggml.q4_0.bin",
-        description=DescriptionTemplates.USER_AI__DEFAULT,
+        prefix_template=DescriptionTemplates.USER_AI__DEFAULT,
     )
     manticore_13b_uncensored = LlamaCppModel(
         name="Manticore-13B-GGML",
@@ -202,11 +268,11 @@ class LLMModels(Enum):
         token_margin=8,
         tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
         model_path="./llama_models/ggml/remon-13B.ggmlv3.q5_1.bin",
-        description=DescriptionTemplates.USER_AI__SHORT,
+        prefix_template=DescriptionTemplates.USER_AI__SHORT,
         user_chat_roles=UserChatRoles(
             user="USER",
             ai="LEMON",
-            system="system",
+            system="Instruction",
         ),
     )
     wizard_lm_13b = LlamaCppModel(
@@ -219,7 +285,7 @@ class LLMModels(Enum):
         user_chat_roles=UserChatRoles(
             user="Instruction",
             ai="Response",
-            system="System",
+            system="Instruction",
         ),
     )
     guanaco_13b = LlamaCppModel(
@@ -231,12 +297,49 @@ class LLMModels(Enum):
             "timdettmers/guanaco-65b-merged"
         ),  # timdettmers/guanaco-13b
         model_path="./llama_models/ggml/guanaco-13B.ggmlv3.q5_1.bin",
-        description=DescriptionTemplates.USER_AI__SHORT,
+        prefix_template=DescriptionTemplates.USER_AI__SHORT,
         user_chat_roles=UserChatRoles(
             user="Human",
             ai="Assistant",
-            system="System",
+            system="Instruction",
         ),
+    )
+    hyper_mantis_13b = LlamaCppModel(
+        name="13B-HyperMantis-GGML",
+        max_total_tokens=2048,  # context tokens (n_ctx)
+        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
+        token_margin=8,
+        tokenizer=LlamaTokenizer("digitous/13B-HyperMantis"),
+        model_path="./llama_models/ggml/13B-HyperMantis.ggmlv3.q5_1.bin",
+        prefix_template=DescriptionTemplates.USER_AI__GAME,
+        user_chat_roles=UserChatRoles(
+            user="Player",
+            ai="Narrator",
+            system="Instruction",
+        ),
+    )
+    karen_the_editor_13b = LlamaCppModel(
+        name="Karen_theEditor_13B-GGML",
+        max_total_tokens=2048,  # context tokens (n_ctx)
+        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
+        token_margin=8,
+        tokenizer=LlamaTokenizer("FPHam/Karen_theEditor_13b_HF"),
+        model_path="./llama_models/ggml/Karen-The-Editor.ggmlv3.q5_1.bin",
+        prefix_template=DescriptionTemplates.USER_AI__GAME,
+        user_chat_roles=UserChatRoles(
+            user="USER",
+            ai="ASSISTANT",
+            system="SYSTEM",
+        ),
+    )
+    airoboros_13b = LlamaCppModel(
+        name="airoboros-13b-gpt4-GGML",
+        max_total_tokens=4096,  # context tokens (n_ctx)
+        max_tokens_per_request=2048,  # The maximum number of tokens to generate.
+        token_margin=8,
+        tokenizer=LlamaTokenizer("jondurbin/airoboros-13b-gpt4"),
+        model_path="./llama_models/ggml/airoboros-13b-gpt4.ggmlv3.q5_1.bin",
+        prefix_template=DescriptionTemplates.USER_AI__SHORT,
     )
 
     @classmethod

@@ -30,7 +30,9 @@ from app.viewmodels.base_models import MessageFromWebsocket, SummarizedResult
 
 
 async def initialize_callback(user_id: str) -> list[UserChatProfile]:
-    user_chat_profiles: list[UserChatProfile] = await CacheManager.fetch_chat_profiles(user_id=user_id)
+    user_chat_profiles: list[UserChatProfile] = await CacheManager.fetch_chat_profiles(
+        user_id=user_id
+    )
     if not user_chat_profiles:
         # create new chatroom
         return [(await create_new_chat_room(user_id=user_id)).user_chat_profile]
@@ -46,7 +48,9 @@ async def harvest_done_tasks(buffer: BufferedUserContext) -> None:
     :param buffer: BufferedUserContext object
     :return: None
     """
-    harvested_tasks = set(task for task in buffer.task_list if task.done() and not task.cancelled())
+    harvested_tasks = set(
+        task for task in buffer.task_list if task.done() and not task.cancelled()
+    )
     update_tasks = []
 
     for task in harvested_tasks:
@@ -75,7 +79,9 @@ async def harvest_done_tasks(buffer: BufferedUserContext) -> None:
                     )
                 )
         except Exception as e:
-            api_logger.exception(f"Some error occurred while harvesting done tasks: {e}")
+            api_logger.exception(
+                f"Some error occurred while harvesting done tasks: {e}"
+            )
 
     if update_tasks:
         api_logger.info(f"Running update tasks: {update_tasks}")
@@ -84,11 +90,17 @@ async def harvest_done_tasks(buffer: BufferedUserContext) -> None:
         results = await asyncio.gather(*update_tasks, return_exceptions=True)
         for result in results:
             if isinstance(result, Exception):
-                api_logger.exception(f"Some error occurred while running update tasks: {result}")
+                api_logger.exception(
+                    f"Some error occurred while running update tasks: {result}"
+                )
     except Exception as e:
-        api_logger.exception(f"Unexpected error occurred while running update tasks: {e}")
+        api_logger.exception(
+            f"Unexpected error occurred while running update tasks: {e}"
+        )
     finally:
-        buffer.task_list = [task for task in buffer.task_list if task not in harvested_tasks]
+        buffer.task_list = [
+            task for task in buffer.task_list if task not in harvested_tasks
+        ]
 
 
 class ChatStreamManager:
@@ -114,7 +126,11 @@ class ChatStreamManager:
                 cls._websocket_receiver(buffer=buffer),
                 cls._websocket_sender(buffer=buffer),
             )
-        except (ChatOtherException, ChatTextGenerationException, ChatTooMuchTokenException) as e:
+        except (
+            ChatOtherException,
+            ChatTextGenerationException,
+            ChatTooMuchTokenException,
+        ) as e:
             api_logger.error(e)
             await SendToWebsocket.message(
                 websocket=buffer.websocket,
@@ -158,22 +174,34 @@ class ChatStreamManager:
                         elif "chat_room_name" in received_json:
                             buffer.current_user_chat_context.user_chat_profile.chat_room_name = received_json[
                                 "chat_room_name"
-                            ][:20]
-                            await CacheManager.update_profile(user_chat_context=buffer.current_user_chat_context)
+                            ][
+                                :20
+                            ]
+                            await CacheManager.update_profile(
+                                user_chat_context=buffer.current_user_chat_context
+                            )
                             await SendToWebsocket.init(
                                 buffer=buffer,
                                 send_previous_chats=True,
                             )
                         elif "model" in received_json:
-                            found_model = LLMModels._member_map_.get(received_json["model"])
+                            found_model = LLMModels._member_map_.get(
+                                received_json["model"]
+                            )
                             if found_model is not None:
                                 buffer.current_user_chat_context.llm_model = found_model  # type: ignore
-                                await SendToWebsocket.init(buffer=buffer, send_selected_model=True)
-                                await CacheManager.update_model(user_chat_context=buffer.current_user_chat_context)
+                                await SendToWebsocket.init(
+                                    buffer=buffer, send_selected_model=True
+                                )
+                                await CacheManager.update_model(
+                                    user_chat_context=buffer.current_user_chat_context
+                                )
             elif received_bytes is not None:
                 await buffer.queue.put(
                     await VectorStoreManager.embed_file_to_vectorstore(
-                        file=received_bytes, filename=filename, collection_name=buffer.current_user_chat_context.user_id
+                        file=received_bytes,
+                        filename=filename,
+                        collection_name=buffer.current_user_chat_context.user_id,
                     )
                 )
 
@@ -224,10 +252,16 @@ class ChatStreamManager:
                             buffer=buffer,
                         )
             except ChatException as chat_exception:
-                await cls._chat_exception_handler(buffer=buffer, chat_exception=chat_exception)
+                await cls._chat_exception_handler(
+                    buffer=buffer, chat_exception=chat_exception
+                )
+            except Exception as e:
+                api_logger.exception(e)
 
     @staticmethod
-    async def _change_context(buffer: BufferedUserContext, changed_chat_room_id: str) -> None:
+    async def _change_context(
+        buffer: BufferedUserContext, changed_chat_room_id: str
+    ) -> None:
         index: int | None = buffer.find_index_of_chatroom(changed_chat_room_id)
         if index is None:
             # if received chat_room_id is not in chat_room_ids, create new chat room
@@ -250,7 +284,9 @@ class ChatStreamManager:
             )
 
     @staticmethod
-    async def _chat_exception_handler(buffer: BufferedUserContext, chat_exception: ChatException):
+    async def _chat_exception_handler(
+        buffer: BufferedUserContext, chat_exception: ChatException
+    ):
         if isinstance(chat_exception, ChatTextGenerationException):
             await asyncio.gather(
                 SendToWebsocket.message(

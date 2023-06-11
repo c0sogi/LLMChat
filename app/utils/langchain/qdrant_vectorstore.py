@@ -2,17 +2,31 @@
 
 from hashlib import md5
 from operator import itemgetter
-from typing import TYPE_CHECKING, Any, Callable, Iterable, List, Optional
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
+import warnings
 
 from langchain.docstore.document import Document
 from langchain.embeddings.base import Embeddings
-from langchain.vectorstores.qdrant import MetadataFilter
 from langchain.vectorstores.qdrant import Qdrant as _Qdrant
 from langchain.vectorstores.utils import maximal_marginal_relevance
 import numpy as np
 
-if TYPE_CHECKING or True:
+if TYPE_CHECKING:
+    from qdrant_client.conversions import common_types
     from qdrant_client import grpc
+
+    DictFilter = Dict[str, Union[str, int, bool, dict, list]]
+    MetadataFilter = Union[DictFilter, common_types.Filter]
 
 
 class Qdrant(_Qdrant):
@@ -116,10 +130,10 @@ class Qdrant(_Qdrant):
     async def asimilarity_search_with_score(
         self,
         query: str,
-        collection_name: Optional[str] = None,
+        collection_name: str,
         k: int = 4,
-        filter: Optional[MetadataFilter] = None,
-    ) -> list[tuple[Document, float]]:
+        filter: Optional["MetadataFilter"] = None,
+    ) -> List[Tuple[Document, float]]:
         """Return docs most similar to query.
 
         Args:
@@ -130,26 +144,38 @@ class Qdrant(_Qdrant):
         Returns:
             List of Documents most similar to the query and score for each.
         """
+
+        from qdrant_client.qdrant_remote import QdrantRemote
+
+        if not isinstance(self.client._client, QdrantRemote):
+            raise NotImplementedError(
+                "Async similarity search is only supported for remote clients",
+            )
+
         from qdrant_client import grpc
+        from qdrant_client.conversions.conversion import RestToGrpc
+        from qdrant_client.http import models as rest
 
         grpc_points = self.client.async_grpc_points
-        if filter is not None:
-            search_filter = grpc.Filter(  # type: ignore
-                must=[
-                    condition
-                    for key, value in filter.items()
-                    for condition in self._build_condition_grpc(key, value)
-                ]
+        if filter is not None and isinstance(filter, dict):
+            warnings.warn(
+                "Using dict as a `filter` is deprecated. Please use qdrant-client "
+                "filters directly: "
+                "https://qdrant.tech/documentation/concepts/filtering/",
+                DeprecationWarning,
             )
+            qdrant_filter = self._qdrant_filter_from_dict_grpc(filter)
+        elif filter is not None and isinstance(filter, rest.Filter):
+            qdrant_filter = RestToGrpc.convert_filter(filter)
         else:
-            search_filter = None
+            qdrant_filter = filter
         response = await grpc_points.Search(
             grpc.SearchPoints(  # type: ignore
-                collection_name=collection_name
-                if collection_name is not None
-                else self.collection_name,
+                collection_name=self.collection_name
+                if collection_name is None
+                else collection_name,
                 vector=self._embed_query(query),
-                filter=search_filter,
+                filter=qdrant_filter,
                 with_payload=grpc.WithPayloadSelector(enable=True),  # type: ignore
                 limit=k,
             )
@@ -158,7 +184,9 @@ class Qdrant(_Qdrant):
         return [
             (
                 self._document_from_scored_point_grpc(
-                    result, self.content_payload_key, self.metadata_payload_key
+                    result,
+                    self.content_payload_key,
+                    self.metadata_payload_key,
                 ),
                 result.score,
             )
@@ -170,7 +198,7 @@ class Qdrant(_Qdrant):
         query: str,
         collection_name: Optional[str] = None,
         k: int = 4,
-        filter: Optional[MetadataFilter] = None,
+        filter: Optional["MetadataFilter"] = None,
         **kwargs: Any,
     ) -> List[Document]:
         """Return docs most similar to query.
@@ -237,7 +265,6 @@ class Qdrant(_Qdrant):
                 limit=fetch_k,
             )
         )
-        # print("scores:", [result.score for result in response.result])
         embeddings: list[rest.VectorStruct] = [
             GrpcToRest.convert_vectors(result.vectors) for result in response.result
         ]
@@ -256,7 +283,7 @@ class Qdrant(_Qdrant):
             for i in mmr_selected
         ]
 
-    def _build_condition_grpc(self, key: str, value: Any) -> List[grpc.Condition]:
+    def _build_condition_grpc(self, key: str, value: Any) -> List["grpc.Condition"]:
         from qdrant_client import grpc
 
         out: List[grpc.Condition] = []
@@ -292,8 +319,8 @@ class Qdrant(_Qdrant):
         return out
 
     def _qdrant_filter_from_dict_grpc(
-        self, filter: Optional[MetadataFilter]
-    ) -> Optional[grpc.Filter]:
+        self, filter: Optional["DictFilter"]
+    ) -> Optional["grpc.Filter"]:
         from qdrant_client import grpc
 
         if not filter:

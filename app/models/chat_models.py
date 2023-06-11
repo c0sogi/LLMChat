@@ -168,7 +168,8 @@ class UserChatContext:
             self.user_message_tokens
             + self.ai_message_tokens
             + self.system_message_tokens
-            + int(getattr(self.llm_model.value, "description_tokens", 0))
+            + self.llm_model.value.prefix_tokens
+            + self.llm_model.value.suffix_tokens
         )
 
     @property

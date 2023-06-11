@@ -1,5 +1,6 @@
 import asyncio
 from copy import deepcopy
+from uuid import uuid4
 from app.common.config import ChatConfig
 
 from app.errors.chat_exceptions import (
@@ -11,12 +12,12 @@ from app.errors.chat_exceptions import (
     ChatTooMuchTokenException,
 )
 from app.models.chat_models import ChatRoles, UserChatContext
-from app.models.llms import LlamaCppModel, OpenAIModel
+from app.models.llms import LLMModel, LlamaCppModel, OpenAIModel
 from app.utils.api.translate import Translator
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.cache_manager import CacheManager
 from app.utils.chat.message_manager import MessageManager
-from app.utils.chat.text_generation import (  # noqa: F401
+from app.utils.chat.text_generation import (
     agenerate_from_openai,
     generate_from_llama_cpp,
     get_summarization,
@@ -28,7 +29,11 @@ from app.viewmodels.base_models import StreamProgress, SummarizedResult
 
 
 async def summarization_task(
-    user_id: str, chat_room_id: str, role: str, to_summarize: str, message_history_uuid: str
+    user_id: str,
+    chat_room_id: str,
+    role: str,
+    to_summarize: str,
+    message_history_uuid: str,
 ) -> SummarizedResult:  # =
     return SummarizedResult(
         user_id=user_id,
@@ -41,12 +46,23 @@ async def summarization_task(
 
 class MessageHandler:
     @staticmethod
-    async def user(msg: str, translate: bool, buffer: BufferedUserContext) -> None:
+    async def user(
+        msg: str,
+        translate: bool,
+        buffer: BufferedUserContext,
+        use_tight_token_limit: bool = True,
+    ) -> None:
         """Handle user message, including translation"""
-        if len(buffer.current_user_message_histories) == 0 and UTC.check_string_valid(buffer.current_chat_room_name):
+        if not buffer.current_user_message_histories and UTC.check_string_valid(
+            buffer.current_chat_room_name
+        ):
             buffer.current_chat_room_name = msg[:20]
-            await CacheManager.update_profile(user_chat_context=buffer.current_user_chat_context)
-            await SendToWebsocket.init(buffer=buffer, send_chat_rooms=True, wait_next_query=True)
+            await CacheManager.update_profile(
+                user_chat_context=buffer.current_user_chat_context
+            )
+            await SendToWebsocket.init(
+                buffer=buffer, send_chat_rooms=True, wait_next_query=True
+            )
 
         if translate:  # if user message is translated
             msg = await Translator.translate(text=msg, src_lang="ko", trg_lang="en")
@@ -59,10 +75,16 @@ class MessageHandler:
             )
 
         user_token: int = buffer.current_user_chat_context.get_tokens_of(msg)
-        if user_token > buffer.current_user_chat_context.token_per_request:  # if user message is too long
+        current_llm_model: LLMModel = buffer.current_llm_model.value
+        token_limit: int = (
+            current_llm_model.max_tokens_per_request
+            if use_tight_token_limit
+            else current_llm_model.max_total_tokens - ChatConfig.extra_token_margin
+        )
+        if user_token > token_limit:  # if user message is too long
             raise ChatTooMuchTokenException(
                 msg=f"Message too long. Now {user_token} tokens, "
-                f"but {buffer.current_user_chat_context.token_per_request} tokens allowed."
+                f"but {token_limit} tokens allowed."
             )
         await MessageManager.add_message_history_safely(
             user_chat_context=buffer.current_user_chat_context,
@@ -71,7 +93,8 @@ class MessageHandler:
         )
         if (
             ChatConfig.summarize_for_chat
-            and buffer.current_user_message_histories[-1].tokens > ChatConfig.summarization_threshold
+            and buffer.current_user_message_histories[-1].tokens
+            > ChatConfig.summarization_threshold
         ):
             buffer.task_list.append(
                 asyncio.create_task(
@@ -80,7 +103,9 @@ class MessageHandler:
                         chat_room_id=buffer.current_chat_room_id,
                         role="user",
                         to_summarize=buffer.current_user_message_histories[-1].content,
-                        message_history_uuid=buffer.current_user_message_histories[-1].uuid,
+                        message_history_uuid=buffer.current_user_message_histories[
+                            -1
+                        ].uuid,
                     )
                 )
             )  # =
@@ -90,7 +115,7 @@ class MessageHandler:
         """Handle ai message, including text generation and translation"""
         backup_context: UserChatContext = deepcopy(buffer.current_user_chat_context)
         current_model = buffer.current_user_chat_context.llm_model.value
-        stream_progress = StreamProgress()
+        stream_progress = StreamProgress(uuid=uuid4().hex)
         try:
             if isinstance(current_model, OpenAIModel):
                 await SendToWebsocket.stream(
@@ -118,10 +143,12 @@ class MessageHandler:
                 user_chat_context=buffer.current_user_chat_context,
                 content=stream_progress.response,
                 role=ChatRoles.AI,
+                uuid=stream_progress.uuid,
             )
             if (
                 ChatConfig.summarize_for_chat
-                and buffer.current_ai_message_histories[-1].tokens > ChatConfig.summarization_threshold
+                and buffer.current_ai_message_histories[-1].tokens
+                > ChatConfig.summarization_threshold
             ):
                 buffer.task_list.append(
                     asyncio.create_task(
@@ -129,8 +156,12 @@ class MessageHandler:
                             user_id=buffer.user_id,
                             chat_room_id=buffer.current_chat_room_id,
                             role="ai",
-                            to_summarize=buffer.current_ai_message_histories[-1].content,
-                            message_history_uuid=buffer.current_ai_message_histories[-1].uuid,
+                            to_summarize=buffer.current_ai_message_histories[
+                                -1
+                            ].content,
+                            message_history_uuid=buffer.current_ai_message_histories[
+                                -1
+                            ].uuid,
                         )
                     )
                 )  # =

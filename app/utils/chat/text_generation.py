@@ -21,9 +21,12 @@ from app.errors.chat_exceptions import (
 from app.models.llms import LlamaCppModel, OpenAIModel
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.llama_cpp import llama_cpp_generation
-from app.utils.chat.prompts import message_histories_to_list, message_histories_to_str
-from app.utils.logger import api_logger
-from app.viewmodels.base_models import OpenAIChatMessage
+from app.utils.chat.prompts import (
+    message_histories_to_list,
+    message_histories_to_str,
+    openai_parse_method,
+)
+from app.utils.logger import ApiLogger, api_logger
 
 
 def generate_from_llama_cpp(
@@ -43,11 +46,14 @@ def generate_from_llama_cpp(
     try:
         prompt = message_histories_to_str(
             user_chat_roles=buffer.current_user_chat_roles,
-            chat_turn_prompt=llama_cpp_model.chat_turn_prompt,
             user_message_histories=user_message_histories,
             ai_message_histories=ai_message_histories,
             system_message_histories=system_message_histories,
-            description_for_prompt=llama_cpp_model.description,
+            prefix_prompt=llama_cpp_model.prefix,
+            prefix_prompt_tokens=llama_cpp_model.prefix_tokens,
+            suffix_prompt=llama_cpp_model.suffix,
+            suffix_prompt_tokens=llama_cpp_model.suffix_tokens,
+            chat_turn_prompt=llama_cpp_model.chat_turn_prompt,
         )
         api_logger.info(f"Sending this prompt to llama_cpp:\n{prompt}")
         future_exception: Optional[BaseException] = None
@@ -97,13 +103,6 @@ async def agenerate_from_openai(
     system_message_histories: list[MessageHistory],
     max_tokens: int,
 ) -> AsyncGenerator[str, None]:
-    def parse_method(message_history: MessageHistory) -> dict[str, str]:
-        if message_history.summarized is not None:
-            message_history = deepcopy(message_history)
-            if message_history.summarized is not None:
-                message_history.content = message_history.summarized
-        return OpenAIChatMessage.from_orm(message_history).dict()
-
     current_model = buffer.current_llm_model.value
     assert isinstance(current_model, OpenAIModel)
 
@@ -121,12 +120,17 @@ async def agenerate_from_openai(
     ) as session:  # initialize client
         try:
             messages = message_histories_to_list(
-                parse_method=parse_method,
+                user_chat_roles=buffer.current_user_chat_roles,
+                parse_method=openai_parse_method,
                 user_message_histories=user_message_histories,
                 ai_message_histories=ai_message_histories,
                 system_message_histories=system_message_histories,
+                prefix_prompt=current_model.prefix,
+                prefix_prompt_tokens=current_model.prefix_tokens,
+                suffix_prompt=current_model.suffix,
+                suffix_prompt_tokens=current_model.suffix_tokens,
             )
-            api_logger.info(f"Sending these messages to OpenAI:\n{messages}")
+            ApiLogger("|A01|").debug(f"Sending these messages to OpenAI:\n{messages}")
             async with session.post(
                 current_model.api_url,
                 headers={
@@ -150,7 +154,8 @@ async def agenerate_from_openai(
                     }
                 ),  # set json for openai api request
             ) as streaming_response:
-                if streaming_response.status != 200:  # if status code is not 200
+                if not streaming_response.ok:  # if status code is not 200
+                    streaming_response.release()
                     error: Any = orjson_loads(await streaming_response.text()).get(
                         "error"
                     )

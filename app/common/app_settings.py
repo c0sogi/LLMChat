@@ -15,7 +15,7 @@ from app.database.schemas.auth import ApiKeys, ApiWhiteLists, Users
 from app.dependencies import USER_DEPENDENCY, api_service_dependency
 from app.middlewares.token_validator import access_control
 from app.middlewares.trusted_hosts import TrustedHostMiddleware
-from app.routers import auth, index, services, users, websocket
+from app.routers import auth, index, services, users, user_services, websocket
 from app.shared import Shared
 from app.utils.chat.cache_manager import CacheManager
 from app.utils.js_initializer import js_url_initializer
@@ -44,7 +44,9 @@ def create_app(config: Config) -> FastAPI:
         )
         admin.add_view(UserAdminView(Users, icon="fa fa-users", label="Users"))
         admin.add_view(ApiKeyAdminView(ApiKeys, icon="fa fa-key", label="API Keys"))
-        admin.add_view(ModelView(ApiWhiteLists, icon="fa fa-list", label="API White Lists"))
+        admin.add_view(
+            ModelView(ApiWhiteLists, icon="fa fa-list", label="API White Lists")
+        )
         admin.add_view(
             DropDown(
                 "Links",
@@ -98,6 +100,12 @@ def create_app(config: Config) -> FastAPI:
         users.router,
         prefix="/api",
         tags=["Users"],
+        dependencies=[Depends(USER_DEPENDENCY)],
+    )
+    new_app.include_router(
+        user_services.router,
+        prefix="/api",
+        tags=["User Services"],
         dependencies=[Depends(USER_DEPENDENCY)],
     )
 

@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import Enum
+from typing import Optional
 
 from pydantic import Field
 from pydantic.main import BaseModel
@@ -105,10 +106,11 @@ class CreateChatMessage(BaseModel):  # stub
 class MessageToWebsocket(BaseModel):
     msg: str | None
     finish: bool
-    chat_room_id: str
+    chat_room_id: Optional[str] = None
     is_user: bool
     init: bool = False
-    model_name: str | None = None
+    model_name: Optional[str] = None
+    uuid: Optional[str] = None
 
     class Config:
         orm_mode = True
@@ -143,7 +145,8 @@ class SendInitToWebsocket(BaseModel):
     tokens: int
     is_user: bool
     timestamp: int
-    model_name: str | None = None
+    model_name: Optional[str] = None
+    uuid: Optional[str] = None
 
     class Config:
         orm_mode = True
@@ -161,6 +164,7 @@ class InitMessage(BaseModel):
 class StreamProgress(BaseModel):
     response: str = ""
     buffer: str = ""
+    uuid: Optional[str] = None
 
 
 class UserChatRoles(BaseModel):

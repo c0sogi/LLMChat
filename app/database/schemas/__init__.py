@@ -34,7 +34,11 @@ class Mixin:
 
     @property
     def columns(self) -> list[Column]:
-        return [col for col in self.__table__.columns if (not col.primary_key) and (col.name != "created_at")]  # type: ignore
+        return [
+            col
+            for col in self.__table__.columns  # type: ignore
+            if (not col.primary_key) and (col.name != "created_at")
+        ]
 
     @classmethod
     async def add_all(
@@ -102,17 +106,23 @@ class Mixin:
         )
 
     @classmethod
-    async def fetchall_filtered_by(cls, session: AsyncSession | None = None, **kwargs: Any) -> list[DeclarativeMeta]:
+    async def fetchall_filtered_by(
+        cls, session: AsyncSession | None = None, **kwargs: Any
+    ) -> list[DeclarativeMeta]:
         stmt: Select[tuple] = select(cls).filter_by(**kwargs)
         return await db.scalars__fetchall(stmt=stmt, session=session)
 
     @classmethod
-    async def one_filtered_by(cls, session: AsyncSession | None = None, **kwargs: Any) -> DeclarativeMeta:
+    async def one_filtered_by(
+        cls, session: AsyncSession | None = None, **kwargs: Any
+    ) -> DeclarativeMeta:
         stmt: Select[tuple] = select(cls).filter_by(**kwargs)
         return await db.scalars__one(stmt=stmt, session=session)
 
     @classmethod
-    async def first_filtered_by(cls, session: AsyncSession | None = None, **kwargs: Any) -> DeclarativeMeta:
+    async def first_filtered_by(
+        cls, session: AsyncSession | None = None, **kwargs: Any
+    ) -> DeclarativeMeta:
         stmt: Select[tuple] = select(cls).filter_by(**kwargs)
         return await db.scalars__first(stmt=stmt, session=session)
 
@@ -125,28 +135,36 @@ class Mixin:
 
     @classmethod
     async def fetchall_filtered(
-        cls, *criteria: _ColumnExpressionArgument[bool], session: AsyncSession | None = None
+        cls,
+        *criteria: _ColumnExpressionArgument[bool],
+        session: AsyncSession | None = None,
     ) -> list[DeclarativeMeta]:
         stmt: Select[tuple] = select(cls).filter(*criteria)
         return await db.scalars__fetchall(stmt=stmt, session=session)
 
     @classmethod
     async def one_filtered(
-        cls, *criteria: _ColumnExpressionArgument[bool], session: AsyncSession | None = None
+        cls,
+        *criteria: _ColumnExpressionArgument[bool],
+        session: AsyncSession | None = None,
     ) -> DeclarativeMeta:
         stmt: Select[tuple] = select(cls).filter(*criteria)
         return await db.scalars__one(stmt=stmt, session=session)
 
     @classmethod
     async def first_filtered(
-        cls, *criteria: _ColumnExpressionArgument[bool], session: AsyncSession | None = None
+        cls,
+        *criteria: _ColumnExpressionArgument[bool],
+        session: AsyncSession | None = None,
     ) -> DeclarativeMeta:
         stmt: Select[tuple] = select(cls).filter(*criteria)
         return await db.scalars__first(stmt=stmt, session=session)
 
     @classmethod
     async def one_or_none_filtered(
-        cls, *criteria: _ColumnExpressionArgument[bool], session: AsyncSession | None = None
+        cls,
+        *criteria: _ColumnExpressionArgument[bool],
+        session: AsyncSession | None = None,
     ) -> Optional[DeclarativeMeta]:
         stmt: Select[tuple] = select(cls).filter(*criteria)
         return await db.scalars__one_or_none(stmt=stmt, session=session)

@@ -145,7 +145,9 @@ async def email_by_gmail(request: Request, mailing_list: SendEmail):
 
 
 @router.post("/email/send_by_gmail2")
-async def email_by_gmail2(request: Request, mailing_list: SendEmail, background_tasks: BackgroundTasks):
+async def email_by_gmail2(
+    request: Request, mailing_list: SendEmail, background_tasks: BackgroundTasks
+):
     # t = time()
     background_tasks.add_task(send_email, mailing_list=mailing_list.email_to)
     return MessageOk()

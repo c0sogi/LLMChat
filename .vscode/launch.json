@@ -14,7 +14,16 @@
             "request": "launch",
             "module": "main",
             "jinja": true,
-            "justMyCode": true
+            "justMyCode": true,
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "uvicorn",
+                "main:app",
+                "--reload"
+            ]
         }
     ]
 }

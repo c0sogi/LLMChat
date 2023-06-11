@@ -1,0 +1,22 @@
+use_default_settings: true
+
+search:
+  # remove format to deny access, use lower case.
+  # formats: [html, csv, json, rss]
+  formats:
+    - json
+
+server:
+  base_url: "http://localhost:8080" # "http://example.com/location"
+  secret_key: "${JWT_SECRET}" # Is overwritten by ${SEARXNG_SECRET}
+  limiter: true # rate limit the number of request on the instance, block some bots
+
+  # Proxying image results through searx
+  image_proxy: true
+
+ui:
+  static_use_hash: true
+redis:
+  # URL to connect redis database. Is overwritten by ${SEARXNG_REDIS_URL}.
+  # https://redis-py.readthedocs.io/en/stable/connections.html#redis.client.Redis.from_url
+  url: "redis://:${REDIS_PASSWORD}@cache:6379/0"

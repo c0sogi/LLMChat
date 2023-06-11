@@ -18,21 +18,6 @@ from app.viewmodels.base_models import SnsType, Token, UserRegister, UserToken
 
 router = APIRouter(prefix="/auth")
 
-"""
-1. 구글 로그인을 위한 구글 앱 준비 (구글 개발자 도구)
-2. FB 로그인을 위한 FB 앱 준비 (FB 개발자 도구)
-3. 카카오 로그인을 위한 카카오 앱준비( 카카오 개발자 도구)
-4. 이메일, 비밀번호로 가입 (v)
-5. 가입된 이메일, 비밀번호로 로그인, (v)
-6. JWT 발급 (v)
-
-7. 이메일 인증 실패시 이메일 변경
-8. 이메일 인증 메일 발송
-9. 각 SNS 에서 Unlink
-10. 회원 탈퇴
-11. 탈퇴 회원 정보 저장 기간 동안 보유(법적 최대 한도 내에서, 가입 때 약관 동의 받아야 함, 재가입 방지 용도로 사용하면 가능)
-"""
-
 
 @router.post("/register/{sns_type}", status_code=201, response_model=Token)
 async def register(
@@ -64,10 +49,14 @@ async def register(
         new_user: Users = await register_new_user(
             email=reg_info.email,
             hashed_password=hashed_password,
-            ip_address=request.client.host if request.client is not None else None,
+            ip_address=request.state.ip,
         )
-        data_to_be_tokenized: dict = UserToken.from_orm(new_user).dict(exclude={"password", "marketing_agree"})
-        token: str = create_access_token(data=data_to_be_tokenized, expires_delta=TOKEN_EXPIRE_HOURS)
+        data_to_be_tokenized: dict = UserToken.from_orm(new_user).dict(
+            exclude={"password", "marketing_agree"}
+        )
+        token: str = create_access_token(
+            data=data_to_be_tokenized, expires_delta=TOKEN_EXPIRE_HOURS
+        )
         response.set_cookie(
             key="Authorization",
             value=f"Bearer {token}",
@@ -106,8 +95,12 @@ async def login(
             hashed_password=matched_user.password.encode("utf-8"),
         ):
             raise Responses_404.not_found_user
-        data_to_be_tokenized: dict = UserToken.from_orm(matched_user).dict(exclude={"password", "marketing_agree"})
-        token: str = create_access_token(data=data_to_be_tokenized, expires_delta=TOKEN_EXPIRE_HOURS)
+        data_to_be_tokenized: dict = UserToken.from_orm(matched_user).dict(
+            exclude={"password", "marketing_agree"}
+        )
+        token: str = create_access_token(
+            data=data_to_be_tokenized, expires_delta=TOKEN_EXPIRE_HOURS
+        )
         response.set_cookie(
             key="Authorization",
             value=f"Bearer {token}",

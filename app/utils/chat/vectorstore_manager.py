@@ -5,7 +5,11 @@ from fastapi.concurrency import run_in_threadpool
 from langchain.docstore.document import Document
 from langchain.text_splitter import TokenTextSplitter
 from qdrant_client import QdrantClient
-from app.common.config import EMBEDDING_TOKEN_CHUNK_OVERLAP, EMBEDDING_TOKEN_CHUNK_SIZE, EMBEDDING_VECTOR_DIMENSION
+from app.common.config import (
+    EMBEDDING_TOKEN_CHUNK_OVERLAP,
+    EMBEDDING_TOKEN_CHUNK_SIZE,
+    EMBEDDING_VECTOR_DIMENSION,
+)
 from app.database.connection import cache
 from app.utils.chat.file_loader import read_bytes_to_text
 
@@ -61,7 +65,9 @@ class VectorStoreManager:
     ) -> list[Document]:
         if collection_name not in await VectorStoreManager.get_all_collection_names():
             return []
-        return await cache.vectorstore.asimilarity_search(query, collection_name=collection_name, k=k)
+        return await cache.vectorstore.asimilarity_search(
+            query, collection_name=collection_name, k=k
+        )
 
     @staticmethod
     async def asimilarity_search_multiple_collections(
@@ -74,7 +80,9 @@ class VectorStoreManager:
         # Reorganize results to have shape: (index * k)
 
         query_tasks: list[Coroutine[Any, Any, list[Document]]] = []
-        existing_collection_names: list[str] = await VectorStoreManager.get_all_collection_names()
+        existing_collection_names: list[
+            str
+        ] = await VectorStoreManager.get_all_collection_names()
         for collection_name in collection_names:
             if collection_name in existing_collection_names:
                 query_tasks.append(
@@ -99,7 +107,9 @@ class VectorStoreManager:
         # Reorganize results to have shape: (index * k), sorted by score.
 
         query_tasks: list[Coroutine[Any, Any, list[tuple[Document, float]]]] = []
-        existing_collection_names: list[str] = await VectorStoreManager.get_all_collection_names()
+        existing_collection_names: list[
+            str
+        ] = await VectorStoreManager.get_all_collection_names()
         for collection_name in collection_names:
             if collection_name in existing_collection_names:
                 query_tasks.append(
@@ -131,7 +141,9 @@ class VectorStoreManager:
         # Reorganize results to have shape: (index * k), sorted by score.
 
         query_tasks: list[Coroutine[Any, Any, list[tuple[Document, float]]]] = []
-        existing_collection_names: list[str] = await VectorStoreManager.get_all_collection_names()
+        existing_collection_names: list[
+            str
+        ] = await VectorStoreManager.get_all_collection_names()
         for collection_name in collection_names:
             if collection_name in existing_collection_names:
                 query_tasks.append(
@@ -159,10 +171,15 @@ class VectorStoreManager:
         # if user uploads file, embed it
         try:
             text: str = await run_in_threadpool(read_bytes_to_text, file, filename)
-            docs: list[str] = await VectorStoreManager.create_documents(text, collection_name=collection_name)
-            return f"Successfully embedded documents. You uploaded file begins with...\n\n```{docs[0][:50]}```..."
+            docs: list[str] = await VectorStoreManager.create_documents(
+                text, collection_name=collection_name
+            )
+            return (
+                f"\n```lottie-ok\nSuccessfully embedded documents. You uploaded file begins with\n```\n\n"
+                f"```\n{docs[0][:100]}\n```\n"
+            )
         except Exception:
-            return "Can't embed this type of file. Try another file."
+            return "\n```lottie-fail\nCan't embed this type of file. Try another file.\n```\n"
 
     @staticmethod
     async def get_all_collection_names() -> list[str]:

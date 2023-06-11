@@ -31,7 +31,9 @@ EXCEPT_PATH_LIST: tuple = (
     "/openapi.json",
     "/test",
 )
-EXCEPT_PATH_REGEX: Pattern = compile("^(/docs|/redoc|/admin|/api/auth|/favicon.ico|/chat|/flutter_service_worker.js)")
+EXCEPT_PATH_REGEX: Pattern = compile(
+    "^(/docs|/redoc|/admin|/api/auth|/favicon.ico|/chat|/flutter_service_worker.js)"
+)
 TOKEN_EXPIRE_HOURS: int = 168
 MAX_API_KEY: int = 3
 MAX_API_WHITELIST: int = 10
@@ -50,6 +52,11 @@ REDIS_PORT: int = int(environ.get("REDIS_PORT", 6379))
 REDIS_DATABASE: int = int(environ.get("REDIS_DATABASE", 0))
 REDIS_PASSWORD: str = environ["REDIS_PASSWORD"]
 
+# Qdrant Variables
+QDRANT_COLLECTION: str = environ.get(
+    "QDRANT_COLLECTION", "SharedCollection"
+)  # Shared Qdrant collection
+
 # Other Required Variables
 HOST_MAIN: str = environ.get("HOST_MAIN", "localhost")
 JWT_SECRET: str = environ["JWT_SECRET"]
@@ -57,9 +64,18 @@ JWT_ALGORITHM: str = "HS256"
 
 
 # Optional Service Variables
+GLOBAL_PREFIX: Optional[str] = environ.get("GLOBAL_PREFIX", None)
+GLOBAL_SUFFIX: Optional[str] = environ.get("GLOBAL_SUFFIX", None)
+if GLOBAL_PREFIX in ("", "None"):
+    GLOBAL_PREFIX = None
+if GLOBAL_SUFFIX in ("", "None"):
+    GLOBAL_SUFFIX = None
+
 EMBEDDING_VECTOR_DIMENSION: int = 1536
 EMBEDDING_TOKEN_CHUNK_SIZE: int = int(environ.get("EMBEDDING_TOKEN_CHUNK_SIZE", 512))
-EMBEDDING_TOKEN_CHUNK_OVERLAP: int = int(environ.get("EMBEDDING_TOKEN_CHUNK_OVERLAP", 128))
+EMBEDDING_TOKEN_CHUNK_OVERLAP: int = int(
+    environ.get("EMBEDDING_TOKEN_CHUNK_OVERLAP", 128)
+)
 SUMMARIZE_FOR_CHAT: bool = environ.get("SUMMARIZE_FOR_CHAT", "True").lower() == "true"
 SUMMARIZATION_THRESHOLD: int = int(environ.get("SUMMARIZATION_THRESHOLD", 512))
 DEFAULT_LLM_MODEL: str = environ.get("DEFAULT_LLM_MODEL", "gpt_3_5_turbo")
@@ -121,7 +137,7 @@ class Config(metaclass=SingletonMetaClass):
     qdrant_host: str = "vectorstore"
     qdrant_port: int = 6333
     qdrant_grpc_port: int = 6334
-    shared_vectorestore_name: str = "SharedCollection"
+    shared_vectorestore_name: str = QDRANT_COLLECTION
     trusted_hosts: list[str] = field(default_factory=lambda: ["*"])
     allowed_sites: list[str] = field(default_factory=lambda: ["*"])
 
@@ -232,15 +248,25 @@ class ChatConfig:
     read_timeout: float = 30.0  # wait for this time before timeout
     wait_for_reconnect: float = 3.0  # wait for this time before reconnecting
     api_regex_pattern: Pattern = compile(r"data:\s*({.+?})\n\n")
-    extra_token_margin: int = 512  # number of tokens to remove when tokens exceed token limit
-    continue_message: str = "...[CONTINUED]"  # message to append when tokens exceed token limit
+    extra_token_margin: int = (
+        512  # number of tokens to remove when tokens exceed token limit
+    )
+    continue_message: str = (
+        "...[CONTINUED]"  # message to append when tokens exceed token limit
+    )
     summarize_for_chat: bool = SUMMARIZE_FOR_CHAT  # whether to summarize chat messages
     summarization_threshold: int = (
-        SUMMARIZATION_THRESHOLD  # token threshold for summarization. if message tokens exceed this, summarize
+        SUMMARIZATION_THRESHOLD  # if message tokens exceed this, summarize
     )
     summarization_openai_model: str = "gpt-3.5-turbo"
-    summarization_token_limit: int = 2048  # token limit for summarization
-    summarization_token_overlap: int = 100  # number of tokens to overlap between chunks
+    summarization_token_limit: int = (
+        EMBEDDING_TOKEN_CHUNK_SIZE  # token limit for summarization
+    )
+    summarization_token_overlap: int = (
+        EMBEDDING_TOKEN_CHUNK_OVERLAP  # number of tokens to overlap between chunks
+    )
+    global_prefix: Optional[str] = GLOBAL_PREFIX  # prefix for global chat
+    global_suffix: Optional[str] = GLOBAL_SUFFIX  # suffix for global chat
 
 
 config = Config.get()

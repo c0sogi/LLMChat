@@ -11,7 +11,6 @@ from fastapi.concurrency import run_in_threadpool
 
 from app.common.config import config
 from app.common.constants import (
-    ChatTurnTemplates,
     SystemPrompts,
     QueryTemplates,
 )
@@ -28,6 +27,7 @@ from app.utils.chat.prompts import message_histories_to_str
 from app.utils.chat.text_generation import get_summarization
 from app.utils.chat.vectorstore_manager import Document, VectorStoreManager
 from app.utils.chat.websocket_manager import SendToWebsocket
+from app.utils.logger import ApiLogger
 
 
 class ResponseType(str, Enum):
@@ -543,7 +543,7 @@ class ChatCommands:
     async def codex(user_chat_context: UserChatContext) -> str:
         """Let GPT act as CODEX("COding DEsign eXpert")\n
         /codex"""
-        system_message = SystemPrompts.CODEX.value
+        system_message = SystemPrompts.CODEX
         await MessageManager.clear_message_history_safely(
             user_chat_context=user_chat_context, role=ChatRoles.SYSTEM
         )
@@ -559,7 +559,7 @@ class ChatCommands:
     async def redx(user_chat_context: UserChatContext) -> str:
         """Let GPT reduce your message as much as possible\n
         /redx"""
-        system_message = SystemPrompts.REDEX.value
+        system_message = SystemPrompts.REDEX
         await MessageManager.clear_message_history_safely(
             user_chat_context=user_chat_context, role=ChatRoles.SYSTEM
         )
@@ -595,7 +595,7 @@ class ChatCommands:
     def codeblock(language, codes: str, /) -> str:
         """Send codeblock\n
         /codeblock <language> <codes>"""
-        return f"```{language.lower()}\n" + codes + "\n```"
+        return f"\n```{language.lower()}\n" + codes + "\n```\n"
 
     @classmethod
     async def model(cls, model: str, user_chat_context: UserChatContext) -> str:
@@ -672,31 +672,35 @@ class ChatCommands:
             collection_names=[buffer.user_id, config.shared_vectorestore_name],
             k=k,
         )  # lower score is the better!
+        ApiLogger("|A02|").debug([score for _, score in found_text_and_score])
 
         if len(found_text_and_score) > 0:
             found_text: str = "\n\n".join(
                 [document.page_content for document, _ in found_text_and_score]
             )
             context_and_query: str = (
-                QueryTemplates.CONTEXT_QUESTION__CONTEXT_ONLY.value.format(
-                    question=query, context=found_text
+                QueryTemplates.CONTEXT_QUESTION__CONTEXT_ONLY.format(
+                    context=found_text, question=query
                 )
             )
             await MessageHandler.user(
                 msg=context_and_query,
                 translate=False,
                 buffer=buffer,
+                use_tight_token_limit=False,
             )
-            await MessageHandler.ai(
-                translate=kwargs.get("translate", False),
-                buffer=buffer,
-            )
-            await MessageManager.set_message_history_safely(
-                user_chat_context=buffer.current_user_chat_context,
-                role=ChatRoles.USER,
-                index=-1,
-                new_content=query,
-            )
+            try:
+                await MessageHandler.ai(
+                    translate=kwargs.get("translate", False),
+                    buffer=buffer,
+                )
+            finally:
+                await MessageManager.set_message_history_safely(
+                    user_chat_context=buffer.current_user_chat_context,
+                    role=ChatRoles.USER,
+                    index=-1,
+                    new_content=query,
+                )
             return None, ResponseType.DO_NOTHING
         else:
             await SendToWebsocket.message(
@@ -716,7 +720,7 @@ class ChatCommands:
         await VectorStoreManager.create_documents(
             text=text_to_embed, collection_name=buffer.user_id
         )
-        return "Embedding successful!"
+        return "\n```lottie-ok\nEmbedding successful!\n```\n"
 
     @staticmethod
     @CommandResponse.send_message_and_stop
@@ -726,7 +730,7 @@ class ChatCommands:
         await VectorStoreManager.create_documents(
             text=text_to_embed, collection_name=config.shared_vectorestore_name
         )
-        return "Embedding successful! This data will be shared for everyone."
+        return "\n```lottie-ok\nEmbedding successful! This data will be shared for everyone.\n```\n"
 
     @staticmethod
     @CommandResponse.send_message_and_stop
@@ -755,7 +759,6 @@ class ChatCommands:
         shared = Shared()
         conversation: str = message_histories_to_str(
             user_chat_roles=buffer.current_user_chat_roles,
-            chat_turn_prompt=ChatTurnTemplates.ROLE_CONTENT_1,
             user_message_histories=buffer.current_user_message_histories,
             ai_message_histories=buffer.current_ai_message_histories,
             system_message_histories=buffer.current_system_message_histories,
@@ -790,3 +793,68 @@ class ChatCommands:
         shared.process_pool_executor.shutdown(wait=True)
         shared.process_pool_executor = ProcessPoolExecutor()
         return "Process pool executor freed!"
+
+    @staticmethod
+    @CommandResponse.send_message_and_stop
+    async def browse_searx(query: str, /) -> str:
+        """Search web for the query, with searxNG\n
+        /browse_searx <query>"""
+        return await Shared().searx.arun(query)
+
+    @staticmethod
+    async def browse(
+        query: str, /, buffer: BufferedUserContext, **kwargs
+    ) -> Tuple[str | None, ResponseType]:
+        """Query LLM with duckduckgo browse results\n
+        /browse <query>"""
+        if query.startswith("/"):
+            return query, ResponseType.REPEAT_COMMAND
+
+        k: int = 3
+        if kwargs.get("translate", False):
+            query = await Translator.translate(text=query, src_lang="ko", trg_lang="en")
+            await SendToWebsocket.message(
+                websocket=buffer.websocket,
+                msg=f"## 번역된 질문\n\n{query}\n\n## 생성된 답변\n\n",
+                chat_room_id=buffer.current_chat_room_id,
+                finish=False,
+                model_name=buffer.current_user_chat_context.llm_model.value.name,
+            )
+        await SendToWebsocket.message(
+            websocket=buffer.websocket,
+            msg=f"\n```lottie-search-web\nBrowsing with 🦢DuckDuckGo...\n```\n",
+            chat_room_id=buffer.current_chat_room_id,
+            finish=False,
+            model_name=buffer.current_user_chat_context.llm_model.value.name,
+        )
+        search_result: str = await run_in_threadpool(Shared().duckduckgo.run, query)
+
+        await SendToWebsocket.message(
+            websocket=buffer.websocket,
+            msg=f"\n```lottie-ok\nDone!\n```\n",
+            chat_room_id=buffer.current_chat_room_id,
+            finish=False,
+        )
+        ApiLogger("|A03|").debug(search_result)
+        context_and_query: str = QueryTemplates.CONTEXT_QUESTION__CONTEXT_ONLY.format(
+            context=search_result, question=query
+        )
+        await MessageHandler.user(
+            msg=context_and_query,
+            translate=False,
+            buffer=buffer,
+            use_tight_token_limit=False,
+        )
+        try:
+            await MessageHandler.ai(
+                translate=kwargs.get("translate", False),
+                buffer=buffer,
+            )
+        finally:
+            await MessageManager.set_message_history_safely(
+                user_chat_context=buffer.current_user_chat_context,
+                role=ChatRoles.USER,
+                index=-1,
+                new_content=query,
+            )
+        return None, ResponseType.DO_NOTHING

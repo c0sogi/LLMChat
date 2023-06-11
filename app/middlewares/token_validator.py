@@ -29,7 +29,10 @@ class StateManager:
         request.state.req_time = UTC.now()
         request.state.start = time()
         if request.client is not None:
-            request.state.ip = request.client.host.split(",")[0] if "," in request.client.host else request.client.host
+            # Check headers for real ip
+            request.state.ip = request.headers.get(
+                "x-forwarded-for", request.client.host
+            ).split(",")[0]
         request.state.inspect = None
         request.state.user = None
 
@@ -76,7 +79,9 @@ class Validator:
         query_params: QueryParams | str,
         timestamp: str,
     ) -> UserToken:
-        matched_api_key, matched_user = await get_api_key_and_owner(access_key=api_access_key)
+        matched_api_key, matched_user = await get_api_key_and_owner(
+            access_key=api_access_key
+        )
         if not hashed_secret == hash_params(
             query_params=str(query_params),
             secret_key=matched_api_key.secret_key,
@@ -119,13 +124,17 @@ async def access_control(request: Request, call_next: RequestResponseEndpoint):
         response: Response = await call_next(request)  # actual endpoint response
 
     except Exception as exception:  # If any error occurs...
-        error: HTTPException | InternalServerError | APIException = exception_handler(error=exception)
+        error: HTTPException | InternalServerError | APIException = exception_handler(
+            error=exception
+        )
         response: Response = JSONResponse(
             status_code=error.status_code,
             content={
                 "status": error.status_code,
                 "msg": error.msg if not isinstance(error, HTTPException) else None,
-                "detail": error.detail if not isinstance(error, HTTPException) else error.detail,
+                "detail": error.detail
+                if not isinstance(error, HTTPException)
+                else error.detail,
                 "code": error.code if not isinstance(error, HTTPException) else None,
             },
         )

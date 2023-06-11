@@ -11,8 +11,10 @@ networks:
     driver: bridge
     ipam:
       driver: default
-      config:
-        - subnet: 172.16.0.0/24 # subnet for traefik and other services
+  api-private:
+    driver: bridge
+    ipam:
+      driver: default
 
 services:
   proxy:
@@ -26,7 +28,7 @@ services:
       - "--entryPoints.web.http.redirections.entryPoint.scheme=https"
       - "--providers.docker"
       - "--providers.docker.exposedbydefault=false"
-      - "--api.insecure=true"
+      - "--api.insecure=false"
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
       - "--certificatesresolvers.myresolver.acme.email=${MY_EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
@@ -37,13 +39,11 @@ services:
       - "443:443"
       - "3306:3306"
       - "6379:6379"
-      - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./letsencrypt:/letsencrypt
     networks:
-      reverse-proxy-public:
-        ipv4_address: 172.16.0.10 # static IP
+      - reverse-proxy-public
 
   db:
     image: mysql
@@ -64,8 +64,7 @@ services:
       - "traefik.tcp.services.db.loadbalancer.server.port=3306"
       - "traefik.tcp.routers.db.entrypoints=mysql"
     networks:
-      reverse-proxy-public:
-        ipv4_address: 172.16.0.11 # static IP
+      - reverse-proxy-public
 
   cache:
     image: redis/redis-stack-server:latest
@@ -80,20 +79,18 @@ services:
       - "traefik.tcp.services.cache.loadbalancer.server.port=6379"
       - "traefik.tcp.routers.cache.entrypoints=redis"
     networks:
-      reverse-proxy-public:
-        ipv4_address: 172.16.0.12 # static IP
-
-  vectorstore:
-    image: qdrant/qdrant
-    restart: always
-    volumes:
-      - qdrant:/qdrant/storage
-    networks:
-      reverse-proxy-public:
-        ipv4_address: 172.16.0.13 # static IP
+      - reverse-proxy-public
 
   api:
-    image: cosogi/llmchat:230531
+    image: cosogi/llmchat:230610
+    restart: always
+    env_file:
+      - .env
+    command:
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api.rule=HostRegexp(`${HOST_MAIN}`, `{subdomain:[a-z]+}.${HOST_MAIN}`, `${HOST_IP}`)"
@@ -104,8 +101,6 @@ services:
       - "traefik.http.routers.api.tls.certresolver=myresolver"
       - "traefik.http.routers.api.tls.domains[0].main=${HOST_MAIN}"
       - "traefik.http.routers.api.tls.domains[0].sans=${HOST_SUB}"
-    env_file:
-      - .env
     depends_on:
       - proxy
       - db
@@ -114,5 +109,24 @@ services:
     volumes:
       - .:/app
     networks:
-      reverse-proxy-public:
-        ipv4_address: 172.16.0.14 # static IP
+      - reverse-proxy-public
+      - api-private
+
+  vectorstore:
+    image: qdrant/qdrant:latest
+    restart: always
+    volumes:
+      - qdrant:/qdrant/storage
+    networks:
+      - api-private
+  # search-api:
+  #   image: searxng/searxng:latest
+  #   restart: always
+
+  #   environment:
+  #     REDIS_PASSWORD: "${REDIS_PASSWORD}"
+  #     JWT_SECRET: "${JWT_SECRET}"
+  #   volumes:
+  #     - ./searxng:/etc/searxng
+  #   networks:
+  #     - api-private

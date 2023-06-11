@@ -1,47 +1,85 @@
 # flake8: noqa
 
-import enum
 from langchain import PromptTemplate
 
 
-class QueryTemplates(str, enum.Enum):
-    CONTEXT_QUESTION__DEFAULT = (
-        "Context information is below. \n"
-        "---------------------\n"
-        "{context}"
-        "\n---------------------\n"
-        "answer the question: {question}\n"
+class QueryTemplates:
+    CONTEXT_QUESTION__DEFAULT = PromptTemplate(
+        template=(
+            "Context information is below. \n"
+            "---------------------\n"
+            "{context}"
+            "\n---------------------\n"
+            "answer the question: {question}\n"
+        ),
+        input_variables=["context", "question"],
+        template_format="f-string",
     )
-    CONTEXT_QUESTION__CONTEXT_ONLY = (
-        "Context information is below. \n"
-        "---------------------\n"
-        "{context}"
-        "\n---------------------\n"
-        "Given the context information and not prior knowledge, "
-        "answer the question: {question}\n"
-    )
-
-
-class DescriptionTemplates(str, enum.Enum):
-    USER_AI__DEFAULT = (
-        "The following is a friendly conversation between a {user} and an {ai}. "
-        "The {ai} is talkative and provides lots of specific details from its context. "
-        "If the {ai} does not know the answer to a question, it truthfully says it does not know.\n\n"
-        "Current conversation:\n\n"
-    )
-
-    USER_AI__SHORT = (
-        "A chat between a curious human and an artificial intelligence assistant. "
-        "The assistant gives helpful, detailed, and polite answers to the human's questions."
+    CONTEXT_QUESTION__CONTEXT_ONLY = PromptTemplate(
+        template=(
+            "Context information is below. \n"
+            "---------------------\n"
+            "{context}"
+            "\n---------------------\n"
+            "Given the context information and not prior knowledge, "
+            "answer the question: {question}\n"
+        ),
+        input_variables=["context", "question"],
+        template_format="f-string",
     )
 
 
-class ChatTurnTemplates(str, enum.Enum):
-    ROLE_CONTENT_1 = "### {role}: {content}\n"
+class DescriptionTemplates:
+    USER_AI__DEFAULT: PromptTemplate = PromptTemplate(
+        template=(
+            "The following is a friendly conversation between a {user} and an {ai}. "
+            "The {ai} is talkative and provides lots of specific details from its context. "
+            "If the {ai} does not know the answer to a question, it truthfully says it does not know.\n\n"
+            "Current conversation:\n\n"
+        ),
+        input_variables=["user", "ai"],
+        template_format="f-string",
+    )
+
+    USER_AI__SHORT: PromptTemplate = PromptTemplate(
+        template=(
+            "A chat between a curious human and an artificial intelligence assistant. "
+            "The assistant gives helpful, detailed, and polite answers to the human's questions."
+        ),
+        input_variables=[],
+    )
+
+    USER_AI__GAME: PromptTemplate = PromptTemplate(
+        template=(
+            "Make Narrator perform as a text based adventure game with Player as Narrator's u"
+            "ser input. Make Narrator describe the scene, scenario, actions of characters, re"
+            "actions of characters to the player's actions, and potential consequences of the"
+            "ir actions and Player's actions when relevant with visually descriptive, detaile"
+            "d, and long storytelling. Allow characters and Player to converse to immerse Pla"
+            "yer in a rich narrative driven story. When Player encounters a new character, Na"
+            "rrator will name the new character and describe their behavior and appearance. N"
+            "arrator will internally determine their underlying motivations and weave it into"
+            " the story where possible."
+        ),
+        input_variables=[],
+    )
 
 
-class SummarizationTemplates(enum.Enum):
-    TEXT__MARKUP = PromptTemplate(
+class ChatTurnTemplates:
+    ROLE_CONTENT_1: PromptTemplate = PromptTemplate(
+        template="### {role}: {content}\n",
+        input_variables=["role", "content"],
+        template_format="f-string",
+    )
+    ROLE_CONTENT_2: PromptTemplate = PromptTemplate(
+        template="### {role}:\n{content}\n",
+        input_variables=["role", "content"],
+        template_format="f-string",
+    )
+
+
+class SummarizationTemplates:
+    TEXT__MARKUP: PromptTemplate = PromptTemplate(
         template=(
             "Write a concise summary of the following text delimited by triple backquotes. "
             "Return your response in bullet points which covers the key points of the text.\n"
@@ -50,7 +88,7 @@ class SummarizationTemplates(enum.Enum):
         input_variables=["text"],
     )
 
-    TEXT__CONVERSATIONAL = PromptTemplate(
+    TEXT__CONVERSATIONAL: PromptTemplate = PromptTemplate(
         template=(
             "Write a summary of the following conversations delimited by triple backquotes.\n"
             "Organize the key points of each message in the order of the conversation in a format like `ROLE: SUMMARY`.\n"
@@ -60,8 +98,23 @@ class SummarizationTemplates(enum.Enum):
     )
 
 
-class SystemPrompts(str, enum.Enum):
-    CODEX = (
+class WebSearchTemplates:
+    QUERY__DEFAULT: PromptTemplate = PromptTemplate(
+        template=(
+            "You are a Web search API bot that only outputs JSON. If you decide that you need"
+            " to search a USER'S QUESTION surrounded by the following triple backticks, you m"
+            'ust use {"query": QUERY_TO_SEARCH} in JSON format. If you don\'t need to search t'
+            'he web, output something like {"query": null}. Keep your QUERY_TO_SEARCH as a se'
+            "t of words rather than a sentence. The JSON must contain only the query.\n\nUSER'S"
+            " QUESTION\n```\n{{query}}\n```"
+        ),
+        input_variables=["query"],
+        template_format="jinja2",
+    )
+
+
+class SystemPrompts:
+    CODEX: str = (
         'Act as CODEX ("COding DEsign eXpert"), an expert coder with experience in mult'
         "iple coding languages. Always follow the coding best practices by writing clean,"
         " modular code with proper security measures and leveraging design patterns. You "
@@ -75,7 +128,7 @@ class SystemPrompts(str, enum.Enum):
         'kage manager. Start a conversation as "CODEX: Hi, what are we coding today?'
     )
 
-    REDEX = (
+    REDEX: str = (
         "compress the following text in a way that fits in a tweet (ideally) and such tha"
         "t you (GPT) can reconstruct the intention of the human who wrote text as close a"
         "s possible to the original intention. This is for yourself. It does not need to "
