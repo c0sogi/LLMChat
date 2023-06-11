@@ -765,8 +765,10 @@ class ChatCommands:
         )
         to_summarize_tokens = buffer.current_user_chat_context.total_tokens
         start: float = time()
-        summarized = await get_summarization(
-            to_summarize=conversation, to_summarize_tokens=to_summarize_tokens
+        summarized = await run_in_threadpool(
+            get_summarization,
+            to_summarize=conversation,
+            to_summarize_tokens=to_summarize_tokens,
         )
         summarized_tokens: int = len(
             shared.token_text_splitter._tokenizer.encode(summarized)
@@ -810,7 +812,6 @@ class ChatCommands:
         if query.startswith("/"):
             return query, ResponseType.REPEAT_COMMAND
 
-        k: int = 3
         if kwargs.get("translate", False):
             query = await Translator.translate(text=query, src_lang="ko", trg_lang="en")
             await SendToWebsocket.message(

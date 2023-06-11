@@ -11,7 +11,7 @@
     Enjoy the beautiful UI and rich set of customizable widgets provided by Flutter.
     - It supports both `mobile` and `PC` environments. 
     - `Markdown` is also supported, so you can use it to format your messages.
-    > ![Overall UI](app/contents/ui_demo.png)
+    > ![Overall UI](app/contents/ui_demo.gif)
 ---
 + ### Vector Embedding
     + #### **Embed Any Text**
@@ -20,6 +20,12 @@
     + #### **Upload Your PDF File**
         You can embed PDF file by clicking `Embed Document` on the bottom left. In a few seconds, text contents of PDF will be converted to vectors and embedded to Redis cache.
     > ![Upload Your PDF File](app/contents/embed_demo.png)
+---
++ ### Web Browsing
+    + #### **Duckduckgo**
+    You can use the Duckduckgo search engine to find relevant information on the web. Just activate the 'Browse' toggle button!
+        
+    > ![Browse Web](app/contents/browsing_demo.png)
 
 
 ---
@@ -31,10 +37,6 @@
     You can change your chat title by clicking the title of the chat. This will be stored until you change or delete it!
     > ![Change your chat title](app/contents/edit_title_demo.png)
 ---
-+ ### Stop generation
-    You can just stop generating text by clicking the stop button at bottom right corner.
-    > ![top generation](app/contents/stop_generation_demo.gif)
----
 
 
 ## Key Features
@@ -45,6 +47,7 @@
 - **WebSocket Connection** - `Real-time`, two-way communication with the ChatGPT, and other LLM models, with Flutter frontend webapp.
 - **Vectorstore** - Using `Redis` and `Langchain`, store and retrieve vector embeddings for similarity search. It will help AI to generate more relevant responses.
 - **Auto summarization** - Using Langchain's summarize chain, summarize the conversation and store it in the database. It will help saving a lot of tokens.
+- **Web Browsing** - Using `Duckduckgo` search engine, browse the web and find relevant information.
 - **Concurrency** - Asynchronous programming with `async`/`await` syntax for concurrency and parallelism.
 - **Security** - Token validation and authentication to keep API secure.
 - **Database** - Manage database connections and execute `MySQL` queries. Easily perform Create, Read, Update, and Delete actions, with `sqlalchemy.asyncio`

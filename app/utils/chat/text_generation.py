@@ -155,10 +155,10 @@ async def agenerate_from_openai(
                 ),  # set json for openai api request
             ) as streaming_response:
                 if not streaming_response.ok:  # if status code is not 200
-                    streaming_response.release()
                     error: Any = orjson_loads(await streaming_response.text()).get(
                         "error"
                     )
+                    streaming_response.release()
                     api_logger.error(f"OpenAI Server Error: {error}")
                     if isinstance(error, dict):
                         error_msg = str(error.get("message"))
@@ -273,7 +273,7 @@ async def agenerate_from_openai(
 #         raise ChatLengthException(msg=content_buffer)
 
 
-async def get_summarization(
+def get_summarization(
     to_summarize: str,
     to_summarize_tokens: Optional[int] = None,
 ) -> str:
@@ -287,7 +287,7 @@ async def get_summarization(
         summarize_chain = shared.stuff_summarize_chain
     else:
         summarize_chain = shared.map_reduce_summarize_chain
-    result = await summarize_chain.arun(
+    result = summarize_chain.run(
         shared.token_text_splitter.create_documents([to_summarize])
     )
     api_logger.info(f"Summarization result:\n {result}")

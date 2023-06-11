@@ -1,8 +1,10 @@
 import asyncio
 from copy import deepcopy
 from uuid import uuid4
-from app.common.config import ChatConfig
 
+from fastapi.concurrency import run_in_threadpool
+
+from app.common.config import ChatConfig
 from app.errors.chat_exceptions import (
     ChatException,
     ChatInterruptedException,
@@ -12,7 +14,7 @@ from app.errors.chat_exceptions import (
     ChatTooMuchTokenException,
 )
 from app.models.chat_models import ChatRoles, UserChatContext
-from app.models.llms import LLMModel, LlamaCppModel, OpenAIModel
+from app.models.llms import LlamaCppModel, LLMModel, OpenAIModel
 from app.utils.api.translate import Translator
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.cache_manager import CacheManager
@@ -39,7 +41,7 @@ async def summarization_task(
         user_id=user_id,
         chat_room_id=chat_room_id,
         role=role,
-        content=await get_summarization(to_summarize),
+        content=await run_in_threadpool(get_summarization, to_summarize=to_summarize),
         uuid=message_history_uuid,
     )
 
@@ -91,6 +93,7 @@ class MessageHandler:
             content=msg,
             role=ChatRoles.USER,
         )
+        # asyncio.create_task(asyncio.sleep(10))
         if (
             ChatConfig.summarize_for_chat
             and buffer.current_user_message_histories[-1].tokens

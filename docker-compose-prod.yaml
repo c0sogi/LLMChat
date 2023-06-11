@@ -109,8 +109,8 @@ services:
     volumes:
       - .:/app
     networks:
-      - reverse-proxy-public
       - api-private
+      - reverse-proxy-public
 
   vectorstore:
     image: qdrant/qdrant:latest

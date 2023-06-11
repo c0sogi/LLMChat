@@ -48,7 +48,7 @@ class Shared(metaclass=SingletonMetaClass):
         )
         self.openai_llm = ChatOpenAI(
             client=None,
-            model=ChatConfig.summarization_openai_model,
+            model=ChatConfig.summarization_openai_model,  # type: ignore
             openai_api_key=OPENAI_API_KEY,
         )
         self.map_reduce_summarize_chain = load_summarize_chain(  # type: ignore
