@@ -19,7 +19,7 @@ from app.errors.chat_exceptions import (
     ChatModelNotImplementedException,
     ChatTooMuchTokenException,
 )
-from app.models.chat_models import MessageHistory
+from app.models.chat_models import ChainStatus, MessageHistory
 from app.models.llms import LLMModel, LLMModels
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.prompts import (
@@ -28,7 +28,7 @@ from app.utils.chat.prompts import (
     message_histories_to_list,
 )
 from app.utils.logger import api_logger
-from app.viewmodels.base_models import (
+from app.models.base_models import (
     InitMessage,
     MessageToWebsocket,
     StreamProgress,
@@ -104,11 +104,11 @@ class SendToWebsocket:
                 tokens=buffer.current_user_chat_context.total_tokens
                 if send_tokens
                 else None,
-                wait_next_query=wait_next_query,
             ).json(),
             chat_room_id=buffer.current_chat_room_id,
             init=True,
             finish=False,
+            wait_next_query=wait_next_query,
         )
 
     @staticmethod
@@ -121,6 +121,7 @@ class SendToWebsocket:
         msg: Optional[str] = None,
         model_name: Optional[str] = None,
         uuid: Optional[str] = None,
+        wait_next_query: Optional[bool] = None,
     ) -> None:
         """Send whole message to websocket"""
         await websocket.send_json(  # send stream message
@@ -132,7 +133,8 @@ class SendToWebsocket:
                 init=init,
                 model_name=model_name,
                 uuid=uuid,
-            ).dict()
+                wait_next_query=wait_next_query,
+            ).dict(exclude_none=True)
         )
 
     @classmethod
@@ -154,6 +156,7 @@ class SendToWebsocket:
         is_user: bool = False,
         chunk_size: int = 1,
         model_name: Optional[str] = None,
+        wait_next_query: Optional[bool] = None,
     ) -> None:
         """Send SSE stream to websocket"""
         current_model: LLMModel = buffer.current_llm_model.value
@@ -274,6 +277,7 @@ class SendToWebsocket:
                 finish=finish,
                 is_user=is_user,
                 model_name=None,
+                wait_next_query=wait_next_query,
             )
 
         try:

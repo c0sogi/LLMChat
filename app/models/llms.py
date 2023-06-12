@@ -8,7 +8,7 @@ from app.common.config import OPENAI_API_KEY, ChatConfig
 from app.common.constants import ChatTurnTemplates, DescriptionTemplates
 
 from app.models.llm_tokenizers import BaseTokenizer, LlamaTokenizer, OpenAITokenizer
-from app.viewmodels.base_models import UserChatRoles
+from app.models.base_models import UserChatRoles
 
 
 @dataclass
@@ -339,6 +339,15 @@ class LLMModels(Enum):
         token_margin=8,
         tokenizer=LlamaTokenizer("jondurbin/airoboros-13b-gpt4"),
         model_path="./llama_models/ggml/airoboros-13b-gpt4.ggmlv3.q5_1.bin",
+        prefix_template=DescriptionTemplates.USER_AI__SHORT,
+    )
+    selfee_7b = LlamaCppModel(
+        name="selfee-7B-GGML",
+        max_total_tokens=4096,  # context tokens (n_ctx)
+        max_tokens_per_request=2048,  # The maximum number of tokens to generate.
+        token_margin=8,
+        tokenizer=LlamaTokenizer("kaist-ai/selfee-7b-delta"),
+        model_path="./llama_models/ggml/selfee-7B.ggmlv3.q4_1.bin",
         prefix_template=DescriptionTemplates.USER_AI__SHORT,
     )
 

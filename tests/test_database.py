@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import select
 from uuid import uuid4
 from app.common.config import Config
-from app.viewmodels.base_models import AddApiKey, UserToken
+from app.models.base_models import AddApiKey, UserToken
 from app.database.connection import db
 from app.database.schemas.auth import Users, ApiKeys
 from app.database.crud.api_keys import create_api_key, get_api_key_and_owner
@@ -17,8 +17,12 @@ db.start(config=Config.get(option="test"))
 async def test_apikey_idenfitication(random_user: dict[str, str]):
     user: Users = await Users.add_one(autocommit=True, refresh=True, **random_user)  # type: ignore
     additional_key_info: AddApiKey = AddApiKey(user_memo="[Testing] test_apikey_query")
-    new_api_key: ApiKeys = await create_api_key(user_id=user.id, additional_key_info=additional_key_info)
-    matched_api_key, matched_user = await get_api_key_and_owner(access_key=new_api_key.access_key)
+    new_api_key: ApiKeys = await create_api_key(
+        user_id=user.id, additional_key_info=additional_key_info
+    )
+    matched_api_key, matched_user = await get_api_key_and_owner(
+        access_key=new_api_key.access_key
+    )
     assert matched_api_key.access_key == new_api_key.access_key
     assert random_user["email"] == matched_user.email
 
@@ -27,12 +31,18 @@ async def test_apikey_idenfitication(random_user: dict[str, str]):
 async def test_api_key_validation(random_user: dict[str, str]):
     user: Users = await Users.add_one(autocommit=True, refresh=True, **random_user)  # type: ignore
     additional_key_info: AddApiKey = AddApiKey(user_memo="[Testing] test_apikey_query")
-    new_api_key: ApiKeys = await create_api_key(user_id=user.id, additional_key_info=additional_key_info)
+    new_api_key: ApiKeys = await create_api_key(
+        user_id=user.id, additional_key_info=additional_key_info
+    )
     timestamp: str = str(UTC.timestamp())
-    parsed_qs: str = parse_params(params={"key": new_api_key.access_key, "timestamp": timestamp})
+    parsed_qs: str = parse_params(
+        params={"key": new_api_key.access_key, "timestamp": timestamp}
+    )
     user_token: UserToken = await Validator.api_key(
         api_access_key=new_api_key.access_key,
-        hashed_secret=hash_params(query_params=parsed_qs, secret_key=new_api_key.secret_key),
+        hashed_secret=hash_params(
+            query_params=parsed_qs, secret_key=new_api_key.secret_key
+        ),
         query_params=parsed_qs,
         timestamp=timestamp,
     )
@@ -43,7 +53,8 @@ async def test_api_key_validation(random_user: dict[str, str]):
 async def test_crud():
     total_users: int = 4
     users: list[dict[str, str]] = [
-        {"email": str(uuid4())[:18], "password": str(uuid4())[:18]} for _ in range(total_users)
+        {"email": str(uuid4())[:18], "password": str(uuid4())[:18]}
+        for _ in range(total_users)
     ]
     user_1, user_2, user_3, user_4 = users
 
@@ -58,7 +69,9 @@ async def test_crud():
     )
 
     # R
-    result_1_stmt = select(Users).filter(Users.email.in_([user_1["email"], "UPDATED", user_3["email"]]))
+    result_1_stmt = select(Users).filter(
+        Users.email.in_([user_1["email"], "UPDATED", user_3["email"]])
+    )
     result_1 = await db.scalars__fetchall(result_1_stmt)
     assert len(result_1) == 2
     assert result_1[0].email == "UPDATED"  # type: ignore

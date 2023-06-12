@@ -1,16 +1,18 @@
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Union
+from functools import wraps
+from inspect import iscoroutinefunction
+from typing import Any, Callable, Optional, Tuple, Union
 from uuid import uuid4
 
 from orjson import dumps as orjson_dumps
 from orjson import loads as orjson_loads
-from app.common.config import DEFAULT_LLM_MODEL
 
+from app.common.config import DEFAULT_LLM_MODEL
+from app.models.base_models import UserChatRoles
 from app.models.llms import LLMModels
 from app.utils.date_utils import UTC
-from app.viewmodels.base_models import UserChatRoles
 
 
 class ChatRoles(str, Enum):
@@ -285,3 +287,48 @@ class UserChatContext:
             self.user_message_histories.pop(0)
             self.ai_message_histories.pop(0)
         return deleted_histories
+
+
+class ResponseType(str, Enum):
+    SEND_MESSAGE_AND_STOP = "send_message_and_stop"
+    SEND_MESSAGE_AND_KEEP_GOING = "send_message_and_keep_going"
+    HANDLE_USER = "handle_user"
+    HANDLE_AI = "handle_ai"
+    HANDLE_BOTH = "handle_both"
+    DO_NOTHING = "do_nothing"
+    REPEAT_COMMAND = "repeat_command"
+
+
+class command_response:
+    @staticmethod
+    def _wrapper(enum_type: ResponseType) -> Callable:
+        def decorator(func: Callable) -> Callable:
+            @wraps(func)
+            def sync_wrapper(*args: Any, **kwargs: Any) -> Tuple[Any, ResponseType]:
+                result = func(*args, **kwargs)
+                return (result, enum_type)
+
+            @wraps(func)
+            async def async_wrapper(
+                *args: Any, **kwargs: Any
+            ) -> Tuple[Any, ResponseType]:
+                result = await func(*args, **kwargs)
+                return (result, enum_type)
+
+            return async_wrapper if iscoroutinefunction(func) else sync_wrapper
+
+        return decorator
+
+    send_message_and_stop = _wrapper(ResponseType.SEND_MESSAGE_AND_STOP)
+    send_message_and_keep_going = _wrapper(ResponseType.SEND_MESSAGE_AND_KEEP_GOING)
+    handle_user = _wrapper(ResponseType.HANDLE_USER)
+    handle_ai = _wrapper(ResponseType.HANDLE_AI)
+    handle_both = _wrapper(ResponseType.HANDLE_BOTH)
+    do_nothing = _wrapper(ResponseType.DO_NOTHING)
+    repeat_command = _wrapper(ResponseType.REPEAT_COMMAND)
+
+
+class ChainStatus(str, Enum):
+    BEGIN = "begin"
+    END = "end"
+    ERROR = "error"

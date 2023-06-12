@@ -13,15 +13,15 @@ from starlette_admin.contrib.sqla.view import ModelView
 from app.database.schemas.auth import Users
 
 USER_STATUS_TYPES = [
-    ("admin", "👑Admin"),
-    ("active", "✅Active"),
-    ("deleted", "❌Deleted"),
-    ("blocked", "🚫Blocked"),
+    ("admin", "Admin"),
+    ("active", "Active"),
+    ("deleted", "Deleted"),
+    ("blocked", "Blocked"),
 ]
 API_KEY_STATUS_TYPES = [
-    ("active", "✅Active"),
-    ("deleted", "❌Deleted"),
-    ("stopped", "🚫Stopped"),
+    ("active", "Active"),
+    ("deleted", "Deleted"),
+    ("stopped", "Stopped"),
 ]
 
 

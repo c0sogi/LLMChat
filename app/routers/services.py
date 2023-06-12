@@ -25,7 +25,7 @@ from app.common.config import (
 from app.errors.api_exceptions import Responses_400
 from app.utils.api.weather import fetch_weather_data
 from app.utils.encoding_utils import encode_from_utf8
-from app.viewmodels.base_models import KakaoMsgBody, MessageOk, SendEmail
+from app.models.base_models import KakaoMsgBody, MessageOk, SendEmail
 
 router = APIRouter(prefix="/services")
 router.redirect_slashes = False

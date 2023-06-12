@@ -1,5 +1,6 @@
 import asyncio
 from copy import deepcopy
+from typing import Optional
 from uuid import uuid4
 
 from fastapi.concurrency import run_in_threadpool
@@ -9,15 +10,14 @@ from app.errors.chat_exceptions import (
     ChatException,
     ChatInterruptedException,
     ChatModelNotImplementedException,
-    ChatOtherException,
     ChatTextGenerationException,
     ChatTooMuchTokenException,
 )
 from app.models.chat_models import ChatRoles, UserChatContext
 from app.models.llms import LlamaCppModel, LLMModel, OpenAIModel
-from app.utils.api.translate import Translator
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.cache_manager import CacheManager
+from app.utils.chat.chains import Chains
 from app.utils.chat.message_manager import MessageManager
 from app.utils.chat.text_generation import (
     agenerate_from_openai,
@@ -27,7 +27,7 @@ from app.utils.chat.text_generation import (
 from app.utils.chat.websocket_manager import SendToWebsocket
 from app.utils.date_utils import UTC
 from app.utils.logger import api_logger
-from app.viewmodels.base_models import StreamProgress, SummarizedResult
+from app.models.base_models import StreamProgress, SummarizedResult
 
 
 async def summarization_task(
@@ -50,7 +50,7 @@ class MessageHandler:
     @staticmethod
     async def user(
         msg: str,
-        translate: bool,
+        translate: Optional[str],
         buffer: BufferedUserContext,
         use_tight_token_limit: bool = True,
     ) -> None:
@@ -67,14 +67,17 @@ class MessageHandler:
             )
 
         if translate:  # if user message is translated
-            msg = await Translator.translate(text=msg, src_lang="ko", trg_lang="en")
-            await SendToWebsocket.message(
-                websocket=buffer.websocket,
-                msg=f"## 번역된 질문\n\n{msg}\n\n## 생성된 답변\n\n",
-                chat_room_id=buffer.current_chat_room_id,
+            translate_chain_result: Optional[str] = await Chains.translate_chain(
+                buffer=buffer,
+                query=msg,
                 finish=False,
-                model_name=buffer.current_user_chat_context.llm_model.value.name,
+                wait_next_query=False,
+                show_result=True,
+                src_lang=translate,
+                trg_lang="en",
             )
+            if translate_chain_result is not None:
+                msg = translate_chain_result
 
         user_token: int = buffer.current_user_chat_context.get_tokens_of(msg)
         current_llm_model: LLMModel = buffer.current_llm_model.value
@@ -114,7 +117,7 @@ class MessageHandler:
             )  # =
 
     @classmethod
-    async def ai(cls, translate: bool, buffer: BufferedUserContext) -> None:
+    async def ai(cls, translate: Optional[str], buffer: BufferedUserContext) -> None:
         """Handle ai message, including text generation and translation"""
         backup_context: UserChatContext = deepcopy(buffer.current_user_chat_context)
         current_model = buffer.current_user_chat_context.llm_model.value
@@ -125,8 +128,8 @@ class MessageHandler:
                     buffer=buffer,
                     stream_func=agenerate_from_openai,
                     stream_progress=stream_progress,
-                    finish=False if translate else True,
                     model_name=current_model.name,
+                    wait_next_query=True if translate else None,
                 )
 
             elif isinstance(current_model, LlamaCppModel):
@@ -134,8 +137,8 @@ class MessageHandler:
                     buffer=buffer,
                     stream_func=generate_from_llama_cpp,
                     stream_progress=stream_progress,
-                    finish=False if translate else True,
                     model_name=current_model.name,
+                    wait_next_query=True if translate else None,
                 )
             else:
                 raise ChatModelNotImplementedException(
@@ -184,18 +187,13 @@ class MessageHandler:
             raise ChatTextGenerationException()
 
         else:
-            try:
-                if translate:  # if user message is translated
-                    translated_msg = await Translator.translate(
-                        text=stream_progress.response,
-                        src_lang="en",
-                        trg_lang="ko",
-                    )
-                    await SendToWebsocket.message(
-                        websocket=buffer.websocket,
-                        msg=f"\n\n## 번역된 답변\n\n{translated_msg}",
-                        chat_room_id=buffer.current_chat_room_id,
-                        model_name=buffer.current_user_chat_context.llm_model.value.name,
-                    )
-            except Exception:
-                raise ChatOtherException(msg="번역하는데 문제가 발생했습니다.")
+            if translate:
+                await Chains.translate_chain(
+                    buffer=buffer,
+                    query=stream_progress.response,
+                    finish=True,
+                    wait_next_query=False,
+                    show_result=True,
+                    src_lang="en",
+                    trg_lang=translate,
+                )

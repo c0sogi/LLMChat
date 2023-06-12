@@ -7,25 +7,24 @@
 
 ## **Demo**
 ---
-+ ### Chat UI
-    Enjoy the beautiful UI and rich set of customizable widgets provided by Flutter.
-    - It supports both `mobile` and `PC` environments. 
-    - `Markdown` is also supported, so you can use it to format your messages.
-    > ![Overall UI](app/contents/ui_demo.gif)
+### **Enjoy the beautiful UI and rich set of customizable widgets provided by Flutter.**
+- It supports both `mobile` and `PC` environments. 
+- `Markdown` is also supported, so you can use it to format your messages.
 ---
-+ ### Vector Embedding
-    + #### **Embed Any Text**
-        With the `/embed` command, you can store the text indefinitely in your own private vector database and query it later, anytime. If you use the `/share` command, the text is stored in a public vector database that everyone can share. Enabling `Query` toggle button or `/query` command helps the AI generate contextualized answers by searching for text similarities in the public and private databases. This solves one of the biggest limitations of language models: **memory**. 
+### Vector Embedding
++ #### **Embed Any Text**
+    With the `/embed` command, you can store the text indefinitely in your own private vector database and query it later, anytime. If you use the `/share` command, the text is stored in a public vector database that everyone can share. Enabling `Query` toggle button or `/query` command helps the AI generate contextualized answers by searching for text similarities in the public and private databases. This solves one of the biggest limitations of language models: **memory**. 
 
-    + #### **Upload Your PDF File**
-        You can embed PDF file by clicking `Embed Document` on the bottom left. In a few seconds, text contents of PDF will be converted to vectors and embedded to Redis cache.
-    > ![Upload Your PDF File](app/contents/embed_demo.png)
++ #### **Upload Your PDF File**
+    You can embed PDF file by clicking `Embed Document` on the bottom left. In a few seconds, text contents of PDF will be converted to vectors and embedded to Redis cache.
+> ![Upload Your PDF File](app/contents/upload_demo.gif)
+    
 ---
-+ ### Web Browsing
-    + #### **Duckduckgo**
+### Web Browsing
++ #### **Duckduckgo**
     You can use the Duckduckgo search engine to find relevant information on the web. Just activate the 'Browse' toggle button!
         
-    > ![Browse Web](app/contents/browsing_demo.png)
+> ![Browse Web](app/contents/browsing_demo.gif)
 
 
 ---
@@ -196,7 +195,7 @@ When a user enters a command in the chat window like `/embed <text_to_embed>`, t
 
 ```python
 @staticmethod
-@CommandResponse.send_message_and_stop
+@command_response.send_message_and_stop
 async def embed(text_to_embed: str, /, buffer: BufferedUserContext) -> str:
     """Embed the text and save its vectors in the redis vectorstore.\n
     /embed <text_to_embed>"""
@@ -230,7 +229,7 @@ async def embed_file_to_vectorstore(cls, file: bytes, filename: str, collection_
 
 In the `commands.py` file, there are several important components:
 
-- `CommandResponse`: This class is used to set a decorator on the command method to specify the next action. It helps to define various response types, such as sending a message and stopping, sending a message and continuing, handling user input, handling AI responses, and more.
+- `command_response`: This class is used to set a decorator on the command method to specify the next action. It helps to define various response types, such as sending a message and stopping, sending a message and continuing, handling user input, handling AI responses, and more.
 - `command_handler`: This function is responsible for performing a command callback method based on the text entered by the user.
 - `arguments_provider`: This function automatically supplies the arguments required by the command method based on the annotation type of the command method.
 

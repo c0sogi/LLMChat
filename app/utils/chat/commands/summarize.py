@@ -1,0 +1,42 @@
+from time import time
+from typing import Optional
+
+from fastapi.concurrency import run_in_threadpool
+
+from app.shared import Shared
+from app.utils.chat.buffer import BufferedUserContext
+from app.utils.chat.prompts import message_histories_to_str
+from app.utils.chat.text_generation import get_summarization
+
+
+async def summarize(to_summarize: Optional[str], /, buffer: BufferedUserContext) -> str:
+    shared = Shared()
+    if to_summarize is None:
+        to_summarize = message_histories_to_str(
+            user_chat_roles=buffer.current_user_chat_roles,
+            user_message_histories=buffer.current_user_message_histories,
+            ai_message_histories=buffer.current_ai_message_histories,
+            system_message_histories=buffer.current_system_message_histories,
+        )
+    to_summarize_tokens = buffer.current_user_chat_context.total_tokens
+    start: float = time()
+    summarized = await run_in_threadpool(
+        get_summarization,
+        to_summarize=to_summarize,
+        to_summarize_tokens=to_summarize_tokens,
+    )
+    summarized_tokens: int = len(
+        shared.token_text_splitter._tokenizer.encode(summarized)
+    )
+    end: float = time()
+    return "\n".join(
+        (
+            "# Summarization complete!",
+            f"- original tokens: {buffer.current_user_chat_context.total_tokens}",
+            f"- summarized tokens: {summarized_tokens}",
+            f"- summarization time: {end-start}s",
+            "```",
+            summarized,
+            "```",
+        )
+    )

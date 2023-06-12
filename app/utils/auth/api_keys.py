@@ -2,7 +2,7 @@ from string import ascii_letters, digits
 from secrets import choice
 from uuid import uuid4
 from app.database.schemas.auth import ApiKeys
-from app.viewmodels.base_models import AddApiKey
+from app.models.base_models import AddApiKey
 
 
 def generate_new_api_key(user_id: int, additional_key_info: AddApiKey) -> ApiKeys:

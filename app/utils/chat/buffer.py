@@ -5,8 +5,14 @@ from typing import Any, Awaitable, Callable, Optional
 from fastapi import WebSocket
 
 from app.database.schemas.auth import Users
-from app.models.chat_models import ChatRoles, MessageHistory, UserChatContext, UserChatProfile, LLMModels
-from app.viewmodels.base_models import UserChatRoles
+from app.models.chat_models import (
+    ChatRoles,
+    MessageHistory,
+    UserChatContext,
+    UserChatProfile,
+    LLMModels,
+)
+from app.models.base_models import UserChatRoles
 
 
 class ContextList:
@@ -46,6 +52,7 @@ class BufferedUserContext:
     done: asyncio.Event = field(default_factory=asyncio.Event)
     task_list: list[asyncio.Task[Any]] = field(default_factory=list)  # =
     last_user_message: Optional[str] = None
+    optional_info: dict = field(default_factory=dict)
     _sorted_ctxts: ContextList = field(init=False)
     _current_ctxt: UserChatContext = field(init=False)
 
@@ -59,7 +66,9 @@ class BufferedUserContext:
         )
         self._current_ctxt = await self._sorted_ctxts.at(0)
 
-    def insert_context(self, user_chat_context: UserChatContext, index: int = 0) -> None:
+    def insert_context(
+        self, user_chat_context: UserChatContext, index: int = 0
+    ) -> None:
         self._sorted_ctxts.insert(index=index, value=user_chat_context)
 
     def delete_context(self, index: int) -> None:
@@ -101,12 +110,17 @@ class BufferedUserContext:
 
     @property
     def sorted_chat_room_ids(self) -> list[str]:
-        return [context_or_profile.chat_room_id for context_or_profile in self._sorted_ctxts]
+        return [
+            context_or_profile.chat_room_id for context_or_profile in self._sorted_ctxts
+        ]
 
     @property
     def sorted_chat_rooms(self) -> list[dict[str, str]]:
         return [
-            {"chat_room_id": context_or_profile.chat_room_id, "chat_room_name": context_or_profile.chat_room_name}
+            {
+                "chat_room_id": context_or_profile.chat_room_id,
+                "chat_room_name": context_or_profile.chat_room_name,
+            }
             for context_or_profile in self._sorted_ctxts
         ]
 

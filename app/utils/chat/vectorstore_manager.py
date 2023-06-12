@@ -174,12 +174,15 @@ class VectorStoreManager:
             docs: list[str] = await VectorStoreManager.create_documents(
                 text, collection_name=collection_name
             )
+            doc_sample_without_triple_backticks: str = docs[0][:100].replace(
+                "```", "'''"
+            )
             return (
-                f"\n```lottie-ok\nSuccessfully embedded documents. You uploaded file begins with\n```\n\n"
-                f"```\n{docs[0][:100]}\n```\n"
+                f"\n```lottie-ok\n### Successfully Embedded\n"
+                f'`"{doc_sample_without_triple_backticks}"`\n```\n'
             )
         except Exception:
-            return "\n```lottie-fail\nCan't embed this type of file. Try another file.\n```\n"
+            return "\n```lottie-fail\n### Can't embed this type of file\nTry another file.\n```\n"
 
     @staticmethod
     async def get_all_collection_names() -> list[str]:

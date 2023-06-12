@@ -1,12 +1,14 @@
 # flake8: noqa
 
+from re import compile, Pattern
+
 from langchain import PromptTemplate
 
 
 class QueryTemplates:
     CONTEXT_QUESTION__DEFAULT = PromptTemplate(
         template=(
-            "Context information is below. \n"
+            "Context information is below. You can utilize this information to answer the question.\n"
             "---------------------\n"
             "{context}"
             "\n---------------------\n"
@@ -98,18 +100,42 @@ class SummarizationTemplates:
     )
 
 
-class WebSearchTemplates:
-    QUERY__DEFAULT: PromptTemplate = PromptTemplate(
+class QueryBasedSearchTemplates:
+    QUERY__JSONIFY_WEB_BROWSING: PromptTemplate = PromptTemplate(
         template=(
-            "You are a Web search API bot that only outputs JSON. If you decide that you need"
-            " to search a USER'S QUESTION surrounded by the following triple backticks, you m"
-            'ust use {"query": QUERY_TO_SEARCH} in JSON format. If you don\'t need to search t'
-            'he web, output something like {"query": null}. Keep your QUERY_TO_SEARCH as a se'
-            "t of words rather than a sentence. The JSON must contain only the query.\n\nUSER'S"
-            " QUESTION\n```\n{{query}}\n```"
+            "You are a Web search API bot that performs a web search for a user's question. F"
+            "ollow the rules below to output a response.\n- Output the query to search the web"
+            ' for USER\'S QUESTION in the form {"query": QUERY_TO_SEARCH}.\n- QUERY_TO_SEARCH i'
+            "s a set of words within 10 words.\n- Your response must be in JSON format, starti"
+            "ng with { and ending with }.\n- Output a generalized query to return sufficiently"
+            " relevant results when searching the web.\n- If a suitable search query does not "
+            'exist, output {"query": null} - don\'t be afraid to output null!\n\n'
+            "```USER'S QUESTION\n{{query}}\n```"
         ),
         input_variables=["query"],
         template_format="jinja2",
+    )
+    QUERY__JSONIFY_VECTORSTORE: PromptTemplate = PromptTemplate(
+        template=(
+            "You are a Search API bot performing a vector similarity-based search for a user'"
+            "s question. Follow the rules below to output a response.\n- Output the query to s"
+            'earch the web for USER\'S QUESTION in a format like {"query": QUERY_TO_SEARCH}.\n-'
+            " QUERY_TO_SEARCH creates a hypothetical answer to facilitate searching in the Ve"
+            "ctor database.\n- Your response must be in JSON format, starting with { and endin"
+            'g with }.\n- If a suitable search query does not exist, output {"query": NULL} - '
+            "don't be afraid to output NULL!"
+            "```USER'S QUESTION\n{{query}}\n```"
+        ),
+        input_variables=["query"],
+        template_format="jinja2",
+    )
+    QUERY__SUMMARIZE_QUERY: PromptTemplate = PromptTemplate(
+        template=(
+            "Summarize the user's question in 10 words or less.\n\n"
+            " ```USER'S QUESTION\n{query}\n```"
+        ),
+        input_variables=["query"],
+        template_format="f-string",
     )
 
 
@@ -342,6 +368,7 @@ CONVERSATION_EXAMPLES: list[dict[str, str]] = [
     },
 ]
 
+JSON_PATTERN: Pattern = compile(r"\{.*\}")
 
 if __name__ == "__main__":
 

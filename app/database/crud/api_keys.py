@@ -1,6 +1,6 @@
 from typing import Optional, Tuple
 from sqlalchemy import select, func, exists
-from app.viewmodels.base_models import AddApiKey
+from app.models.base_models import AddApiKey
 from app.errors.api_exceptions import (
     Responses_400,
     Responses_404,
@@ -24,9 +24,15 @@ async def create_api_key(
         if api_key_count is not None and api_key_count >= MAX_API_KEY:
             raise Responses_400.max_key_count_exceed
         while True:
-            new_api_key: ApiKeys = generate_new_api_key(user_id=user_id, additional_key_info=additional_key_info)
-            is_api_key_duplicate_stmt = select(exists().where(ApiKeys.access_key == new_api_key.access_key))
-            is_api_key_duplicate: bool | None = await transaction.scalar(is_api_key_duplicate_stmt)
+            new_api_key: ApiKeys = generate_new_api_key(
+                user_id=user_id, additional_key_info=additional_key_info
+            )
+            is_api_key_duplicate_stmt = select(
+                exists().where(ApiKeys.access_key == new_api_key.access_key)
+            )
+            is_api_key_duplicate: bool | None = await transaction.scalar(
+                is_api_key_duplicate_stmt
+            )
             if not is_api_key_duplicate:
                 break
         transaction.add(new_api_key)
@@ -43,7 +49,9 @@ async def get_api_key_owner(access_key: str) -> Users:
     if db.session is None:
         raise Responses_500.database_not_initialized
     async with db.session() as transaction:
-        matched_api_key: Optional[ApiKeys] = await transaction.scalar(select(ApiKeys).filter_by(access_key=access_key))
+        matched_api_key: Optional[ApiKeys] = await transaction.scalar(
+            select(ApiKeys).filter_by(access_key=access_key)
+        )
         if matched_api_key is None:
             raise Responses_404.not_found_access_key
         owner: Users = await Users.first_filtered_by(id=matched_api_key.user_id)  # type: ignore
@@ -56,10 +64,14 @@ async def get_api_key_and_owner(access_key: str) -> Tuple[ApiKeys, Users]:
     if db.session is None:
         raise Responses_500.database_not_initialized
     async with db.session() as transaction:
-        matched_api_key: Optional[ApiKeys] = await transaction.scalar(select(ApiKeys).filter_by(access_key=access_key))
+        matched_api_key: Optional[ApiKeys] = await transaction.scalar(
+            select(ApiKeys).filter_by(access_key=access_key)
+        )
         if matched_api_key is None:
             raise Responses_404.not_found_access_key
-        api_key_owner: Optional[Users] = await transaction.scalar(select(Users).filter_by(id=matched_api_key.user_id))
+        api_key_owner: Optional[Users] = await transaction.scalar(
+            select(Users).filter_by(id=matched_api_key.user_id)
+        )
         if api_key_owner is None:
             raise Responses_404.not_found_user
         return matched_api_key, api_key_owner
@@ -94,7 +106,9 @@ async def delete_api_key(
         raise Responses_500.database_not_initialized
     async with db.session() as transaction:
         matched_api_key: Optional[ApiKeys] = await transaction.scalar(
-            select(ApiKeys).filter_by(id=access_key_id, user_id=user_id, access_key=access_key)
+            select(ApiKeys).filter_by(
+                id=access_key_id, user_id=user_id, access_key=access_key
+            )
         )
         if matched_api_key is None:
             raise Responses_404.not_found_api_key

@@ -93,6 +93,7 @@ services:
       - "8000"
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=reverse-proxy-public"
       - "traefik.http.routers.api.rule=HostRegexp(`${HOST_MAIN}`, `{subdomain:[a-z]+}.${HOST_MAIN}`, `${HOST_IP}`)"
       - "traefik.http.routers.api.entrypoints=websecure"
       - "traefik.http.services.api.loadbalancer.server.scheme=http"

@@ -1,6 +1,8 @@
-from typing import Callable
+from typing import Callable, Optional
 import httpx
 import orjson
+from app.utils.chat.buffer import BufferedUserContext
+from app.utils.chat.websocket_manager import SendToWebsocket
 from app.utils.logger import api_logger
 from app.common.config import (
     GOOGLE_TRANSLATE_API_KEY,
@@ -19,14 +21,24 @@ class Translator:
         {"function": "custom_translate_api", "args": {"api_url": CUSTOM_TRANSLATE_URL}},
         {"function": "deepl_via_rapid_api", "args": {"api_key": RAPID_API_KEY}},
         {"function": "google", "args": {"api_key": GOOGLE_TRANSLATE_API_KEY}},
-        {"function": "papago", "args": {"client_id": PAPAGO_CLIENT_ID, "client_secret": PAPAGO_CLIENT_SECRET}},
+        {
+            "function": "papago",
+            "args": {
+                "client_id": PAPAGO_CLIENT_ID,
+                "client_secret": PAPAGO_CLIENT_SECRET,
+            },
+        },
     ]
 
     @classmethod
-    async def translate(cls, text: str, src_lang: str, trg_lang: str) -> str:
+    async def translate(
+        cls, text: str, src_lang: str, trg_lang: str = "en"
+    ) -> str:
         if cls.cached_function is not None:
             try:
-                api_logger.info(f"Using cached translate function: {cls.cached_function}")
+                api_logger.info(
+                    f"Using cached translate function: {cls.cached_function}"
+                )
                 return await cls.cached_function(
                     text=text,
                     src_lang=src_lang,
@@ -53,10 +65,11 @@ class Translator:
                     cls.cached_args = args
                     return result
                 except Exception:
-                    api_logger.error(f"Failed to translate using {cfg['function']}", exc_info=True)
+                    api_logger.error(
+                        f"Failed to translate using {cfg['function']}", exc_info=True
+                    )
                     pass
-
-        return "번역 API가 설정되지 않았습니다."
+        raise RuntimeError("Failed to translate")
 
     @staticmethod
     async def papago(
@@ -86,7 +99,9 @@ class Translator:
         api_key: str,
         timeout: int = 10,
     ) -> str:
-        api_url = f"https://translation.googleapis.com/language/translate/v2?key={api_key}"
+        api_url = (
+            f"https://translation.googleapis.com/language/translate/v2?key={api_key}"
+        )
         data = {"q": text, "source": src_lang, "target": trg_lang, "format": "text"}
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(api_url, data=data)
@@ -107,7 +122,9 @@ class Translator:
             "X-RapidAPI-Key": api_key,
             "X-RapidAPI-Host": api_host,
         }
-        content = orjson.dumps({"text": text, "source": src_lang.upper(), "target": trg_lang.upper()})
+        content = orjson.dumps(
+            {"text": text, "source": src_lang.upper(), "target": trg_lang.upper()}
+        )
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(api_url, headers=headers, content=content)
         return orjson.loads(response.text)["text"]
@@ -123,7 +140,9 @@ class Translator:
         headers = {
             "Content-Type": "application/json",
         }
-        content = orjson.dumps({"text": text, "source_lang": src_lang, "target_lang": trg_lang})
+        content = orjson.dumps(
+            {"text": text, "target_lang": trg_lang}
+        )  # source_lang is excluded because we'll use auto-detection
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(api_url, headers=headers, content=content)
         return orjson.loads(response.text)["data"]

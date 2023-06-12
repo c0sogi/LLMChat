@@ -10,7 +10,7 @@ from langchain import PromptTemplate
 from app.common.constants import ChatTurnTemplates
 from app.errors.chat_exceptions import ChatTooMuchTokenException
 from app.models.chat_models import MessageHistory
-from app.viewmodels.base_models import (
+from app.models.base_models import (
     OpenAIChatMessage,
     SendInitToWebsocket,
     UserChatRoles,
@@ -56,7 +56,7 @@ def message_histories_to_list(
     suffix_prompt: Optional[str] = None,
     suffix_prompt_tokens: int = 0,
 ) -> list[Any]:
-    message_histories: list[dict[str, str]] = []
+    message_histories: list[Any] = []
     if prefix_prompt is not None:
         message_histories.append(
             parse_method(

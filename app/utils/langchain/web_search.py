@@ -5,7 +5,6 @@ import aiohttp
 import requests
 from langchain.utils import get_from_dict_or_env
 from pydantic import BaseModel, Extra, Field, PrivateAttr, root_validator, validator
-
 from app.utils.api.duckduckgo import DDGS
 
 
@@ -381,7 +380,7 @@ class DuckDuckGoSearchAPIWrapper(BaseModel):
     region: str = "wt-wt"
     safesearch: str = "moderate"
     time: Optional[str] = "y"
-    max_results: int = 5
+    max_results: int = 10
 
     class Config:
         """Configuration for this pydantic object."""
@@ -415,16 +414,15 @@ class DuckDuckGoSearchAPIWrapper(BaseModel):
         return results
 
     @staticmethod
-    def _get_result_strings(results: List[Dict]) -> List[str]:
-        template = """# Title: {title}
-        # Body: {snippet}
-        # Link: {link}"""
-        print(results)
+    def _get_formatted_results(results: List[Dict]) -> List[str]:
         return [
-            template.format(
-                title=result["title"], snippet=result["snippet"], link=result["link"]
+            "# [{idx}] {link}\n```{title}\n{snippet}\n```".format(
+                idx=idx,
+                title=result["title"],
+                snippet=result["snippet"],
+                link=result["link"],
             )
-            for result in results
+            for idx, result in enumerate(results, start=1)
         ]
 
     def get_snippets(self, query: str) -> List[str]:
@@ -443,8 +441,7 @@ class DuckDuckGoSearchAPIWrapper(BaseModel):
         return snippets
 
     def run(self, query: str) -> str:
-        results = self.results(query)
-        return "\n\n".join(self._get_result_strings(results))
+        return "\n\n".join(self._get_formatted_results(self.results(query)))
 
     def results(
         self, query: str, num_results: Optional[int] = None

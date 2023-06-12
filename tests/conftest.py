@@ -12,7 +12,7 @@ from app.database.schemas.auth import Users
 from app.common.app_settings import create_app
 from app.common.config import Config, LoggingConfig
 from app.utils.logger import CustomLogger
-from app.viewmodels.base_models import UserToken
+from app.models.base_models import UserToken
 from app.utils.chat.cache_manager import CacheManager, cache
 
 
@@ -29,7 +29,9 @@ def cache_manager():
 
 @pytest.fixture(scope="session")
 def test_logger():
-    return CustomLogger(name="PyTest", logging_config=LoggingConfig(file_log_name="./logs/test.log"))
+    return CustomLogger(
+        name="PyTest", logging_config=LoggingConfig(file_log_name="./logs/test.log")
+    )
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -55,7 +57,9 @@ def base_websocket_url() -> str:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def async_client(app: FastAPI, base_http_url: str) -> AsyncGenerator[httpx.AsyncClient, None]:
+async def async_client(
+    app: FastAPI, base_http_url: str
+) -> AsyncGenerator[httpx.AsyncClient, None]:
     async with httpx.AsyncClient(app=app, base_url=base_http_url) as ac:
         yield ac
 

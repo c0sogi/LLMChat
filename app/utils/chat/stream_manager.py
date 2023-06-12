@@ -26,7 +26,7 @@ from app.utils.chat.message_manager import MessageManager
 from app.utils.chat.vectorstore_manager import VectorStoreManager
 from app.utils.chat.websocket_manager import SendToWebsocket
 from app.utils.logger import api_logger
-from app.viewmodels.base_models import MessageFromWebsocket, SummarizedResult
+from app.models.base_models import MessageFromWebsocket, SummarizedResult
 
 
 async def initialize_callback(user_id: str) -> list[UserChatProfile]:

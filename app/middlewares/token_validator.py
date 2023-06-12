@@ -16,7 +16,7 @@ from app.errors.api_exceptions import (
     InternalServerError,
     exception_handler,
 )
-from app.viewmodels.base_models import UserToken
+from app.models.base_models import UserToken
 from app.utils.auth.token import token_decode
 from app.utils.date_utils import UTC
 from app.utils.logger import api_logger
