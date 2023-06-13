@@ -9,12 +9,12 @@ from langchain.chains.combine_documents.stuff import StuffDocumentsChain
 from langchain.chains.summarize import load_summarize_chain, stuff_prompt
 from langchain.chat_models import ChatOpenAI
 from langchain.embeddings import OpenAIEmbeddings
-from langchain.text_splitter import TokenTextSplitter
 from langchain.utilities import SearxSearchWrapper
 
 from app.common.config import OPENAI_API_KEY, ChatConfig, SingletonMetaClass, config
 from app.common.constants import SummarizationTemplates
 from app.utils.langchain.web_search import DuckDuckGoSearchAPIWrapper
+from app.utils.langchain.token_text_splitter import CustomTokenTextSplitter
 
 
 @dataclass
@@ -27,12 +27,8 @@ class Shared(metaclass=SingletonMetaClass):
     openai_llm: ChatOpenAI = field(init=False)
     map_reduce_summarize_chain: MapReduceDocumentsChain = field(init=False)
     stuff_summarize_chain: StuffDocumentsChain = field(init=False)
-    token_text_splitter: TokenTextSplitter = field(
-        default_factory=lambda: TokenTextSplitter(
-            encoding_name="cl100k_base",
-            chunk_size=ChatConfig.summarization_token_limit,
-            chunk_overlap=ChatConfig.summarization_token_overlap,
-        )
+    token_text_splitter: CustomTokenTextSplitter = field(
+        default_factory=lambda: CustomTokenTextSplitter(encoding_name="cl100k_base")
     )
     searx: SearxSearchWrapper = field(
         default_factory=lambda: SearxSearchWrapper(searx_host="http://localhost:8080")

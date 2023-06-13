@@ -414,16 +414,12 @@ class DuckDuckGoSearchAPIWrapper(BaseModel):
         return results
 
     @staticmethod
-    def _get_formatted_results(results: List[Dict]) -> List[str]:
-        return [
-            "# [{idx}] {link}\n```{title}\n{snippet}\n```".format(
-                idx=idx,
-                title=result["title"],
-                snippet=result["snippet"],
-                link=result["link"],
-            )
-            for idx, result in enumerate(results, start=1)
-        ]
+    def _get_formatted_result(result: Dict[str, str]) -> str:
+        return "# [{link}]\n```{title}\n{snippet}\n```".format(
+            title=result["title"],
+            snippet=result["snippet"],
+            link=result["link"],
+        )
 
     def get_snippets(self, query: str) -> List[str]:
         """Run query through DuckDuckGo and return concatenated results."""
@@ -441,7 +437,16 @@ class DuckDuckGoSearchAPIWrapper(BaseModel):
         return snippets
 
     def run(self, query: str) -> str:
-        return "\n\n".join(self._get_formatted_results(self.results(query)))
+        return "\n\n".join(self.formatted_results(query))
+
+    def formatted_results(self, query: str) -> List[str]:
+        return [self._get_formatted_result(result) for result in self.results(query)]
+
+    def formatted_results_with_link(self, query: str) -> Dict[str, str]:
+        return {
+            result["link"]: self._get_formatted_result(result)
+            for result in self.results(query)
+        }
 
     def results(
         self, query: str, num_results: Optional[int] = None

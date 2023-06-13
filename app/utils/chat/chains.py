@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from fastapi.concurrency import run_in_threadpool
 from langchain import PromptTemplate
@@ -74,7 +74,7 @@ class Chains:
             finish=False,
         )
         try:
-            query_to_search: Optional[str] = await cls._get_query_to_search(
+            query_to_search: Optional[str] = await cls._aget_query_to_search(
                 query,
                 query_template=QueryBasedSearchTemplates.QUERY__JSONIFY_WEB_BROWSING,
             )
@@ -126,7 +126,7 @@ class Chains:
             finish=False,
         )
         try:
-            query_to_search: Optional[str] = await cls._get_query_to_search(
+            query_to_search: Optional[str] = await cls._aget_query_to_search(
                 query,
                 query_template=QueryBasedSearchTemplates.QUERY__JSONIFY_VECTORSTORE,
             )
@@ -179,16 +179,33 @@ class Chains:
             )
 
     @staticmethod
-    async def _get_query_to_search(
+    async def _aget_query_to_search(
         query: str, query_template: PromptTemplate
     ) -> Optional[str]:
         try:
             json_query = JSON_PATTERN.search(
-                await Shared().openai_llm.apredict(query_template.format(query=query))
+                await Shared().openai_llm.apredict(query_template.format(query=query))  # type: ignore
             )
             if json_query is None:
                 raise ValueError("Result is None")
             else:
                 return orjson_loads(json_query.group())["query"]
+        except Exception:
+            return
+
+    @staticmethod
+    async def aget_json(
+        query_template: PromptTemplate, **kwargs_to_format: str
+    ) -> Optional[Any]:
+        try:
+            json_query = JSON_PATTERN.search(
+                await Shared().openai_llm.apredict(
+                    query_template.format(**kwargs_to_format)
+                )
+            )
+            if json_query is None:
+                raise ValueError("Result is None")
+            else:
+                return orjson_loads(json_query.group())
         except Exception:
             return

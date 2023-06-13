@@ -11,10 +11,6 @@ networks:
     driver: bridge
     ipam:
       driver: default
-  api-private:
-    driver: bridge
-    ipam:
-      driver: default
 
 services:
   proxy:
@@ -110,7 +106,6 @@ services:
     volumes:
       - .:/app
     networks:
-      - api-private
       - reverse-proxy-public
 
   vectorstore:
@@ -119,7 +114,7 @@ services:
     volumes:
       - qdrant:/qdrant/storage
     networks:
-      - api-private
+      - reverse-proxy-public
   # search-api:
   #   image: searxng/searxng:latest
   #   restart: always

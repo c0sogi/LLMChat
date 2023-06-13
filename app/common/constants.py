@@ -105,7 +105,7 @@ class QueryBasedSearchTemplates:
         template=(
             "You are a Web search API bot that performs a web search for a user's question. F"
             "ollow the rules below to output a response.\n- Output the query to search the web"
-            ' for USER\'S QUESTION in the form {"query": QUERY_TO_SEARCH}.\n- QUERY_TO_SEARCH i'
+            ' for USER\'S QUESTION in JSON format like {"query": QUERY_TO_SEARCH}.\n- QUERY_TO_SEARCH i'
             "s a set of words within 10 words.\n- Your response must be in JSON format, starti"
             "ng with { and ending with }.\n- Output a generalized query to return sufficiently"
             " relevant results when searching the web.\n- If a suitable search query does not "
@@ -119,7 +119,7 @@ class QueryBasedSearchTemplates:
         template=(
             "You are a Search API bot performing a vector similarity-based search for a user'"
             "s question. Follow the rules below to output a response.\n- Output the query to s"
-            'earch the web for USER\'S QUESTION in a format like {"query": QUERY_TO_SEARCH}.\n-'
+            'earch the web for USER\'S QUESTION in JSON format like {"query": QUERY_TO_SEARCH}.\n-'
             " QUERY_TO_SEARCH creates a hypothetical answer to facilitate searching in the Ve"
             "ctor database.\n- Your response must be in JSON format, starting with { and endin"
             'g with }.\n- If a suitable search query does not exist, output {"query": NULL} - '

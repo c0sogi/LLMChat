@@ -265,6 +265,7 @@ class ChatConfig:
     summarization_token_overlap: int = (
         EMBEDDING_TOKEN_CHUNK_OVERLAP  # number of tokens to overlap between chunks
     )
+    summarization_chunk_size: int = 2048
     global_prefix: Optional[str] = GLOBAL_PREFIX  # prefix for global chat
     global_suffix: Optional[str] = GLOBAL_SUFFIX  # suffix for global chat
 
