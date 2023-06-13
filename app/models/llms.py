@@ -343,8 +343,8 @@ class LLMModels(Enum):
     )
     selfee_7b = LlamaCppModel(
         name="selfee-7B-GGML",
-        max_total_tokens=4096,  # context tokens (n_ctx)
-        max_tokens_per_request=2048,  # The maximum number of tokens to generate.
+        max_total_tokens=2048,  # context tokens (n_ctx)
+        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
         tokenizer=LlamaTokenizer("kaist-ai/selfee-7b-delta"),
         model_path="./llama_models/ggml/selfee-7B.ggmlv3.q4_1.bin",

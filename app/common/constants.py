@@ -100,8 +100,8 @@ class SummarizationTemplates:
     )
 
 
-class QueryBasedSearchTemplates:
-    QUERY__JSONIFY_WEB_BROWSING: PromptTemplate = PromptTemplate(
+class JsonTemplates:
+    QUERY__GET_QUERY_FOR_WEB_BROWSING: PromptTemplate = PromptTemplate(
         template=(
             "You are a Web search API bot that performs a web search for a user's question. F"
             "ollow the rules below to output a response.\n- Output the query to search the web"
@@ -111,11 +111,12 @@ class QueryBasedSearchTemplates:
             " relevant results when searching the web.\n- If a suitable search query does not "
             'exist, output {"query": null} - don\'t be afraid to output null!\n\n'
             "```USER'S QUESTION\n{{query}}\n```"
+            "\nYOUR JSON RESPONSE:\n"
         ),
         input_variables=["query"],
         template_format="jinja2",
     )
-    QUERY__JSONIFY_VECTORSTORE: PromptTemplate = PromptTemplate(
+    QUERY__GET_QUERY_FOR_VECTORSTORE: PromptTemplate = PromptTemplate(
         template=(
             "You are a Search API bot performing a vector similarity-based search for a user'"
             "s question. Follow the rules below to output a response.\n- Output the query to s"
@@ -125,17 +126,40 @@ class QueryBasedSearchTemplates:
             'g with }.\n- If a suitable search query does not exist, output {"query": NULL} - '
             "don't be afraid to output NULL!"
             "```USER'S QUESTION\n{{query}}\n```"
+            "\nYOUR JSON RESPONSE:\n"
         ),
         input_variables=["query"],
         template_format="jinja2",
     )
-    QUERY__SUMMARIZE_QUERY: PromptTemplate = PromptTemplate(
+    CONTEXT_QUERY__CLICK_LINK_OR_FINISH: PromptTemplate = PromptTemplate(
         template=(
-            "Summarize the user's question in 10 words or less.\n\n"
-            " ```USER'S QUESTION\n{query}\n```"
+            "You are a JSON response bot that determines if the provided CONTEXT is sufficient to "
+            "answer the user's question. Follow the rules below to output a response.\n- Outpu"
+            't your next action to do in JSON form like {"action": YOUR_NEXT_ACTION, "link": '
+            'LINK_TO_CLICK}.\n- "action" should be one of "click", "finish".\n- {"action": "cli'
+            'ck"} should be selected when you want to click on a link to read more about it.\n'
+            '- {"action": "finish"} should be selected when the information already provided '
+            'is sufficient to answer the user.\n- "link" should be a link to click. You don\'t '
+            'have to output "link" if you decided to take "action" as "finish".\n- CONTEXT con'
+            "sists of multiple #[LINK]\\n```TITLE\\nSNIPPET\n```CONTEXT\n{{context}}\n```\n```USER'"
+            "S QUESTION\n{{query}}\n```"
+            "\nYOUR JSON RESPONSE:\n"
         ),
-        input_variables=["query"],
-        template_format="f-string",
+        input_variables=["context", "query"],
+        template_format="jinja2",
+    )
+    CONTEXT_QUERY__ANSWERABLE_OR_NOT: PromptTemplate = PromptTemplate(
+        template=(
+            "You are a JSON response bot that uses the context provided to determine if you c"
+            "an answer the user's question. Follow the rules below to output a response.\n- Ou"
+            'tput your next action to do in JSON format like {"answerable": TRUE_OR_FALSE}. This '
+            'is important.\n- "answerable" should be one of true or false.\n- CONTEXT and USER\'s QU'
+            "ESTION are surrounded by triple backticks.\n```CONTEXT\n{{context}}\n```\n```USER'S "
+            "QUESTION\n{{query}}\n```"
+            "\nYOUR JSON RESPONSE:\n"
+        ),
+        input_variables=["context", "query"],
+        template_format="jinja2",
     )
 
 

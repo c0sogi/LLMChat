@@ -31,7 +31,7 @@ async def browse(
         )
         if translate_chain_result is not None:
             user_query = translate_chain_result
-    browsing_result: Optional[str] = await Chains.web_browsing_chain(
+    browsing_result: Optional[str] = await Chains.full_web_browsing_chain(
         buffer=buffer,
         query=user_query,
         finish=True,
