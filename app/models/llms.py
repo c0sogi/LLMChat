@@ -203,6 +203,15 @@ class LLMModels(Enum):
         #     input_variables=[],
         # ),  # Example of a suffix template
     )
+    gpt_3_5_turbo_16k = OpenAIModel(
+        name="gpt-3.5-turbo-16k",
+        max_total_tokens=16384,
+        max_tokens_per_request=8192,
+        token_margin=8,
+        tokenizer=OpenAITokenizer("gpt-3.5-turbo"),
+        api_url="https://api.openai.com/v1/chat/completions",
+        api_key=OPENAI_API_KEY,
+    )
 
     gpt_4 = OpenAIModel(
         name="gpt-4",
@@ -212,26 +221,6 @@ class LLMModels(Enum):
         tokenizer=OpenAITokenizer("gpt-4"),
         api_url="https://api.openai.com/v1/chat/completions",
         api_key=OPENAI_API_KEY,
-    )
-
-    gpt_3_5_turbo_proxy = OpenAIModel(
-        name="gpt-3.5-turbo",
-        max_total_tokens=4096,
-        max_tokens_per_request=2048,
-        token_margin=8,
-        tokenizer=OpenAITokenizer("gpt-3.5-turbo"),
-        api_url="https://gookproxy-gyul.hf.space/proxy/openai/v1/chat/completions",
-        api_key="arcalive",
-    )
-
-    gpt_4_proxy = OpenAIModel(
-        name="gpt-4",
-        max_total_tokens=4096,
-        max_tokens_per_request=2048,
-        token_margin=8,
-        tokenizer=OpenAITokenizer("gpt-3.5-turbo"),
-        api_url="https://gookproxy-gyul.hf.space/proxy/openai/v1/chat/completions",
-        api_key="arcalive",
     )
 
     # Llama-cpp models

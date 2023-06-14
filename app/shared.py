@@ -7,7 +7,6 @@ import openai
 from langchain.chains.combine_documents.map_reduce import MapReduceDocumentsChain
 from langchain.chains.combine_documents.stuff import StuffDocumentsChain
 from langchain.chains.summarize import load_summarize_chain, stuff_prompt
-from langchain.chat_models import ChatOpenAI
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.utilities import SearxSearchWrapper
 
@@ -15,6 +14,7 @@ from app.common.config import OPENAI_API_KEY, ChatConfig, SingletonMetaClass, co
 from app.common.constants import SummarizationTemplates
 from app.utils.langchain.web_search import DuckDuckGoSearchAPIWrapper
 from app.utils.langchain.token_text_splitter import CustomTokenTextSplitter
+from app.utils.langchain.chat_openai import CustomChatOpenAI
 
 
 @dataclass
@@ -24,7 +24,7 @@ class Shared(metaclass=SingletonMetaClass):
         default_factory=ProcessPoolExecutor
     )
     openai_embeddings: OpenAIEmbeddings = field(init=False)
-    openai_llm: ChatOpenAI = field(init=False)
+    openai_llm: CustomChatOpenAI = field(init=False)
     map_reduce_summarize_chain: MapReduceDocumentsChain = field(init=False)
     stuff_summarize_chain: StuffDocumentsChain = field(init=False)
     token_text_splitter: CustomTokenTextSplitter = field(
@@ -42,9 +42,9 @@ class Shared(metaclass=SingletonMetaClass):
             client=openai.Embedding,
             openai_api_key=OPENAI_API_KEY,
         )
-        self.openai_llm = ChatOpenAI(
+        self.openai_llm = CustomChatOpenAI(
             client=None,
-            model=ChatConfig.summarization_openai_model,  # type: ignore
+            model_name=ChatConfig.summarization_openai_model,
             openai_api_key=OPENAI_API_KEY,
         )
         self.map_reduce_summarize_chain = load_summarize_chain(  # type: ignore

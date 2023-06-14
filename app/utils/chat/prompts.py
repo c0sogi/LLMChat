@@ -1,20 +1,19 @@
 # flake8: noqa
 from copy import deepcopy
-from itertools import zip_longest
-from re import sub
 from functools import partial
 from typing import Any, Callable, Optional
 
 from langchain import PromptTemplate
+from langchain.schema import HumanMessage, AIMessage, SystemMessage, BaseMessage
 
 from app.common.constants import ChatTurnTemplates
-from app.errors.chat_exceptions import ChatTooMuchTokenException
+from app.errors.chat_exceptions import ChatTextGenerationException
 from app.models.chat_models import MessageHistory
 from app.models.base_models import (
-    OpenAIChatMessage,
     SendInitToWebsocket,
     UserChatRoles,
 )
+from app.utils.logger import ApiLogger
 
 
 def str_parse_method(
@@ -29,16 +28,31 @@ def str_parse_method(
     )
 
 
-def openai_parse_method(message_history: MessageHistory) -> dict[str, str]:
+def openai_parse_method(message_history: MessageHistory) -> BaseMessage:
     if message_history.summarized is not None:
         message_history = deepcopy(message_history)
         if message_history.summarized is not None:
             message_history.content = message_history.summarized
-    if message_history.is_user:
-        message_history.role = "user"
+    if message_history.is_user or message_history.role == "user":
+        return HumanMessage(content=message_history.content)
+    elif message_history.role == "assistant":
+        return AIMessage(content=message_history.content)
+    elif message_history.role == "system":
+        return SystemMessage(content=message_history.content)
     else:
-        message_history.role = "assistant"
-    return OpenAIChatMessage.from_orm(message_history).dict()
+        raise ValueError(f"Unknown role: {message_history.role}")
+
+
+# def openai_parse_method(message_history: MessageHistory) -> dict[str, str]:
+#     if message_history.summarized is not None:
+#         message_history = deepcopy(message_history)
+#         if message_history.summarized is not None:
+#             message_history.content = message_history.summarized
+#     if message_history.is_user:
+#         message_history.role = "user"
+#     else:
+#         message_history.role = "assistant"
+#     return OpenAIChatMessage.from_orm(message_history).dict()
 
 
 def init_parse_method(message_history: MessageHistory) -> dict[str, Any]:
@@ -68,19 +82,20 @@ def message_histories_to_list(
                 )
             )
         )
+
     if system_message_histories:
         for system_history in system_message_histories:
             message_histories.append(
                 parse_method(system_history)
             )  # append system message history
-    for user_message_history, ai_message_history in zip_longest(
-        user_message_histories,
-        ai_message_histories,
-    ):
-        if user_message_history is not None:
-            message_histories.append(parse_method(user_message_history))
-        if ai_message_history is not None:
-            message_histories.append(parse_method(ai_message_history))
+    message_histories.extend(
+        [
+            parse_method(message_history)
+            for message_history in sorted(
+                user_message_histories + ai_message_histories, key=lambda x: x.timestamp
+            )
+        ]
+    )  # append user and ai message histories
     if suffix_prompt is not None:
         message_histories.append(
             parse_method(
@@ -92,6 +107,7 @@ def message_histories_to_list(
                 )
             )
         )
+    ApiLogger("|A01|").info(f"Sending these messages to LLM:\n{message_histories}")
     return message_histories
 
 
@@ -138,7 +154,7 @@ def cutoff_message_histories(
         ]
     )
     if system_message_tokens > token_limit:
-        raise ChatTooMuchTokenException(msg="System messages exceed the token limit.")
+        raise ChatTextGenerationException(msg="System messages exceed the token limit.")
 
     token_limit -= system_message_tokens
     user_results: list[MessageHistory] = []

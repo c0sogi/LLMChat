@@ -10,6 +10,16 @@
 ### **Enjoy the beautiful UI and rich set of customizable widgets provided by Flutter.**
 - It supports both `mobile` and `PC` environments. 
 - `Markdown` is also supported, so you can use it to format your messages.
+
+---
+### Web Browsing
++ #### **Duckduckgo**
+    You can use the Duckduckgo search engine to find relevant information on the web. Just activate the 'Browse' toggle button!
+    
+    Watch the demo video for full-browsing: https://www.youtube.com/watch?v=mj_CVrWrS08
+        
+> ![Browse Web](app/contents/browsing_demo.gif)
+
 ---
 ### Vector Embedding
 + #### **Embed Any Text**
@@ -19,13 +29,6 @@
     You can embed PDF file by clicking `Embed Document` on the bottom left. In a few seconds, text contents of PDF will be converted to vectors and embedded to Redis cache.
 > ![Upload Your PDF File](app/contents/upload_demo.gif)
     
----
-### Web Browsing
-+ #### **Duckduckgo**
-    You can use the Duckduckgo search engine to find relevant information on the web. Just activate the 'Browse' toggle button!
-        
-> ![Browse Web](app/contents/browsing_demo.gif)
-
 
 ---
 + ### Change your chat model

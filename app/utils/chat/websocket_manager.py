@@ -10,16 +10,17 @@ from typing import (
     Optional,
     Union,
 )
-
 from fastapi import WebSocket
 from app.common.config import ChatConfig
 
 from app.errors.chat_exceptions import (
     ChatLengthException,
     ChatModelNotImplementedException,
+    ChatOtherException,
+    ChatTextGenerationException,
     ChatTooMuchTokenException,
 )
-from app.models.chat_models import ChainStatus, MessageHistory
+from app.models.chat_models import MessageHistory
 from app.models.llms import LLMModel, LLMModels
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.prompts import (
@@ -182,19 +183,22 @@ class SendToWebsocket:
                     raise InterruptedError(
                         stream_progress.response + stream_progress.buffer
                     )
-                stream_progress.buffer += delta
-                iteration += 1
-                if iteration % chunk_size == 0:
-                    stream_progress.response += stream_progress.buffer
-                    await cls.message(
-                        websocket=buffer.websocket,
-                        msg=stream_progress.buffer,
-                        chat_room_id=None,
-                        finish=False,
-                        is_user=is_user,
-                        model_name=None,
-                    )
-                    stream_progress.buffer = ""
+                if isinstance(delta, str):
+                    stream_progress.buffer += delta
+                    iteration += 1
+                    if iteration % chunk_size == 0:
+                        stream_progress.response += stream_progress.buffer
+                        await cls.message(
+                            websocket=buffer.websocket,
+                            msg=stream_progress.buffer,
+                            chat_room_id=None,
+                            finish=False,
+                            is_user=is_user,
+                            model_name=None,
+                        )
+                        stream_progress.buffer = ""
+                else:
+                    pass
 
         async def transmission(
             user_message_histories: list[MessageHistory],
@@ -203,6 +207,11 @@ class SendToWebsocket:
             token_limit: int,
             response_in_progress: Optional[MessageHistory] = None,
         ) -> None:
+            print(token_limit, ChatConfig.extra_token_margin)
+            if token_limit < ChatConfig.extra_token_margin:
+                raise ChatTextGenerationException(
+                    msg=f"No tokens left to generate text."
+                )
             if response_in_progress is not None:
                 ai_message_histories.append(response_in_progress)
             user_message_histories, ai_message_histories = cutoff_message_histories(
@@ -246,7 +255,9 @@ class SendToWebsocket:
                 if response_in_progress is not None:
                     ai_message_histories.pop()
                     new_content: str = (
-                        response_in_progress.content
+                        response_in_progress.content.replace(
+                            ChatConfig.continue_message, ""
+                        )
                         + e.msg
                         + ChatConfig.continue_message
                     )
