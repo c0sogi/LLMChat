@@ -1,5 +1,3 @@
-# flake8: noqa
-
 from re import compile, Pattern
 
 from langchain import PromptTemplate
@@ -101,6 +99,8 @@ class SummarizationTemplates:
 
 
 class JsonTemplates:
+    """Deprecated since OpenAI's function call is much better"""
+
     QUERY__GET_QUERY_FOR_WEB_BROWSING: PromptTemplate = PromptTemplate(
         template=(
             "You are a Web search API bot that performs a web search for a user's question. F"

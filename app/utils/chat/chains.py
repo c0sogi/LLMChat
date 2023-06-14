@@ -3,6 +3,7 @@ from aiohttp import ClientSession
 
 from fastapi.concurrency import run_in_threadpool
 from langchain import PromptTemplate
+from langchain.schema import HumanMessage, SystemMessage
 from lxml import html
 from orjson import loads as orjson_loads
 
@@ -17,7 +18,10 @@ from app.utils.api.translate import Translator
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.vectorstore_manager import Document, VectorStoreManager
 from app.utils.chat.websocket_manager import SendToWebsocket
+from app.utils.langchain.chat_openai import CustomChatOpenAI
 from app.utils.logger import ApiLogger
+
+shared = Shared()
 
 
 class Chains:
@@ -79,9 +83,9 @@ class Chains:
             query_to_search: str = await cls.aget_query_to_search(
                 buffer=buffer,
                 query=query,
-                json_query_template=JsonTemplates.QUERY__GET_QUERY_FOR_WEB_BROWSING,
+                search_llm=shared.web_search_llm,
             )
-            r = await run_in_threadpool(Shared().duckduckgo.run, query_to_search)
+            r = await run_in_threadpool(shared.duckduckgo.run, query_to_search)
             ApiLogger("|A03|").debug(r)
 
             await SendToWebsocket.message(
@@ -127,9 +131,7 @@ class Chains:
             async with ClientSession() as session:
                 res = await session.get(link)
                 paragraphs = html.fromstring(await res.read()).xpath("//p")
-                scrollable_contents: list[
-                    str
-                ] = Shared().token_text_splitter.split_text(
+                scrollable_contents: list[str] = shared.token_text_splitter.split_text(
                     "\n".join([p.text_content().strip() for p in paragraphs]),
                     tokens_per_chunk=tokens_per_chunk,
                     chunk_overlap=chunk_overlap,
@@ -142,14 +144,17 @@ class Chains:
                 )
                 for scrollable_content in scrollable_contents:
                     scrollable_content = scrollable_content.strip()
-                    answerable_or_not_json = await Chains.aget_json(
-                        query_template=JsonTemplates.CONTEXT_QUERY__ANSWERABLE_OR_NOT,
-                        context=scrollable_content,
-                        question=query,
-                    )
-                    if not isinstance(
-                        answerable_or_not_json, dict
-                    ) or answerable_or_not_json.get("answerable") not in (True, False):
+                    answerable_or_not_llm_output = (
+                        await shared.answerable_or_not_llm.agenerate(
+                            messages=[
+                                [
+                                    SystemMessage(content=scrollable_content),
+                                    HumanMessage(content=query),
+                                ]
+                            ],
+                        )
+                    ).llm_output
+                    if answerable_or_not_llm_output is None:
                         await SendToWebsocket.message(
                             websocket=buffer.websocket,
                             msg=f"\n```lottie-fail\n### Reading content failed\n```\n",
@@ -157,7 +162,10 @@ class Chains:
                             finish=False,
                         )
                         continue
-                    if answerable_or_not_json["answerable"]:
+                    answerable = answerable_or_not_llm_output["function_calls"][0][
+                        "arguments"
+                    ]["answerable"]
+                    if answerable:
                         return scrollable_content
                     await SendToWebsocket.message(
                         websocket=buffer.websocket,
@@ -173,63 +181,79 @@ class Chains:
             chat_room_id=buffer.current_chat_room_id,
             finish=False,
         )
-        return_when_fail: Optional[str] = None
+        snippets: Optional[str] = None
+        visited_links: set[str] = set()
         try:
-            query_to_search: str = await cls.aget_query_to_search(
+            web_search_llm_output = (
+                await shared.web_search_llm.agenerate(
+                    messages=[[HumanMessage(content=query)]],
+                )
+            ).llm_output
+            if web_search_llm_output is None:
+                return snippets
+            query_to_search = await cls.aget_query_to_search(
                 buffer=buffer,
                 query=query,
-                json_query_template=JsonTemplates.QUERY__GET_QUERY_FOR_WEB_BROWSING,
+                search_llm=shared.web_search_llm,
             )
             snippets_with_link: dict[str, str] = await run_in_threadpool(
-                Shared().duckduckgo.formatted_results_with_link, query=query_to_search
+                shared.duckduckgo.formatted_results_with_link, query=query_to_search
             )
-            return_when_fail = "\n\n".join(snippets_with_link.values())
+            snippets = "\n\n".join(snippets_with_link.values())
             ApiLogger("|A06|").debug(snippets_with_link)
 
             while snippets_with_link:
-                action_and_link_json = await Chains.aget_json(
-                    query_template=JsonTemplates.CONTEXT_QUERY__CLICK_LINK_OR_FINISH,
-                    query=query,
-                    context="\n\n".join(snippets_with_link.values()),
-                )
-                if (
-                    not isinstance(action_and_link_json, dict)
-                    or (action_and_link_json.get("action") not in ("click", "finish"))
-                    or (
-                        action_and_link_json.get("action") == "link"
-                        and action_and_link_json.get("link") not in snippets_with_link
+                browsing_llm_output = (
+                    await shared.browsing_llm.agenerate(
+                        messages=[
+                            [
+                                SystemMessage(content=snippets),
+                                HumanMessage(content=query),
+                            ]
+                        ],
                     )
-                ):
-                    return
-                if action_and_link_json.get("action") == "finish":
+                ).llm_output
+                if browsing_llm_output is None:
+                    return snippets
+                arguments = browsing_llm_output["function_calls"][0]["arguments"]
+
+                if arguments["action"] == "click_link":
+                    if arguments["link_to_click"] in visited_links:
+                        raise Exception("Link already visited")
+                    if arguments["link_to_click"] in snippets_with_link:
+                        snippets_with_link.pop(arguments["link_to_click"])
+                    else:
+                        visited_links.add(arguments["link_to_click"])
+                    scroll_result: str | None = await scrolling(
+                        link=arguments["link_to_click"],
+                        tokens_per_chunk=tokens_per_chunk,
+                        chunk_overlap=chunk_overlap,
+                    )
+                    if scroll_result is not None:
+                        await SendToWebsocket.message(
+                            websocket=buffer.websocket,
+                            msg=f"\n```lottie-ok\n### I found the result!\n```\n",
+                            chat_room_id=buffer.current_chat_room_id,
+                            finish=False,
+                        )
+                        return scroll_result
+                    else:
+                        await SendToWebsocket.message(
+                            websocket=buffer.websocket,
+                            msg=f"\n```lottie-fail\n### This link is not sufficient to answer\n```\n",
+                            chat_room_id=buffer.current_chat_room_id,
+                            finish=False,
+                        )
+                elif arguments["action"] == "finish_browsing":
                     await SendToWebsocket.message(
                         websocket=buffer.websocket,
                         msg=f"\n```lottie-ok\n### I found the result!\n```\n",
                         chat_room_id=buffer.current_chat_room_id,
                         finish=False,
                     )
-                    return return_when_fail
-                snippets_with_link.pop(action_and_link_json["link"])
-                scroll_result: str | None = await scrolling(
-                    link=action_and_link_json["link"],
-                    tokens_per_chunk=tokens_per_chunk,
-                    chunk_overlap=chunk_overlap,
-                )
-                if scroll_result is not None:
-                    await SendToWebsocket.message(
-                        websocket=buffer.websocket,
-                        msg=f"\n```lottie-ok\n### I found the result!\n```\n",
-                        chat_room_id=buffer.current_chat_room_id,
-                        finish=False,
-                    )
-                    return scroll_result
+                    return snippets
                 else:
-                    await SendToWebsocket.message(
-                        websocket=buffer.websocket,
-                        msg=f"\n```lottie-fail\n### This link is not sufficient to answer the user's question.\n```\n",
-                        chat_room_id=buffer.current_chat_room_id,
-                        finish=False,
-                    )
+                    raise Exception("Unknown action")
 
             await SendToWebsocket.message(
                 websocket=buffer.websocket,
@@ -238,7 +262,7 @@ class Chains:
                 finish=finish,
                 wait_next_query=wait_next_query,
             )
-            return return_when_fail
+            return snippets
         except Exception as e:
             ApiLogger("|A07|").error(e)
             await SendToWebsocket.message(
@@ -248,7 +272,7 @@ class Chains:
                 finish=finish,
                 wait_next_query=wait_next_query,
             )
-            return return_when_fail
+            return snippets
 
     @classmethod
     async def vectorstore_query_chain(
@@ -270,7 +294,7 @@ class Chains:
             query_to_search: str = await cls.aget_query_to_search(
                 buffer=buffer,
                 query=query,
-                json_query_template=JsonTemplates.QUERY__GET_QUERY_FOR_VECTORSTORE,
+                search_llm=shared.vectorstore_search_llm,
             )
             found_text_and_score: list[
                 Tuple[Document, float]
@@ -286,11 +310,6 @@ class Chains:
             found_text: str = "\n\n".join(
                 [document.page_content for document, _ in found_text_and_score]
             )
-            context_and_query: str = (
-                QueryTemplates.CONTEXT_QUESTION__CONTEXT_ONLY.format(
-                    context=found_text, question=query
-                )
-            )
             await SendToWebsocket.message(
                 websocket=buffer.websocket,
                 msg=f"\n```lottie-ok\n### Finished searching vectorstore\n```\n{found_text if show_result else ''}",
@@ -298,7 +317,7 @@ class Chains:
                 finish=finish,
                 wait_next_query=wait_next_query,
             )
-            return context_and_query
+            return found_text
 
         except Exception as e:
             ApiLogger("|A05|").exception(e)
@@ -315,19 +334,18 @@ class Chains:
         cls,
         buffer: BufferedUserContext,
         query: str,
-        json_query_template: PromptTemplate,
+        search_llm: CustomChatOpenAI,
     ) -> str:
-        query_to_search_json: Optional[dict] = await cls.aget_json(
-            query_template=json_query_template,
-            query=query,
-        )
-        if (
-            not isinstance(query_to_search_json, dict)
-            or "query" not in query_to_search_json
-        ):
-            query_to_search = query
-        else:
-            query_to_search = query_to_search_json["query"]
+        web_search_llm_output = (
+            await search_llm.agenerate(
+                messages=[[HumanMessage(content=query)]],
+            )
+        ).llm_output
+        if web_search_llm_output is None:
+            return query
+        query_to_search = web_search_llm_output["function_calls"][0]["arguments"][
+            "query_to_search"
+        ]
         await SendToWebsocket.message(
             websocket=buffer.websocket,
             msg="---\n{query_to_search}\n```\n".format(
@@ -344,7 +362,7 @@ class Chains:
     ) -> Optional[Any]:
         try:
             json_query = JSON_PATTERN.search(
-                await Shared().openai_llm.apredict(  # type: ignore
+                await shared.llm.apredict(  # type: ignore
                     query_template.format(**kwargs_to_format)
                 )
             )

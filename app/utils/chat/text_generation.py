@@ -117,7 +117,7 @@ async def agenerate_from_openai(
     callback = AsyncIteratorCallbackHandler()
     producer = CustomChatOpenAI(
         client=None,
-        model_name=current_model.name,
+        model_name=current_model.name,  # type: ignore
         openai_api_key=api_key_to_use,
         streaming=True,
         max_tokens=max_tokens,

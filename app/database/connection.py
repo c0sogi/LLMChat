@@ -2,9 +2,20 @@ from asyncio import current_task
 from collections.abc import Iterable
 from typing import Any, AsyncGenerator, Callable, Optional, Type
 
+import openai
+from langchain.embeddings import OpenAIEmbeddings
 from qdrant_client import QdrantClient
 from redis.asyncio import Redis, from_url
-from sqlalchemy import Delete, Result, ScalarResult, Select, TextClause, Update, create_engine, text
+from sqlalchemy import (
+    Delete,
+    Result,
+    ScalarResult,
+    Select,
+    TextClause,
+    Update,
+    create_engine,
+    text,
+)
 from sqlalchemy.engine.base import Connection, Engine
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -15,9 +26,8 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy_utils import create_database, database_exists
 
-from app.common.config import Config, SingletonMetaClass, logging_config
+from app.common.config import OPENAI_API_KEY, Config, SingletonMetaClass, logging_config
 from app.errors.api_exceptions import Responses_500
-from app.shared import Shared
 from app.utils.langchain.qdrant_vectorstore import Qdrant
 from app.utils.logger import CustomLogger
 
@@ -39,13 +49,21 @@ class MySQL(metaclass=SingletonMetaClass):
     }
 
     @staticmethod
-    def execute(query: str, engine_or_conn: Engine | Connection, scalar: bool = False) -> Any | None:
-        if isinstance(engine_or_conn, Engine) and not isinstance(engine_or_conn, Connection):
+    def execute(
+        query: str, engine_or_conn: Engine | Connection, scalar: bool = False
+    ) -> Any | None:
+        if isinstance(engine_or_conn, Engine) and not isinstance(
+            engine_or_conn, Connection
+        ):
             with engine_or_conn.connect() as conn:
-                cursor = conn.execute(text(query + ";" if not query.endswith(";") else query))
+                cursor = conn.execute(
+                    text(query + ";" if not query.endswith(";") else query)
+                )
                 return cursor.scalar() if scalar else None
         elif isinstance(engine_or_conn, Connection):
-            cursor = engine_or_conn.execute(text(query + ";" if not query.endswith(";") else query))
+            cursor = engine_or_conn.execute(
+                text(query + ";" if not query.endswith(";") else query)
+            )
             return cursor.scalar() if scalar else None
 
     @staticmethod
@@ -54,7 +72,9 @@ class MySQL(metaclass=SingletonMetaClass):
             conn.execute(text("SET FOREIGN_KEY_CHECKS = 0;"))
             for table in Base.metadata.sorted_tables:
                 if except_tables is not None:
-                    conn.execute(table.delete()) if table.name not in except_tables else ...
+                    conn.execute(
+                        table.delete()
+                    ) if table.name not in except_tables else ...
             conn.execute(text("SET FOREIGN_KEY_CHECKS = 1;"))
             conn.commit()
 
@@ -79,7 +99,9 @@ class MySQL(metaclass=SingletonMetaClass):
         )
 
     @classmethod
-    def is_user_granted(cls, user: str, database: str, engine_or_conn: Engine | Connection) -> bool:
+    def is_user_granted(
+        cls, user: str, database: str, engine_or_conn: Engine | Connection
+    ) -> bool:
         return bool(
             cls.execute(
                 cls.query_set["is_user_granted"].format(user=user, database=database),
@@ -111,7 +133,9 @@ class MySQL(metaclass=SingletonMetaClass):
         engine_or_conn: Engine | Connection,
     ) -> None:
         return cls.execute(
-            cls.query_set["create_user"].format(user=user, password=password, host=host),
+            cls.query_set["create_user"].format(
+                user=user, password=password, host=host
+            ),
             engine_or_conn,
         )
 
@@ -125,7 +149,9 @@ class MySQL(metaclass=SingletonMetaClass):
         engine_or_conn: Engine | Connection,
     ) -> None:
         return cls.execute(
-            cls.query_set["grant_user"].format(grant=grant, on=on, to_user=to_user, user_host=user_host),
+            cls.query_set["grant_user"].format(
+                grant=grant, on=on, to_user=to_user, user_host=user_host
+            ),
             engine_or_conn,
         )
 
@@ -154,8 +180,12 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         self.root_engine = create_engine(config.mysql_root_url, echo=config.db_echo)
         with self.root_engine.connect() as conn:
             if not MySQL.is_user_exists(config.mysql_user, engine_or_conn=conn):
-                MySQL.create_user(config.mysql_user, config.mysql_password, "%", engine_or_conn=conn)
-            if not MySQL.is_user_granted(config.mysql_user, config.mysql_database, engine_or_conn=conn):
+                MySQL.create_user(
+                    config.mysql_user, config.mysql_password, "%", engine_or_conn=conn
+                )
+            if not MySQL.is_user_granted(
+                config.mysql_user, config.mysql_database, engine_or_conn=conn
+            ):
                 MySQL.grant_user(
                     "ALL PRIVILEGES",
                     f"{config.mysql_database}.*",
@@ -176,7 +206,9 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
             pool_pre_ping=True,
         )
         self.session = async_scoped_session(
-            async_sessionmaker(bind=self.engine, autocommit=False, autoflush=False, future=True),
+            async_sessionmaker(
+                bind=self.engine, autocommit=False, autoflush=False, future=True
+            ),
             scopefunc=current_task,
         )
         self.is_initiated = True
@@ -280,12 +312,16 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         refresh: bool = False,
         session: AsyncSession | None = None,
     ) -> Result:
-        return await self.run_in_session(self._execute)(session, autocommit=autocommit, refresh=refresh, stmt=stmt)
+        return await self.run_in_session(self._execute)(
+            session, autocommit=autocommit, refresh=refresh, stmt=stmt
+        )
 
     async def scalar(self, stmt: Select, session: AsyncSession | None = None) -> Any:
         return await self.run_in_session(self._scalar)(session, stmt=stmt)
 
-    async def scalars(self, stmt: Select, session: AsyncSession | None = None) -> ScalarResult:
+    async def scalars(
+        self, stmt: Select, session: AsyncSession | None = None
+    ) -> ScalarResult:
         return await self.run_in_session(self._scalars)(session, stmt=stmt)
 
     async def add(
@@ -297,7 +333,9 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
         **kwargs: Any,
     ) -> DeclarativeMeta:
         instance = schema(**kwargs)  # type: ignore
-        return await self.run_in_session(self._add)(session, autocommit=autocommit, refresh=refresh, instance=instance)
+        return await self.run_in_session(self._add)(
+            session, autocommit=autocommit, refresh=refresh, instance=instance
+        )
 
     async def add_all(
         self,
@@ -323,19 +361,27 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
             session, autocommit=autocommit, refresh=refresh, instance=instance
         )
 
-    async def scalars__fetchall(self, stmt: Select, session: AsyncSession | None = None) -> list[DeclarativeMeta]:
+    async def scalars__fetchall(
+        self, stmt: Select, session: AsyncSession | None = None
+    ) -> list[DeclarativeMeta]:
         return (await self.run_in_session(self._scalars)(session, stmt=stmt)).fetchall()
 
-    async def scalars__one(self, stmt: Select, session: AsyncSession | None = None) -> DeclarativeMeta:
+    async def scalars__one(
+        self, stmt: Select, session: AsyncSession | None = None
+    ) -> DeclarativeMeta:
         return (await self.run_in_session(self._scalars)(session, stmt=stmt)).one()
 
-    async def scalars__first(self, stmt: Select, session: AsyncSession | None = None) -> DeclarativeMeta:
+    async def scalars__first(
+        self, stmt: Select, session: AsyncSession | None = None
+    ) -> DeclarativeMeta:
         return (await self.run_in_session(self._scalars)(session, stmt=stmt)).first()
 
     async def scalars__one_or_none(
         self, stmt: Select, session: AsyncSession | None = None
     ) -> Optional[DeclarativeMeta]:
-        return (await self.run_in_session(self._scalars)(session, stmt=stmt)).one_or_none()
+        return (
+            await self.run_in_session(self._scalars)(session, stmt=stmt)
+        ).one_or_none()
 
 
 class CacheFactory(metaclass=SingletonMetaClass):
@@ -360,7 +406,10 @@ class CacheFactory(metaclass=SingletonMetaClass):
                 prefer_grpc=True,
             ),
             collection_name=config.shared_vectorestore_name,
-            embeddings=Shared().openai_embeddings,
+            embeddings=OpenAIEmbeddings(
+                client=openai.Embedding,
+                openai_api_key=OPENAI_API_KEY,
+            ),
         )
         self.is_initiated = True
 

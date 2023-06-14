@@ -1,13 +1,13 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional, Union, Type
 
 from pydantic import Field
 from pydantic.main import BaseModel
 
 from app.database.schemas.auth import UserStatus
 
-# from pydantic.networks import EmailStr, IPvanyAddress
+JSON_TYPES = Union[int, float, str, bool, dict, list, None]
 
 
 class UserRegister(BaseModel):
@@ -179,3 +179,61 @@ class SummarizedResult(BaseModel):
     role: str
     content: str
     uuid: str
+
+
+def get_json_type(python_type: Type[JSON_TYPES]) -> str:
+    """Returns the JSON type for a given python type"""
+    if python_type is int:
+        return "integer"
+    elif python_type is float:
+        return "number"
+    elif python_type is str:
+        return "string"
+    elif python_type is bool:
+        return "boolean"
+    elif python_type is dict:
+        return "object"
+    elif python_type is list:
+        return "array"
+    else:
+        return "null"
+
+
+class OpenAIFunctionParameter(BaseModel):
+    name: str
+    type: Type[JSON_TYPES]
+    description: Optional[str] = None
+    enum: Optional[list[JSON_TYPES]] = None
+
+    def to_dict(self):
+        param_dict: dict[str, Any] = {"type": get_json_type(self.type)}
+        if self.description:
+            param_dict["description"] = self.description
+        if self.enum:
+            param_dict["enum"] = self.enum
+        return {self.name: param_dict}
+
+
+class OpenAIFunction(BaseModel):
+    name: str
+    description: Optional[str] = None
+    parameters: Optional[list[OpenAIFunctionParameter]] = None
+    required: Optional[list[str]] = None
+
+    def to_dict(self):
+        function_dict: dict[str, Any] = {"name": self.name}
+        if self.description:
+            function_dict["description"] = self.description
+        if self.parameters:
+            function_dict["parameters"] = {
+                "type": "object",
+                "properties": {
+                    param.name: param.to_dict()[param.name] for param in self.parameters
+                },
+                "required": [
+                    param.name
+                    for param in self.parameters
+                    if param.name in (self.required or [])
+                ],
+            }
+        return function_dict

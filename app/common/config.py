@@ -258,7 +258,7 @@ class ChatConfig:
     summarization_threshold: int = (
         SUMMARIZATION_THRESHOLD  # if message tokens exceed this, summarize
     )
-    summarization_openai_model: str = "gpt-3.5-turbo"
+    global_openai_model: str = "gpt-3.5-turbo-0613"
     summarization_token_limit: int = (
         EMBEDDING_TOKEN_CHUNK_SIZE  # token limit for summarization
     )

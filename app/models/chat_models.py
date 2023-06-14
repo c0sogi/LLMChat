@@ -326,9 +326,3 @@ class command_response:
     handle_both = _wrapper(ResponseType.HANDLE_BOTH)
     do_nothing = _wrapper(ResponseType.DO_NOTHING)
     repeat_command = _wrapper(ResponseType.REPEAT_COMMAND)
-
-
-class ChainStatus(str, Enum):
-    BEGIN = "begin"
-    END = "end"
-    ERROR = "error"
