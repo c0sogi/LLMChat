@@ -28,7 +28,7 @@ class Shared(metaclass=SingletonMetaClass):
     browsing_llm: CustomChatOpenAI = field(init=False)
     web_search_llm: CustomChatOpenAI = field(init=False)
     vectorstore_search_llm: CustomChatOpenAI = field(init=False)
-    answerable_or_not_llm: CustomChatOpenAI = field(init=False)
+    control_web_page_llm: CustomChatOpenAI = field(init=False)
     map_reduce_summarize_chain: MapReduceDocumentsChain = field(init=False)
     stuff_summarize_chain: StuffDocumentsChain = field(init=False)
     token_text_splitter: CustomTokenTextSplitter = field(
@@ -69,10 +69,10 @@ class Shared(metaclass=SingletonMetaClass):
             },
             **common_llm_kwargs,
         )
-        self.answerable_or_not_llm = CustomChatOpenAI(
+        self.control_web_page_llm = CustomChatOpenAI(
             model_kwargs={
-                "functions": [OpenAIFunctions.ANSWERABLE_OR_NOT],
-                "function_call": OpenAIFunctions.ANSWERABLE_OR_NOT,
+                "functions": [OpenAIFunctions.CONTROL_WEB_PAGE],
+                "function_call": OpenAIFunctions.CONTROL_WEB_PAGE,
             },
             **common_llm_kwargs,
         )

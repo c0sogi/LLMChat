@@ -1,3 +1,4 @@
+from asyncio import gather
 from concurrent.futures import ProcessPoolExecutor
 from inspect import Parameter, iscoroutinefunction, signature
 from types import NoneType
@@ -501,20 +502,58 @@ class ChatCommands:
         return await cls.setlastmessage(role, new_message, user_chat_context)
 
     @staticmethod
-    async def retry(
-        user_chat_context: UserChatContext,
-    ) -> Tuple[str | None, ResponseType]:
+    async def retry(buffer: BufferedUserContext) -> Tuple[str | None, ResponseType]:
         """Retry last message\n
         /retry"""
-        if len(user_chat_context.user_message_histories) < 1:
-            return "There is no message to retry.", ResponseType.SEND_MESSAGE_AND_STOP
-        if len(user_chat_context.user_message_histories) == len(
-            user_chat_context.ai_message_histories
-        ):
-            await MessageManager.pop_message_history_safely(
-                user_chat_context=user_chat_context, role=ChatRoles.AI
-            )
-        return None, ResponseType.HANDLE_AI
+        if buffer.last_user_message is None:
+            if (
+                len(buffer.current_ai_message_histories)
+                == len(buffer.current_user_message_histories)
+                > 0
+            ):
+                await MessageManager.pop_message_history_safely(
+                    user_chat_context=buffer.current_user_chat_context,
+                    role=ChatRoles.AI,
+                )
+                return (None, ResponseType.HANDLE_AI)
+            else:
+                return (
+                    "There is no message to retry.",
+                    ResponseType.SEND_MESSAGE_AND_STOP,
+                )
+        if buffer.last_user_message.startswith("/"):
+            changable = False
+            for command in ("/browse", "/query"):
+                if buffer.last_user_message.startswith(command):
+                    changable = True
+                    break
+            if changable and (
+                len(buffer.current_ai_message_histories)
+                == len(buffer.current_user_message_histories)
+                > 0
+            ):
+                await gather(
+                    MessageManager.pop_message_history_safely(
+                        user_chat_context=buffer.current_user_chat_context,
+                        role=ChatRoles.USER,
+                    ),
+                    MessageManager.pop_message_history_safely(
+                        user_chat_context=buffer.current_user_chat_context,
+                        role=ChatRoles.AI,
+                    ),
+                )
+            return (buffer.last_user_message, ResponseType.REPEAT_COMMAND)
+        else:
+            if (
+                len(buffer.current_ai_message_histories)
+                == len(buffer.current_user_message_histories)
+                > 0
+            ):
+                await MessageManager.pop_message_history_safely(
+                    user_chat_context=buffer.current_user_chat_context,
+                    role=ChatRoles.AI,
+                )
+            return (None, ResponseType.HANDLE_AI)
 
     @staticmethod
     @command_response.send_message_and_stop

@@ -83,19 +83,17 @@ def message_histories_to_list(
             )
         )
 
-    if system_message_histories:
-        for system_history in system_message_histories:
-            message_histories.append(
-                parse_method(system_history)
-            )  # append system message history
     message_histories.extend(
         [
             parse_method(message_history)
             for message_history in sorted(
-                user_message_histories + ai_message_histories, key=lambda x: x.timestamp
+                user_message_histories
+                + ai_message_histories
+                + (system_message_histories if system_message_histories else []),
+                key=lambda x: x.timestamp,
             )
         ]
-    )  # append user and ai message histories
+    )  # organize message histories
     if suffix_prompt is not None:
         message_histories.append(
             parse_method(

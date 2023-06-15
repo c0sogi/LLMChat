@@ -1,21 +1,25 @@
+from copy import deepcopy
 from typing import Any, Optional, Tuple
-from aiohttp import ClientSession
 
+from aiohttp import ClientSession
 from fastapi.concurrency import run_in_threadpool
 from langchain import PromptTemplate
 from langchain.schema import HumanMessage, SystemMessage
-from lxml import html
+from lxml import html, etree
 from orjson import loads as orjson_loads
 
-from app.common.config import config
-from app.common.constants import (
-    JSON_PATTERN,
-    QueryTemplates,
-    JsonTemplates,
-)
+from app.common.config import ChatConfig, config
+from app.common.constants import JSON_PATTERN
+from app.models.chat_models import MessageHistory
+from app.models.openai_functions import OpenAIFunctions
 from app.shared import Shared
 from app.utils.api.translate import Translator
 from app.utils.chat.buffer import BufferedUserContext
+from app.utils.chat.prompts import (
+    cutoff_message_histories,
+    message_histories_to_list,
+    openai_parse_method,
+)
 from app.utils.chat.vectorstore_manager import Document, VectorStoreManager
 from app.utils.chat.websocket_manager import SendToWebsocket
 from app.utils.langchain.chat_openai import CustomChatOpenAI
@@ -83,9 +87,9 @@ class Chains:
             query_to_search: str = await cls.aget_query_to_search(
                 buffer=buffer,
                 query=query,
-                search_llm=shared.web_search_llm,
+                search_llm=Shared().web_search_llm,
             )
-            r = await run_in_threadpool(shared.duckduckgo.run, query_to_search)
+            r = await run_in_threadpool(Shared().duckduckgo.run, query_to_search)
             ApiLogger("|A03|").debug(r)
 
             await SendToWebsocket.message(
@@ -114,8 +118,8 @@ class Chains:
         finish: bool,
         wait_next_query: bool,
         show_result: bool = True,
-        tokens_per_chunk: int = 1024,
-        chunk_overlap: int = 256,
+        scrolling_chunk_size: int = ChatConfig.scrolling_chunk_size_when_browsing,
+        scrolling_chunk_overlap: int = ChatConfig.scrolling_overlap_when_browsing,
     ) -> Optional[str]:
         async def scrolling(
             link: str,
@@ -130,9 +134,9 @@ class Chains:
             )
             async with ClientSession() as session:
                 res = await session.get(link)
-                paragraphs = html.fromstring(await res.read()).xpath("//p")
-                scrollable_contents: list[str] = shared.token_text_splitter.split_text(
-                    "\n".join([p.text_content().strip() for p in paragraphs]),
+                scrollable_contents: list[str] = await run_in_threadpool(
+                    cls.parse_text_content,
+                    raw_html=await res.text(),
                     tokens_per_chunk=tokens_per_chunk,
                     chunk_overlap=chunk_overlap,
                 )
@@ -142,19 +146,30 @@ class Chains:
                     chat_room_id=buffer.current_chat_room_id,
                     finish=False,
                 )
-                for scrollable_content in scrollable_contents:
+                for scroll_idx, scrollable_content in enumerate(
+                    scrollable_contents, start=1
+                ):
                     scrollable_content = scrollable_content.strip()
-                    answerable_or_not_llm_output = (
-                        await shared.answerable_or_not_llm.agenerate(
+                    control_web_page_llm_output = (
+                        await Shared().control_web_page_llm.agenerate(
                             messages=[
                                 [
-                                    SystemMessage(content=scrollable_content),
+                                    SystemMessage(content=f"Current link: {link}"),
+                                    SystemMessage(
+                                        content=f"Current scroll bar: [{scroll_idx}/{len(scrollable_contents)}]"
+                                    ),
+                                    SystemMessage(
+                                        content=f"Previous snippets\n```{fallback_result}```"
+                                    ),
+                                    SystemMessage(
+                                        content=f"Current reading content\n```{scrollable_content}```\n"
+                                    ),
                                     HumanMessage(content=query),
                                 ]
                             ],
                         )
                     ).llm_output
-                    if answerable_or_not_llm_output is None:
+                    if control_web_page_llm_output is None:
                         await SendToWebsocket.message(
                             websocket=buffer.websocket,
                             msg=f"\n```lottie-fail\n### Reading content failed\n```\n",
@@ -162,17 +177,27 @@ class Chains:
                             finish=False,
                         )
                         continue
-                    answerable = answerable_or_not_llm_output["function_calls"][0][
+                    action = control_web_page_llm_output["function_calls"][0][
                         "arguments"
-                    ]["answerable"]
-                    if answerable:
+                    ]["action"]
+                    if action == "scroll_down":
+                        await SendToWebsocket.message(
+                            websocket=buffer.websocket,
+                            msg=f"\n```lottie-scroll-down\n### Scrolling down\n```\n",
+                            chat_room_id=buffer.current_chat_room_id,
+                            finish=False,
+                        )
+                    elif action == "go_back":
+                        await SendToWebsocket.message(
+                            websocket=buffer.websocket,
+                            msg=f"\n```lottie-go-back\n### Going back\n```\n",
+                            chat_room_id=buffer.current_chat_room_id,
+                            finish=False,
+                        )
+                        break
+                    elif action == "finish_browsing":
                         return scrollable_content
-                    await SendToWebsocket.message(
-                        websocket=buffer.websocket,
-                        msg=f"\n```lottie-scroll-down\n### Scrolling down\n```\n",
-                        chat_room_id=buffer.current_chat_room_id,
-                        finish=False,
-                    )
+
                 return None
 
         await SendToWebsocket.message(
@@ -181,55 +206,59 @@ class Chains:
             chat_room_id=buffer.current_chat_room_id,
             finish=False,
         )
-        snippets: Optional[str] = None
+        fallback_result: Optional[str] = None
         visited_links: set[str] = set()
         try:
-            web_search_llm_output = (
-                await shared.web_search_llm.agenerate(
-                    messages=[[HumanMessage(content=query)]],
-                )
-            ).llm_output
-            if web_search_llm_output is None:
-                return snippets
             query_to_search = await cls.aget_query_to_search(
                 buffer=buffer,
                 query=query,
-                search_llm=shared.web_search_llm,
+                search_llm=Shared().web_search_llm,
             )
             snippets_with_link: dict[str, str] = await run_in_threadpool(
-                shared.duckduckgo.formatted_results_with_link, query=query_to_search
+                Shared().duckduckgo.formatted_results_with_link, query=query_to_search
             )
-            snippets = "\n\n".join(snippets_with_link.values())
+            fallback_result = "\n\n".join(snippets_with_link.values())
             ApiLogger("|A06|").debug(snippets_with_link)
+            browsing_function = deepcopy(OpenAIFunctions.WEB_BROWSING)
 
             while snippets_with_link:
+                snippets = "\n\n".join(snippets_with_link.values())
+                browsing_function["parameters"]["properties"]["link_to_click"][
+                    "enum"
+                ] = list(snippets_with_link.keys()) + ["null"]
                 browsing_llm_output = (
-                    await shared.browsing_llm.agenerate(
+                    await Shared().browsing_llm.agenerate(
                         messages=[
                             [
                                 SystemMessage(content=snippets),
                                 HumanMessage(content=query),
                             ]
                         ],
+                        functions=[browsing_function],
+                        function_call={"name": browsing_function["name"]},
                     )
                 ).llm_output
                 if browsing_llm_output is None:
-                    return snippets
+                    return fallback_result
                 arguments = browsing_llm_output["function_calls"][0]["arguments"]
 
                 if arguments["action"] == "click_link":
                     if arguments["link_to_click"] in visited_links:
-                        raise Exception("Link already visited")
+                        continue
+                        # raise Exception("Link already visited")
                     if arguments["link_to_click"] in snippets_with_link:
                         snippets_with_link.pop(arguments["link_to_click"])
+                    elif arguments["link_to_click"] == "null":
+                        continue
                     else:
                         visited_links.add(arguments["link_to_click"])
                     scroll_result: str | None = await scrolling(
                         link=arguments["link_to_click"],
-                        tokens_per_chunk=tokens_per_chunk,
-                        chunk_overlap=chunk_overlap,
+                        tokens_per_chunk=scrolling_chunk_size,
+                        chunk_overlap=scrolling_chunk_overlap,
                     )
                     if scroll_result is not None:
+                        ApiLogger("|A08|").debug(scroll_result)
                         await SendToWebsocket.message(
                             websocket=buffer.websocket,
                             msg=f"\n```lottie-ok\n### I found the result!\n```\n",
@@ -237,23 +266,14 @@ class Chains:
                             finish=False,
                         )
                         return scroll_result
-                    else:
-                        await SendToWebsocket.message(
-                            websocket=buffer.websocket,
-                            msg=f"\n```lottie-fail\n### This link is not sufficient to answer\n```\n",
-                            chat_room_id=buffer.current_chat_room_id,
-                            finish=False,
-                        )
                 elif arguments["action"] == "finish_browsing":
                     await SendToWebsocket.message(
                         websocket=buffer.websocket,
-                        msg=f"\n```lottie-ok\n### I found the result!\n```\n",
+                        msg=f"\n```lottie-ok\n### Finishing browsing\n```\n",
                         chat_room_id=buffer.current_chat_room_id,
                         finish=False,
                     )
-                    return snippets
-                else:
-                    raise Exception("Unknown action")
+                    return fallback_result
 
             await SendToWebsocket.message(
                 websocket=buffer.websocket,
@@ -262,7 +282,7 @@ class Chains:
                 finish=finish,
                 wait_next_query=wait_next_query,
             )
-            return snippets
+            return fallback_result
         except Exception as e:
             ApiLogger("|A07|").error(e)
             await SendToWebsocket.message(
@@ -272,7 +292,7 @@ class Chains:
                 finish=finish,
                 wait_next_query=wait_next_query,
             )
-            return snippets
+            return fallback_result
 
     @classmethod
     async def vectorstore_query_chain(
@@ -282,7 +302,7 @@ class Chains:
         finish: bool,
         wait_next_query: bool,
         show_result: bool = False,
-        k: int = 3,
+        k: int = ChatConfig.vectorstore_n_results_limit,
     ) -> Optional[str]:
         await SendToWebsocket.message(
             websocket=buffer.websocket,
@@ -294,7 +314,7 @@ class Chains:
             query_to_search: str = await cls.aget_query_to_search(
                 buffer=buffer,
                 query=query,
-                search_llm=shared.vectorstore_search_llm,
+                search_llm=Shared().vectorstore_search_llm,
             )
             found_text_and_score: list[
                 Tuple[Document, float]
@@ -336,9 +356,30 @@ class Chains:
         query: str,
         search_llm: CustomChatOpenAI,
     ) -> str:
+        user_message_histories, ai_message_histories = cutoff_message_histories(
+            ai_message_histories=buffer.current_ai_message_histories,
+            user_message_histories=buffer.current_user_message_histories
+            + [
+                MessageHistory(
+                    role=buffer.current_user_chat_roles.user,
+                    content=query,
+                    tokens=buffer.current_user_chat_context.get_tokens_of(query),
+                    is_user=True,
+                )
+            ],
+            system_message_histories=[],
+            token_limit=ChatConfig.query_context_token_limit,
+        )
         web_search_llm_output = (
             await search_llm.agenerate(
-                messages=[[HumanMessage(content=query)]],
+                messages=[
+                    message_histories_to_list(
+                        user_chat_roles=buffer.current_user_chat_roles,
+                        parse_method=openai_parse_method,
+                        user_message_histories=user_message_histories,
+                        ai_message_histories=ai_message_histories,
+                    )
+                ],
             )
         ).llm_output
         if web_search_llm_output is None:
@@ -362,7 +403,7 @@ class Chains:
     ) -> Optional[Any]:
         try:
             json_query = JSON_PATTERN.search(
-                await shared.llm.apredict(  # type: ignore
+                await Shared().llm.apredict(  # type: ignore
                     query_template.format(**kwargs_to_format)
                 )
             )
@@ -372,3 +413,17 @@ class Chains:
                 return orjson_loads(json_query.group())
         except Exception:
             return
+
+    @staticmethod
+    def parse_text_content(
+        raw_html: str | bytes, tokens_per_chunk: int, chunk_overlap: int
+    ) -> list[str]:
+        try:
+            paragraphs = html.fromstring(raw_html).xpath("//p")
+        except etree.ParserError:
+            return []
+        return Shared().token_text_splitter.split_text(
+            "\n".join([p.text_content().strip() for p in paragraphs]),
+            tokens_per_chunk=tokens_per_chunk,
+            chunk_overlap=chunk_overlap,
+        )

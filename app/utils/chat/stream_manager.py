@@ -234,6 +234,8 @@ class ChatStreamManager:
                     elif item.msg.startswith("/"):
                         # if user message is command, handle command
                         splitted: list[str] = item.msg[1:].split(" ")
+                        if not item.msg.startswith("/retry"):
+                            buffer.last_user_message = item.msg
                         await command_handler(
                             callback_name=splitted[0],
                             callback_args=splitted[1:],

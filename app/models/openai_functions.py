@@ -13,17 +13,26 @@ class OpenAIFunctions:
         ],
         required=["link"],
     ).to_dict()
-    ANSWERABLE_OR_NOT: dict = OpenAIFunction(
-        name="answerable_or_not",
-        description="Determine if you can answer the user's question.",
+    CONTROL_WEB_PAGE: dict = OpenAIFunction(
+        name="control_web_page",
+        description=(
+            "Control the web page to read more information or stop reading. You have to gather suffici"
+            "ent information answer the user's question."
+        ),
         parameters=[
             OpenAIFunctionParameter(
-                name="answerable",
-                type=bool,
-                enum=[True, False],
+                name="action",
+                type=str,
+                description=(
+                    "Whether to scroll down, go back, or finish browsing. Select `scroll_down` if you"
+                    "must scroll down to read more information. Select `go_back` if you need to g"
+                    "o back to the previous page to read other information. Select `finish_browsing` "
+                    "if you can answer the user's question with given information."
+                ),
+                enum=["scroll_down", "go_back", "finish_browsing"],
             ),
         ],
-        required=["answerable"],
+        required=["action"],
     ).to_dict()
     WEB_BROWSING: dict = OpenAIFunction(
         name="web_browsing",

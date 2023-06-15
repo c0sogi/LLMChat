@@ -1,7 +1,10 @@
 """OpenAI chat wrapper."""
 from __future__ import annotations
-import json
 
+import asyncio
+import inspect
+from orjson import loads as orjson_loads
+from orjson import JSONDecodeError
 import logging
 from typing import (
     Any,
@@ -9,21 +12,28 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Tuple,
+    Dict,
 )
 
 from langchain.callbacks.manager import (
+    AsyncCallbackManager,
     AsyncCallbackManagerForLLMRun,
+    Callbacks,
 )
 from langchain.chat_models.openai import (
     ChatOpenAI,
-    logger,
-    acompletion_with_retry,
     _convert_dict_to_message,
+    acompletion_with_retry,
+    logger,
+    _convert_message_to_dict,
 )
 from langchain.schema import (
     BaseMessage,
     ChatGeneration,
     ChatResult,
+    LLMResult,
+    RunInfo,
 )
 from tenacity import (
     before_sleep_log,
@@ -43,12 +53,12 @@ from app.errors.chat_exceptions import (
 
 def _create_retry_decorator(llm: ChatOpenAI) -> Callable[[Any], Any]:
     from openai.error import (
-        Timeout,
-        APIError,
         APIConnectionError,
+        APIError,
+        InvalidRequestError,
         RateLimitError,
         ServiceUnavailableError,
-        InvalidRequestError,
+        Timeout,
     )
 
     min_seconds = 1
@@ -85,13 +95,28 @@ class CustomChatOpenAI(ChatOpenAI):
     def _create_retry_decorator(self) -> Callable[[Any], Any]:
         return _create_retry_decorator(self)
 
+    def _create_message_dicts(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]],
+        **kwargs: Any,
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        params = dict(self._invocation_params) | kwargs
+        if stop is not None:
+            if "stop" in params:
+                raise ValueError("`stop` found in both the input and default params.")
+            params["stop"] = stop
+        message_dicts = [_convert_message_to_dict(m) for m in messages]
+        return message_dicts, params
+
     async def _agenerate(
         self,
         messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        **kwargs: Any,
     ) -> ChatResult:
-        message_dicts, params = self._create_message_dicts(messages, stop)
+        message_dicts, params = self._create_message_dicts(messages, stop, **kwargs)
         if self.streaming:
             completion_tokens = 0
             inner_completion = ""
@@ -134,8 +159,8 @@ class CustomChatOpenAI(ChatOpenAI):
             if function_name:
                 function_arguments = {}
                 try:
-                    function_arguments = json.loads(function_arguments_unparsed)
-                except json.JSONDecodeError:
+                    function_arguments = orjson_loads(function_arguments_unparsed)
+                except JSONDecodeError:
                     pass
                 finally:
                     llm_output.update(
@@ -157,6 +182,47 @@ class CustomChatOpenAI(ChatOpenAI):
                 self, messages=message_dicts, **params
             )
             return self._create_chat_result(response)
+
+    async def agenerate(
+        self,
+        messages: List[List[BaseMessage]],
+        stop: Optional[List[str]] = None,
+        callbacks: Callbacks = None,
+        **kwargs: Any,
+    ) -> LLMResult:
+        """Top Level call"""
+        params = self.dict()
+        params["stop"] = stop
+
+        callback_manager = AsyncCallbackManager.configure(
+            callbacks, self.callbacks, self.verbose
+        )
+        run_manager = await callback_manager.on_chat_model_start(
+            {"name": self.__class__.__name__}, messages, invocation_params=params
+        )
+
+        new_arg_supported = inspect.signature(self._agenerate).parameters.get(
+            "run_manager"
+        )
+        try:
+            results = await asyncio.gather(
+                *[
+                    self._agenerate(m, stop=stop, run_manager=run_manager, **kwargs)
+                    if new_arg_supported
+                    else self._agenerate(m, stop=stop)
+                    for m in messages
+                ]
+            )
+        except (KeyboardInterrupt, Exception) as e:
+            await run_manager.on_llm_error(e)
+            raise e
+        llm_output = self._combine_llm_outputs([res.llm_output for res in results])
+        generations = [res.generations for res in results]
+        output = LLMResult(generations=generations, llm_output=llm_output)
+        await run_manager.on_llm_end(output)
+        if run_manager:
+            output.run = RunInfo(run_id=run_manager.run_id)
+        return output
 
     def _combine_llm_outputs(self, llm_outputs: List[Optional[dict]]) -> dict:
         overall_token_usage: dict = {}
@@ -198,10 +264,10 @@ class CustomChatOpenAI(ChatOpenAI):
             if res["message"].get("function_call") is not None:
                 function_arguments = {}
                 try:
-                    function_arguments = json.loads(
+                    function_arguments = orjson_loads(
                         res["message"]["function_call"].get("arguments")
                     )
-                except json.JSONDecodeError:
+                except JSONDecodeError:
                     pass
                 finally:
                     function_calls.append(

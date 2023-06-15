@@ -266,6 +266,10 @@ class ChatConfig:
         EMBEDDING_TOKEN_CHUNK_OVERLAP  # number of tokens to overlap between chunks
     )
     summarization_chunk_size: int = 2048
+    query_context_token_limit: int = 2048
+    scrolling_chunk_size_when_browsing: int = 1024
+    scrolling_overlap_when_browsing: int = 256
+    vectorstore_n_results_limit: int = 3
     global_prefix: Optional[str] = GLOBAL_PREFIX  # prefix for global chat
     global_suffix: Optional[str] = GLOBAL_SUFFIX  # suffix for global chat
 
