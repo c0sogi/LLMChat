@@ -2,7 +2,7 @@ from typing import Callable, Optional
 import httpx
 import orjson
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.websocket_manager import SendToWebsocket
+from app.utils.chat.managers.websocket import SendToWebsocket
 from app.utils.logger import api_logger
 from app.common.config import (
     GOOGLE_TRANSLATE_API_KEY,

@@ -315,7 +315,7 @@ The Message Manager (`MessageManager`) ensures that the number of tokens in mess
 To use the cache manager and message manager in your project, import them as follows:
 
 ```python
-from app.utils.chat.cache_manager import CacheManager
+from app.utils.chat.managers.cache import CacheManager
 from app.utils.chat.message_manager import MessageManager
 ```
 

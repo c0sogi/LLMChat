@@ -78,7 +78,7 @@ services:
       - reverse-proxy-public
 
   api:
-    image: cosogi/llmchat:230610
+    image: cosogi/llmchat:230616
     restart: always
     env_file:
       - .env

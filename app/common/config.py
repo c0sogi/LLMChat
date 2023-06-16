@@ -52,6 +52,7 @@ REDIS_PORT: int = int(environ.get("REDIS_PORT", 6379))
 REDIS_DATABASE: int = int(environ.get("REDIS_DATABASE", 0))
 REDIS_PASSWORD: str = environ["REDIS_PASSWORD"]
 
+
 # Qdrant Variables
 QDRANT_COLLECTION: str = environ.get(
     "QDRANT_COLLECTION", "SharedCollection"

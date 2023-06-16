@@ -5,9 +5,10 @@ from app.common.constants import (
 )
 from app.models.chat_models import ChatRoles, ResponseType
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.chains import Chains
-from app.utils.chat.message_handler import MessageHandler
-from app.utils.chat.message_manager import MessageManager
+from app.utils.chat.chains.translate import translate_chain
+from app.utils.chat.chains.vectorstore_query import vectorstore_query_chain
+from app.utils.chat.messages.handler import MessageHandler
+from app.utils.chat.managers.message import MessageManager
 
 
 async def query(
@@ -20,7 +21,7 @@ async def query(
 
     translate: Optional[str] = kwargs.get("translate", None)
     if translate:
-        translate_chain_result: Optional[str] = await Chains.translate_chain(
+        translate_chain_result: Optional[str] = await translate_chain(
             buffer=buffer,
             query=user_query,
             finish=False,
@@ -31,7 +32,7 @@ async def query(
         )
         if translate_chain_result is not None:
             user_query = translate_chain_result
-    vectorstore_query_result: Optional[str] = await Chains.vectorstore_query_chain(
+    vectorstore_query_result: Optional[str] = await vectorstore_query_chain(
         buffer=buffer,
         query=user_query,
         finish=True,

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Type
 
 from tiktoken import Encoding, encoding_for_model
-from transformers import LlamaTokenizer as _LlamaTokenizer
+from transformers.models.llama import LlamaTokenizer as _LlamaTokenizer
 
 from app.utils.chat.llama_cpp import LlamaTokenizerAdapter
 
@@ -16,8 +16,28 @@ class BaseTokenizer(ABC):
         ...
 
     @abstractmethod
+    def decode(self, tokens: list[int]) -> str:
+        ...
+
+    @abstractmethod
     def tokens_of(self, message: str) -> int:
         ...
+
+    def split_text_on_tokens(
+        self, text: str, tokens_per_chunk: int, chunk_overlap: int
+    ) -> list[str]:
+        """Split incoming text and return chunks."""
+        splits: list[str] = []
+        input_ids = self.encode(text)
+        start_idx = 0
+        cur_idx = min(start_idx + tokens_per_chunk, len(input_ids))
+        chunk_ids = input_ids[start_idx:cur_idx]
+        while start_idx < len(input_ids):
+            splits.append(self.decode(chunk_ids))
+            start_idx += tokens_per_chunk - chunk_overlap
+            cur_idx = min(start_idx + tokens_per_chunk, len(input_ids))
+            chunk_ids = input_ids[start_idx:cur_idx]
+        return splits
 
 
 class OpenAITokenizer(BaseTokenizer):
@@ -27,6 +47,9 @@ class OpenAITokenizer(BaseTokenizer):
 
     def encode(self, message: str, /) -> list[int]:
         return self.tokenizer.encode(message)
+
+    def decode(self, tokens: list[int], /) -> str:
+        return self.tokenizer.decode(tokens)
 
     def tokens_of(self, message: str) -> int:
         return len(self.encode(message))
@@ -51,6 +74,9 @@ class LlamaTokenizer(BaseTokenizer):
     def encode(self, message: str, /) -> list[int]:
         return self.tokenizer.encode(message)
 
+    def decode(self, tokens: list[int], /) -> str:
+        return self.tokenizer.decode(tokens)
+
     def tokens_of(self, message: str) -> int:
         return len(self.encode(message))
 
@@ -73,9 +99,13 @@ class LlamaTokenizer(BaseTokenizer):
                 print(split_str)
                 raise ValueError("Input string is not in the correct format")
             try:
-                self._tokenizer = _LlamaTokenizer.from_pretrained(root_path, subfolder=subfolder)
+                self._tokenizer = _LlamaTokenizer.from_pretrained(
+                    root_path, subfolder=subfolder
+                )
             except Exception as e:
-                api_logger.error(f"Error loading tokenizer: {self.model_name}", exc_info=True)
+                api_logger.error(
+                    f"Error loading tokenizer: {self.model_name}", exc_info=True
+                )
                 raise e
             print("Tokenizer loaded:", self.model_name)
         return self._tokenizer

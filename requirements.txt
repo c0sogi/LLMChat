@@ -47,6 +47,7 @@ python-dotenv
 qdrant_client
 redis
 requests
+requests_html
 s3transfer
 sentencepiece
 six

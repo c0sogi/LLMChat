@@ -3,7 +3,6 @@ from dataclasses import dataclass, field
 from multiprocessing import Manager
 from multiprocessing.managers import SyncManager
 
-import openai
 from langchain.chains.combine_documents.map_reduce import MapReduceDocumentsChain
 from langchain.chains.combine_documents.stuff import StuffDocumentsChain
 from langchain.chains.summarize import load_summarize_chain, stuff_prompt

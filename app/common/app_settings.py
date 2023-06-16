@@ -17,7 +17,7 @@ from app.middlewares.token_validator import access_control
 from app.middlewares.trusted_hosts import TrustedHostMiddleware
 from app.routers import auth, index, services, users, user_services, websocket
 from app.shared import Shared
-from app.utils.chat.cache_manager import CacheManager
+from app.utils.chat.managers.cache import CacheManager
 from app.utils.js_initializer import js_url_initializer
 from app.utils.logger import api_logger
 from app.viewmodels.admin import ApiKeyAdminView, UserAdminView

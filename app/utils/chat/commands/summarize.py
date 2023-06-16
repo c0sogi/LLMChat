@@ -5,8 +5,8 @@ from fastapi.concurrency import run_in_threadpool
 
 from app.shared import Shared
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.prompts import message_histories_to_str
-from app.utils.chat.text_generation import get_summarization
+from app.utils.chat.messages.converter import message_histories_to_str
+from app.utils.chat.text_generations.summarization import get_summarization
 
 
 async def summarize(to_summarize: Optional[str], /, buffer: BufferedUserContext) -> str:

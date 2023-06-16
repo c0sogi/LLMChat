@@ -59,30 +59,31 @@ class ChatRoles(str, Enum):
         else:
             raise ValueError(f"Invalid role: {role}")
 
+from app.models.base_models import SendInitToWebsocket as MessageHistory
 
-@dataclass
-class MessageHistory:
-    role: str
-    content: str
-    tokens: int
-    is_user: bool
-    timestamp: int = field(default_factory=UTC.timestamp)
-    uuid: str = field(default_factory=lambda: uuid4().hex)
-    model_name: Optional[str] = None
-    summarized: Optional[str] = None  # =
-    summarized_tokens: Optional[int] = None  # =
+# @dataclass
+# class MessageHistory:
+#     role: str
+#     content: str
+#     tokens: int
+#     actual_role: str
+#     timestamp: int = field(default_factory=UTC.timestamp)
+#     uuid: str = field(default_factory=lambda: uuid4().hex)
+#     model_name: Optional[str] = None
+#     summarized: Optional[str] = None  # =
+#     summarized_tokens: Optional[int] = None  # =
 
-    def __repr__(self) -> str:
-        if self.summarized is not None:
-            return (
-                f'<{self.role} uuid="{self.uuid}" date="{self.datetime}Z" tokens="{self.tokens}" '
-                f'summarized="{self.summarized}">{self.content}</>'
-            )
-        return f'<{self.role} uuid="{self.uuid}" date="{self.datetime}Z" tokens="{self.tokens}">{self.content}</>'
+#     def __repr__(self) -> str:
+#         if self.summarized is not None:
+#             return (
+#                 f'<{self.role} uuid="{self.uuid}" date="{self.datetime}Z" tokens="{self.tokens}" '
+#                 f'summarized="{self.summarized}">{self.content}</>'
+#             )
+#         return f'<{self.role} uuid="{self.uuid}" date="{self.datetime}Z" tokens="{self.tokens}">{self.content}</>'
 
-    @property
-    def datetime(self) -> datetime:
-        return UTC.timestamp_to_datetime(self.timestamp)
+#     @property
+#     def datetime(self) -> datetime:
+#         return UTC.timestamp_to_datetime(self.timestamp)
 
 
 @dataclass

@@ -58,7 +58,7 @@ async def test_chat_redis(cache_manager):
     new_message: MessageHistory = MessageHistory(
         role=role.value,
         content=message,
-        is_user=True,
+        actual_role=role.value,
         tokens=new_context.get_tokens_of(message),
     )
     await cache_manager.append_message_history(

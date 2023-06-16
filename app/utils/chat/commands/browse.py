@@ -5,9 +5,12 @@ from app.common.constants import (
 )
 from app.models.chat_models import ChatRoles, ResponseType
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.chains import Chains
-from app.utils.chat.message_handler import MessageHandler
-from app.utils.chat.message_manager import MessageManager
+from app.utils.chat.chains.full_browsing import full_web_browsing_chain
+from app.utils.chat.chains.translate import translate_chain
+from app.utils.chat.messages.handler import MessageHandler
+from app.utils.chat.managers.message import MessageManager
+from app.utils.chat.tokens import get_token_limit_with_n_messages, make_formatted_query
+from app.utils.logger import ApiLogger
 
 
 async def browse(
@@ -20,7 +23,7 @@ async def browse(
 
     translate: Optional[str] = kwargs.get("translate", None)
     if translate:
-        translate_chain_result: Optional[str] = await Chains.translate_chain(
+        translate_chain_result: Optional[str] = await translate_chain(
             buffer=buffer,
             query=user_query,
             finish=False,
@@ -31,20 +34,25 @@ async def browse(
         )
         if translate_chain_result is not None:
             user_query = translate_chain_result
-    browsing_result: Optional[str] = await Chains.full_web_browsing_chain(
+    browsing_result: Optional[str] = await full_web_browsing_chain(
         buffer=buffer,
         query=user_query,
         finish=True,
         wait_next_query=True,
         show_result=False,
     )
+    if browsing_result:
+        query_to_send: str = make_formatted_query(
+            user_chat_context=buffer.current_user_chat_context,
+            question=user_query,
+            context=browsing_result,
+            query_template=QueryTemplates.CONTEXT_QUESTION__DEFAULT,
+        )
+    else:
+        query_to_send: str = user_query
 
     await MessageHandler.user(
-        msg=QueryTemplates.CONTEXT_QUESTION__DEFAULT.format(
-            context=browsing_result, question=user_query
-        )
-        if browsing_result is not None
-        else user_query,
+        msg=query_to_send,
         translate=None,
         buffer=buffer,
         use_tight_token_limit=False,

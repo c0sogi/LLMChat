@@ -6,7 +6,6 @@ from time import sleep
 from typing import TYPE_CHECKING, Any, Generator, Iterator
 from langchain import LlamaCpp
 from llama_cpp import Llama, LlamaCache, llama_free, llama_n_ctx
-from pydantic import Field, root_validator
 import gc
 
 from app.errors.chat_exceptions import (
@@ -21,60 +20,7 @@ if TYPE_CHECKING:
     from app.models.llms import LlamaCppModel
 
 
-class LlamaCppGpu(LlamaCpp):
-    n_gpu_layers: int = Field(30, alias="n_gpu_layers")
-
-    @root_validator()
-    def validate_environment(cls, values: dict) -> dict:
-        model_path = values["model_path"]
-        lora_path = values["lora_path"]
-        lora_base = values["lora_base"]
-        n_ctx = values["n_ctx"]
-        n_parts = values["n_parts"]
-        seed = values["seed"]
-        f16_kv = values["f16_kv"]
-        logits_all = values["logits_all"]
-        vocab_only = values["vocab_only"]
-        use_mlock = values["use_mlock"]
-        n_threads = values["n_threads"]
-        n_batch = values["n_batch"]
-        use_mmap = values["use_mmap"]
-        last_n_tokens_size = values["last_n_tokens_size"]
-        n_gpu_layers = values["n_gpu_layers"]
-
-        try:
-            from llama_cpp import Llama
-
-            values["client"] = Llama(
-                n_gpu_layers=n_gpu_layers,
-                model_path=model_path,
-                lora_base=lora_base,
-                lora_path=lora_path,
-                n_ctx=n_ctx,
-                n_parts=n_parts,
-                seed=seed,
-                f16_kv=f16_kv,
-                logits_all=logits_all,
-                vocab_only=vocab_only,
-                use_mlock=use_mlock,
-                n_threads=n_threads,
-                n_batch=n_batch,
-                use_mmap=use_mmap,
-                last_n_tokens_size=last_n_tokens_size,
-            )
-        except ImportError:
-            raise ModuleNotFoundError(
-                "Could not import llama-cpp-python library. "
-                "Please install the llama-cpp-python library t  o "
-                "use this embedding model: pip install llama-cpp-python"
-            )
-        except Exception:
-            raise NameError(f"Could not load Llama model from path: {model_path}")
-
-        return values
-
-
-cached: dict[str, LlamaCppGpu] = {}
+cached: dict[str, LlamaCpp] = {}
 
 
 def get_stops(s: str) -> list[str]:
@@ -98,7 +44,7 @@ def get_fake_response() -> Generator:
 def load_llama(
     llama_cpp_model: "LlamaCppModel",
     cache_only_single_model: bool = True,
-) -> LlamaCppGpu:
+) -> LlamaCpp:
     try:
         model_name: str = llama_cpp_model.name
         if cache_only_single_model:
@@ -150,7 +96,7 @@ def llama_cpp_generation(
             stdout.write(str(prompt))
         assert isinstance(prompt, str)
         if not is_fake:
-            llm: LlamaCppGpu = load_llama(llama_cpp_model=llama_cpp_model)
+            llm: LlamaCpp = load_llama(llama_cpp_model=llama_cpp_model)
             llm_client: Llama = llm.client
             llm_client.verbose = echo
             real_max_tokens: int = max_tokens
@@ -217,6 +163,7 @@ def llama_cpp_generation(
                         continue
                     if echo:
                         stdout.write(text)
+                        stdout.flush()
                     content_buffer += text
                     m_queue.put(text)
                 if content_buffer.replace("\u200b", "").strip() == "":
@@ -244,8 +191,8 @@ def llama_cpp_generation(
         m_queue.put_nowait(None)  # put None to indicate that the process is done
 
 
-def get_llama(llama_cpp_model: "LlamaCppModel") -> LlamaCppGpu:
-    return LlamaCppGpu(
+def get_llama(llama_cpp_model: "LlamaCppModel") -> LlamaCpp:
+    return LlamaCpp(
         client=None,
         cache=None,
         callbacks=None,

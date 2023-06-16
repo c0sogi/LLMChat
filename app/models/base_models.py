@@ -1,11 +1,13 @@
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional, Union, Type
+from uuid import uuid4
 
 from pydantic import Field
 from pydantic.main import BaseModel
 
 from app.database.schemas.auth import UserStatus
+from app.utils.date_utils import UTC
 
 JSON_TYPES = Union[int, float, str, bool, dict, list, None]
 
@@ -107,7 +109,7 @@ class MessageToWebsocket(BaseModel):
     msg: Optional[str]
     finish: bool
     chat_room_id: Optional[str] = None
-    is_user: bool
+    actual_role: Optional[str] = None
     init: bool = False
     model_name: Optional[str] = None
     uuid: Optional[str] = None
@@ -142,15 +144,30 @@ class OpenAIChatMessage(BaseModel):
 
 
 class SendInitToWebsocket(BaseModel):
+    role: str
     content: str
     tokens: int
-    is_user: bool
-    timestamp: int
+    actual_role: str
+    timestamp: int = Field(default_factory=UTC.timestamp)
+    uuid: str = Field(default_factory=lambda: uuid4().hex)
     model_name: Optional[str] = None
-    uuid: Optional[str] = None
+    summarized: Optional[str] = None
+    summarized_tokens: Optional[int] = None
 
     class Config:
         orm_mode = True
+
+    def __repr__(self) -> str:
+        if self.summarized is not None:
+            return (
+                f'<{self.role} uuid="{self.uuid}" date="{self.datetime}Z" tokens="{self.tokens}" '
+                f'summarized="{self.summarized}">{self.content}</>'
+            )
+        return f'<{self.role} uuid="{self.uuid}" date="{self.datetime}Z" tokens="{self.tokens}">{self.content}</>'
+
+    @property
+    def datetime(self) -> datetime:
+        return UTC.timestamp_to_datetime(self.timestamp)
 
 
 class InitMessage(BaseModel):

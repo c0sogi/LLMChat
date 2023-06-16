@@ -76,6 +76,11 @@ class ChatTurnTemplates:
         input_variables=["role", "content"],
         template_format="f-string",
     )
+    ROLE_CONTENT_3: PromptTemplate = PromptTemplate(
+        template="# {role}:\n{content}\n",
+        input_variables=["role", "content"],
+        template_format="f-string",
+    )
 
 
 class SummarizationTemplates:
@@ -91,7 +96,8 @@ class SummarizationTemplates:
     TEXT__CONVERSATIONAL: PromptTemplate = PromptTemplate(
         template=(
             "Write a summary of the following conversations delimited by triple backquotes.\n"
-            "Organize the key points of each message in the order of the conversation in a format like `ROLE: SUMMARY`.\n"
+            "Organize the key points of each message in the order of the conversation in a format like "
+            "`ROLE: SUMMARY`.\n"
             "```\n{text}\n```\n\nCONVERSATION SUMMARY:\n"
         ),
         input_variables=["text"],
@@ -395,6 +401,24 @@ CONVERSATION_EXAMPLES: list[dict[str, str]] = [
 JSON_PATTERN: Pattern = compile(r"\{.*\}")
 
 if __name__ == "__main__":
+    import sys
+
+    try:
+        import pyperclip
+    except ImportError:
+        pyperclip = None
+
+    ANSI_COLORS = {
+        "red": "\033[91m",
+        "green": "\033[92m",
+        "yellow": "\033[93m",
+        "blue": "\033[94m",
+        "magenta": "\033[95m",
+        "cyan": "\033[96m",
+        "white": "\033[97m",
+        "black": "\033[98m",
+        "end": "\033[0m",
+    }
 
     def split_long_text(long_text: str, chars_per_line: int):
         split_strings = [
@@ -405,17 +429,24 @@ if __name__ == "__main__":
 
     while True:
         lines = []
+        print(
+            f"{ANSI_COLORS['cyan']}> Input long texts to compress:{ANSI_COLORS['end']}"
+        )
         try:
-            while True:
-                line = input()
+            for line in sys.stdin:
+                line = line.strip()
                 lines.append(line)
         except KeyboardInterrupt:
-            if not lines:
-                print("No input received. Exiting.")
-                break
+            pass
 
-            # Join the lines with newline characters
-            long_text = "\n".join(lines)
-            print("\n\nInput ended. Here is your text:")
-            print(split_long_text(long_text, 80))
-            print("\n\n")
+        if not lines:
+            print(f"{ANSI_COLORS['red']}No input, exiting...{ANSI_COLORS['end']}")
+            break
+
+        # Join the lines with newline characters
+        long_text = "\n".join(lines)
+        result = split_long_text(long_text, 80)
+        print(f"\n\n{ANSI_COLORS['green']}{result}{ANSI_COLORS['end']}\n\n")
+        if pyperclip:
+            pyperclip.copy(result)
+            print(f"{ANSI_COLORS['yellow']}Copied to clipboard!{ANSI_COLORS['end']}")

@@ -13,7 +13,7 @@ from app.utils.auth.register_validation import (
     is_password_length_in_range,
 )
 from app.utils.auth.token import create_access_token, token_decode
-from app.utils.chat.cache_manager import CacheManager
+from app.utils.chat.managers.cache import CacheManager
 from app.models.base_models import SnsType, Token, UserRegister, UserToken
 
 router = APIRouter(prefix="/auth")

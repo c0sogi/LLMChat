@@ -62,3 +62,15 @@ class ChatInterruptedException(ChatException):
     def __init__(self, *, msg: str | None = None) -> None:
         self.msg = msg
         super().__init__(msg=msg)
+
+
+class ChatStreamingInterruptedException(ChatInterruptedException):
+    def __init__(self, *, msg: str | None = None) -> None:
+        self.msg = msg
+        super().__init__(msg=msg)
+
+
+class ChatGeneralInterruptedException(ChatInterruptedException):
+    def __init__(self, *, msg: str | None = None) -> None:
+        self.msg = msg
+        super().__init__(msg=msg)

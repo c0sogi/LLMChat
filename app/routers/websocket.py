@@ -4,9 +4,9 @@ from app.common.config import HOST_MAIN, OPENAI_API_KEY
 from app.database.crud import api_keys
 from app.database.schemas.auth import ApiKeyStatus, UserStatus, Users
 from app.errors.api_exceptions import Responses_400, Responses_401
-from app.utils.chat.websocket_manager import SendToWebsocket
+from app.utils.chat.managers.websocket import SendToWebsocket
 from app.utils.logger import api_logger
-from app.utils.chat.stream_manager import ChatStreamManager
+from app.utils.chat.managers.stream import ChatStreamManager
 from app.common.config import API_ENV
 
 router = APIRouter()

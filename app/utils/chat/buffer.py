@@ -53,6 +53,7 @@ class BufferedUserContext:
     task_list: list[asyncio.Task[Any]] = field(default_factory=list)  # =
     last_user_message: Optional[str] = None
     optional_info: dict = field(default_factory=dict)
+    is_stream_in_progress: asyncio.Event = field(default_factory=asyncio.Event)
     _sorted_ctxts: ContextList = field(init=False)
     _current_ctxt: UserChatContext = field(init=False)
 

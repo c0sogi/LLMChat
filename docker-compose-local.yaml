@@ -61,7 +61,7 @@ services:
         ipv4_address: 172.16.0.13 # static IP
 
   api:
-    image: cosogi/llmchat:230610
+    image: cosogi/llmchat:230616
     restart: always
     env_file:
       - .env
@@ -80,17 +80,16 @@ services:
     networks:
       reverse-proxy-public:
         ipv4_address: 172.16.0.14 # static IP
-
-  search-api:
-    image: searxng/searxng:latest
-    restart: always
-    ports:
-      - "8080:8080"
-    environment:
-      REDIS_PASSWORD: "${REDIS_PASSWORD}"
-      JWT_SECRET: "${JWT_SECRET}"
-    volumes:
-      - ./searxng:/etc/searxng
-    networks:
-      reverse-proxy-public:
-        ipv4_address: 172.16.0.15 # static IP
+  # search-api:
+  #   image: searxng/searxng:latest
+  #   restart: always
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     REDIS_PASSWORD: "${REDIS_PASSWORD}"
+  #     JWT_SECRET: "${JWT_SECRET}"
+  #   volumes:
+  #     - ./searxng:/etc/searxng
+  #   networks:
+  #     reverse-proxy-public:
+  #       ipv4_address: 172.16.0.15 # static IP

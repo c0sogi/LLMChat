@@ -250,19 +250,14 @@ class LLMModels(Enum):
         tokenizer=LlamaTokenizer("openaccess-ai-collective/manticore-13b"),
         model_path="./llama_models/ggml/Manticore-13B.ggmlv2.q5_1.bin",
     )
-    remon_13b = LlamaCppModel(
-        name="remon-13b",
+    kovicuna_7b = LlamaCppModel(
+        name="kovicuna_7b",
         max_total_tokens=2048,  # context tokens (n_ctx)
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
-        tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
-        model_path="./llama_models/ggml/remon-13B.ggmlv3.q5_1.bin",
+        tokenizer=LlamaTokenizer("digitous/13B-HyperMantis"),
+        model_path="./llama_models/ggml/kovicuna_q4km.bin",
         prefix_template=DescriptionTemplates.USER_AI__SHORT,
-        user_chat_roles=UserChatRoles(
-            user="USER",
-            ai="LEMON",
-            system="Instruction",
-        ),
     )
     wizard_lm_13b = LlamaCppModel(
         name="wizardLM-13B-1.0-GGML",

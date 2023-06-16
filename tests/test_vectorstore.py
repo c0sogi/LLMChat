@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from langchain.docstore.document import Document
 from app.database.connection import cache
-from app.utils.chat.vectorstore_manager import VectorStoreManager
+from app.utils.chat.managers.vectorstore import VectorStoreManager
 
 
 @pytest.mark.asyncio

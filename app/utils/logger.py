@@ -41,6 +41,16 @@ class CustomLogger(logging.Logger):
 
 
 class ApiLogger(CustomLogger):
+    _instances: dict[str, CustomLogger] = {}
+
+    def __new__(
+        cls, name: str, logging_config: LoggingConfig = LoggingConfig()
+    ) -> CustomLogger:
+        """Singleton pattern for ApiLogger class"""
+        if name not in cls._instances:
+            cls._instances[name] = super().__new__(cls)
+        return cls._instances[name]
+
     def __init__(
         self, name: str, logging_config: LoggingConfig = LoggingConfig()
     ) -> None:
@@ -134,3 +144,4 @@ if __name__ == "__main__":
     except Exception:
         api_logger.error("Testing logger: error", exc_info=True)
     api_logger.critical("Testing logger: critical")
+api_logger.info

@@ -376,11 +376,11 @@ class DuckDuckGoSearchAPIWrapper(BaseModel):
     Free and does not require any setup
     """
 
-    k: int = 10
+    k: int = 10  # Not used
     region: str = "wt-wt"
     safesearch: str = "moderate"
     time: Optional[str] = "y"
-    max_results: int = 10
+    max_results: int = 10  # Max results to return
 
     class Config:
         """Configuration for this pydantic object."""

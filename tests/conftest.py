@@ -13,7 +13,7 @@ from app.common.app_settings import create_app
 from app.common.config import Config, LoggingConfig
 from app.utils.logger import CustomLogger
 from app.models.base_models import UserToken
-from app.utils.chat.cache_manager import CacheManager, cache
+from app.utils.chat.managers.cache import CacheManager, cache
 
 
 @pytest.fixture(scope="session")
