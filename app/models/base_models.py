@@ -254,3 +254,8 @@ class OpenAIFunction(BaseModel):
                 ],
             }
         return function_dict
+
+
+class ParserDefinitions(BaseModel):
+    selector: Optional[str] = None
+    render_js: bool = False

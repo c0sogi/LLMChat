@@ -46,7 +46,7 @@ async def browse(
             user_chat_context=buffer.current_user_chat_context,
             question=user_query,
             context=browsing_result,
-            query_template=QueryTemplates.CONTEXT_QUESTION__DEFAULT,
+            query_template=QueryTemplates.CONTEXT_QUESTION__WEB_BROWSING,
         )
     else:
         query_to_send: str = user_query

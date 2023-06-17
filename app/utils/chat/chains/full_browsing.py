@@ -1,5 +1,6 @@
 from collections import deque
 from copy import deepcopy
+from re import Pattern, compile
 from typing import Optional, Sequence, Tuple
 
 from fastapi.concurrency import run_in_threadpool
@@ -15,6 +16,10 @@ from app.utils.chat.managers.websocket import SendToWebsocket
 from app.utils.logger import ApiLogger
 
 from . import aget_query_to_search
+
+URL_PATTERN: Pattern = compile(
+    r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
+)
 
 
 def _harvest_click_results(
@@ -93,15 +98,15 @@ async def full_web_browsing_chain(
     relevant_content_and_scores: deque[Tuple[str, int]] = deque(
         maxlen=num_content_chunks
     )
-    overall_snippets: Optional[str] = None
     visited_links: set[str] = set()
-    asession: AsyncHTMLSession = AsyncHTMLSession()
+    user_provided_links: list[str] = URL_PATTERN.findall(query)
+    overall_snippets: Optional[str] = None
 
     def get_best_result():
         # Get best result from relevant_content_and_scores and overall_snippets
         if not relevant_content_and_scores:
             # If no relevant content, return overall_snippets
-            ApiLogger("||get_best_result||").info("[1]" + str(overall_snippets))
+            # ApiLogger("||get_best_result||").info("[1]" + str(overall_snippets))
             return overall_snippets
         elif relevant_content_and_scores[-1][1] > 5:
             # If there's content with more than `collect_content_larger_than`, return it
@@ -111,15 +116,16 @@ async def full_web_browsing_chain(
                 if i[1] > collect_score_larger_than
             ]
             if overall_snippets is not None:
-                if len(best_results) < num_content_chunks:
-                    best_results.insert(0, overall_snippets)
-                else:
-                    best_results[0] = overall_snippets
-            ApiLogger("||get_best_result||").info("[2]" + "\n\n".join(best_results))
+                if not user_provided_links:
+                    if len(best_results) < num_content_chunks:
+                        best_results.insert(0, overall_snippets)
+                    else:
+                        best_results[0] = overall_snippets
+            # ApiLogger("||get_best_result||").info("[2]" + "\n\n".join(best_results))
             return "\n\n".join(best_results)
         else:
             # Otherwise, return overall_snippets
-            ApiLogger("||get_best_result||").info("[3]" + str(overall_snippets))
+            # ApiLogger("||get_best_result||").info("[3]" + str(overall_snippets))
             return overall_snippets
 
     # Begin browsing
@@ -129,6 +135,7 @@ async def full_web_browsing_chain(
         chat_room_id=buffer.current_chat_room_id,
         finish=False,
     )
+    asession = AsyncHTMLSession()
     try:
         # Get query to search, and perform web search
         query_to_search = await aget_query_to_search(
@@ -139,6 +146,12 @@ async def full_web_browsing_chain(
         snippets_with_link: dict[str, str] = await run_in_threadpool(
             Shared().duckduckgo.formatted_results_with_link, query=query_to_search
         )
+        for link in user_provided_links:
+            snippets_with_link[link] = (
+                "User provided link"
+                if link not in snippets_with_link
+                else snippets_with_link[link]
+            )
         overall_snippets = "\n\n".join(snippets_with_link.values())
         while snippets_with_link:
             # Get next action and link to click until no more snippets
@@ -157,7 +170,7 @@ async def full_web_browsing_chain(
 
             if action == "click_link":
                 # Prepare to click link, prevent infinite loop
-                if link_to_click in visited_links or link_to_click is None:
+                if link_to_click is None or link_to_click in visited_links:
                     continue
                 if link_to_click in snippets_with_link:
                     snippets_with_link.pop(link_to_click)

@@ -80,6 +80,13 @@ services:
     networks:
       reverse-proxy-public:
         ipv4_address: 172.16.0.14 # static IP
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [ gpu ]
   # search-api:
   #   image: searxng/searxng:latest
   #   restart: always

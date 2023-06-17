@@ -270,7 +270,7 @@ class ChatConfig:
     query_context_token_limit: int = 2048
     scrolling_chunk_size_when_browsing: int = 1024
     scrolling_overlap_when_browsing: int = 256
-    vectorstore_n_results_limit: int = 3
+    vectorstore_n_results_limit: int = 10
     global_prefix: Optional[str] = GLOBAL_PREFIX  # prefix for global chat
     global_suffix: Optional[str] = GLOBAL_SUFFIX  # suffix for global chat
 

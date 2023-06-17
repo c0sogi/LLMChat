@@ -1,10 +1,12 @@
 from typing import Optional, Tuple
 
 from app.common.config import ChatConfig, config
+from app.common.constants import QueryTemplates
 from app.shared import Shared
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.managers.vectorstore import Document, VectorStoreManager
 from app.utils.chat.managers.websocket import SendToWebsocket
+from app.utils.chat.tokens import make_formatted_query
 from app.utils.logger import ApiLogger
 from . import aget_query_to_search
 
@@ -36,14 +38,19 @@ async def vectorstore_query_chain(
             collection_names=[buffer.user_id, config.shared_vectorestore_name],
             k=k,
         )  # lower score is the better!
-        ApiLogger("||vectorstore_query_chain||").info(
-            [score for _, score in found_text_and_score]
-        )
+        # ApiLogger("||vectorstore_query_chain||").info(
+        #     [score for _, score in found_text_and_score]
+        # )
         if not found_text_and_score:
             raise Exception("No result found")
 
-        found_text: str = "\n\n".join(
-            [document.page_content for document, _ in found_text_and_score]
+        found_text: str = make_formatted_query(
+            user_chat_context=buffer.current_user_chat_context,
+            question=query,
+            context="\n\n".join(
+                [document.page_content for document, _ in found_text_and_score]
+            ),
+            query_template=QueryTemplates.CONTEXT_QUESTION__CONTEXT_ONLY,
         )
         await SendToWebsocket.message(
             websocket=buffer.websocket,

@@ -4,16 +4,19 @@ from urllib.parse import urlparse
 
 from fastapi.concurrency import run_in_threadpool
 from langchain.schema import HumanMessage, SystemMessage
-from lxml.etree import HTML
-from requests_html import AsyncHTMLSession, HTMLResponse
+from requests_html import HTML, AsyncHTMLSession
+from app.models.base_models import ParserDefinitions
 
 from app.shared import Shared
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.managers.websocket import SendToWebsocket
 from app.utils.logger import ApiLogger
 
-SELECTOR_DEFINITIONS = {
-    "dcinside.com": "//div[contains(@class, 'view_content_wrap') or contains(@class, 'comment_box')]",
+PARSER_DEFINITIONS = {
+    "dcinside.com": ParserDefinitions(
+        selector="//div[contains(@class, 'view_content_wrap') or contains(@class, 'comment_box')]",
+        render_js=True,
+    ),
 }
 BASE_FILTERING = (
     "[not(self::script or self::style or self::head or self::meta "
@@ -21,29 +24,80 @@ BASE_FILTERING = (
 )
 
 
-def _parse_text_content(
-    url: str, html_response: HTMLResponse, tokens_per_chunk: int, chunk_overlap: int
+async def _parse_text_content(
+    url: str,
+    asession: AsyncHTMLSession,
+    tokens_per_chunk: int,
+    chunk_overlap: int,
+    timeout_for_render: int = 10,
+    sleep_for_render: int = 0,
 ) -> list[str]:
-    tld = ".".join(urlparse(url).netloc.split(".")[-2:])
-    html = HTML(html_response.text, parser=None)
-
-    selector = SELECTOR_DEFINITIONS.get(tld, "")
-    if not selector:
-        if html.xpath("//article"):
-            selector = "//article"
-        else:
-            selector = "//body"
-    xpath = selector + "//text()" + BASE_FILTERING
-
     try:
-        text = " ".join([content for content in html.xpath(xpath) if content.strip()])
+        tld = ".".join(urlparse(url).netloc.split(".")[-2:])
+        html: HTML = (await asession.get(url, timeout=10)).html  # type: ignore
+
+        parser_definition = PARSER_DEFINITIONS.get(tld)
+        js_required = parser_definition and parser_definition.render_js
+        if js_required:
+            await html.arender(
+                timeout=timeout_for_render, sleep=sleep_for_render, keep_page=False
+            )
+        if not parser_definition or not parser_definition.selector:
+            if html.xpath("//article"):
+                selector = "//article"
+            else:
+                selector = "//body"
+        else:
+            selector = parser_definition.selector
+
+        contents = html.xpath(selector + "//text()" + BASE_FILTERING)
+        if isinstance(contents, list):
+            text = " ".join(
+                [
+                    content.strip()
+                    for content in contents
+                    if isinstance(content, str) and content.strip()
+                ]
+            )
+        elif isinstance(contents, str):
+            text = contents.strip()
+        else:
+            text = contents.text.strip()
+
         return Shared().token_text_splitter.split_text(
             text,
             tokens_per_chunk=tokens_per_chunk,
             chunk_overlap=chunk_overlap,
         )
-    except Exception:
+
+    except Exception as e:
+        ApiLogger("||_parse_text_content||").exception(e)
         return []
+
+
+# def _parse_text_content(
+#     url: str, html_response: HTMLResponse, tokens_per_chunk: int, chunk_overlap: int
+# ) -> list[str]:
+#     tld = ".".join(urlparse(url).netloc.split(".")[-2:])
+#     html = HTML(html_response.text, parser=None)
+
+#     selector = SELECTOR_DEFINITIONS.get(tld, "")
+#     if not selector:
+#         if html.xpath("//article"):
+#             selector = "//article"
+#         else:
+#             selector = "//body"
+#     xpath = selector + "//text()" + BASE_FILTERING
+
+#     try:
+#         text = " ".join([content for content in html.xpath(xpath) if content.strip()])
+#         return Shared().token_text_splitter.split_text(
+#             text,
+#             tokens_per_chunk=tokens_per_chunk,
+#             chunk_overlap=chunk_overlap,
+#         )
+#     except Exception:
+#         return []
 
 
 async def _get_controlling_page_and_relevance_score(
@@ -119,15 +173,9 @@ async def click_link_chain(
         chat_room_id=buffer.current_chat_room_id,
         finish=False,
     )
-    try:
-        html_response: HTMLResponse = await asession.get(link, timeout=10)  # type: ignore
-    except Exception as e:
-        ApiLogger("||_click_link||").exception(e)
-        return []
-    scrollable_contents: list[str] = await run_in_threadpool(
-        _parse_text_content,
+    scrollable_contents: list[str] = await _parse_text_content(
         url=link,
-        html_response=html_response,
+        asession=asession,
         tokens_per_chunk=scrolling_chunk_size,
         chunk_overlap=scrolling_chunk_overlap,
     )

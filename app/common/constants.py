@@ -4,25 +4,26 @@ from langchain import PromptTemplate
 
 
 class QueryTemplates:
-    CONTEXT_QUESTION__DEFAULT = PromptTemplate(
+    CONTEXT_QUESTION__WEB_BROWSING = PromptTemplate(
         template=(
-            "Context information is below. You can utilize this information to answer the question.\n"
-            "---------------------\n"
+            "The results of a web search for the user's question are shown below, enclosed in triple dashes(---).\n"
+            "You can use this information to answer user's question."
+            "\n---\n"
             "{context}"
-            "\n---------------------\n"
-            "answer the question: {question}\n"
+            "\n---\n"
+            "Answer the question in detail: {question}\n"
         ),
         input_variables=["context", "question"],
         template_format="f-string",
     )
     CONTEXT_QUESTION__CONTEXT_ONLY = PromptTemplate(
         template=(
-            "Context information is below. \n"
-            "---------------------\n"
+            "Context information is below."
+            "\n---\n"
             "{context}"
-            "\n---------------------\n"
+            "\n---\n"
             "Given the context information and not prior knowledge, "
-            "answer the question: {question}\n"
+            "answer the question in detail: {question}\n"
         ),
         input_variables=["context", "question"],
         template_format="f-string",

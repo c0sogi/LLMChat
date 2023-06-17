@@ -5,8 +5,6 @@ from app.common.config import ChatConfig
 
 from app.errors.chat_exceptions import ChatTextGenerationException
 from app.models.chat_models import MessageHistory, UserChatContext
-from app.models.llms import LLMModel
-from app.utils.chat.buffer import BufferedUserContext
 
 
 def get_token_limit_with_n_messages(
@@ -98,7 +96,7 @@ def cutoff_message_histories(
     ai_message_histories: list[MessageHistory],
     system_message_histories: list[MessageHistory],
     token_limit: int,
-    extra_token_margin: Optional[int] = None,
+    extra_token_margin: int = 0,
 ) -> tuple[list[MessageHistory], list[MessageHistory]]:
     """
     Cutoff message histories to fit the token limit.
@@ -123,7 +121,7 @@ def cutoff_message_histories(
 
     while (
         num_user_messages - idx >= 0 or num_ai_messages - idx >= 0
-    ) and token_limit > 0:
+    ) and token_limit > extra_token_margin:
         user_and_ai_tokens = 0
         if num_user_messages - idx >= 0:
             user_and_ai_tokens += user_message_histories[-idx].tokens
@@ -140,9 +138,9 @@ def cutoff_message_histories(
             break
         idx += 1
 
-    if extra_token_margin is not None:
-        deleted_tokens: int = 0
-        while user_results and ai_results and deleted_tokens < extra_token_margin:
-            deleted_tokens += user_results.pop().tokens + ai_results.pop().tokens
+    # if extra_token_margin is not None:
+    #     deleted_tokens: int = 0
+    #     while user_results and ai_results and deleted_tokens < extra_token_margin:
+    #         deleted_tokens += user_results.pop().tokens + ai_results.pop().tokens
 
     return list(reversed(user_results)), list(reversed(ai_results))
