@@ -143,7 +143,7 @@ class OpenAIChatMessage(BaseModel):
         orm_mode = True
 
 
-class SendInitToWebsocket(BaseModel):
+class MessageHistory(BaseModel):
     role: str
     content: str
     tokens: int

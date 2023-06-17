@@ -1,5 +1,6 @@
 import asyncio
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi.concurrency import run_in_threadpool
 from langchain.schema import HumanMessage, SystemMessage
@@ -11,20 +12,31 @@ from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.managers.websocket import SendToWebsocket
 from app.utils.logger import ApiLogger
 
+SELECTOR_DEFINITIONS = {
+    "dcinside.com": "//div[contains(@class, 'view_content_wrap') or contains(@class, 'comment_box')]",
+}
+BASE_FILTERING = (
+    "[not(self::script or self::style or self::head or self::meta "
+    "or self::link or self::title or self::noscript or self::iframe) and not(ancestor::script or ancestor::style)]"
+)
+
 
 def _parse_text_content(
-    html_response: HTMLResponse, tokens_per_chunk: int, chunk_overlap: int
+    url: str, html_response: HTMLResponse, tokens_per_chunk: int, chunk_overlap: int
 ) -> list[str]:
+    tld = ".".join(urlparse(url).netloc.split(".")[-2:])
+    html = HTML(html_response.text, parser=None)
+
+    selector = SELECTOR_DEFINITIONS.get(tld, "")
+    if not selector:
+        if html.xpath("//article"):
+            selector = "//article"
+        else:
+            selector = "//body"
+    xpath = selector + "//text()" + BASE_FILTERING
+
     try:
-        text = " ".join(
-            [
-                content
-                for content in HTML(html_response.text, parser=None).xpath(
-                    "//*[not(self::script) and not(self::style)]/text()"
-                )
-                if content.strip()
-            ]
-        )
+        text = " ".join([content for content in html.xpath(xpath) if content.strip()])
         return Shared().token_text_splitter.split_text(
             text,
             tokens_per_chunk=tokens_per_chunk,
@@ -88,7 +100,7 @@ async def click_link_chain(
     scrolling_chunk_overlap: int,
     asession: AsyncHTMLSession,
     timeout: float | int = 10,
-    maximum_scrolls: int = 20,
+    maximum_scrolls: int = 10,
 ) -> list[tuple[str, int]]:
     """Click link and get most relevant content and score"""
     content_idx_and_score_list: list[tuple[int, int]] = []
@@ -114,17 +126,15 @@ async def click_link_chain(
         return []
     scrollable_contents: list[str] = await run_in_threadpool(
         _parse_text_content,
+        url=link,
         html_response=html_response,
         tokens_per_chunk=scrolling_chunk_size,
         chunk_overlap=scrolling_chunk_overlap,
     )
     max_scroll_position: int = len(scrollable_contents)
-    if not 0 < max_scroll_position < maximum_scrolls:
-        ApiLogger("||_click_link||").warning(
-            f"No scrollable content for {link}: {max_scroll_position}"
-        )
-        return []
-    for scroll_idx, scrollable_content in enumerate(scrollable_contents):
+    for scroll_idx, scrollable_content in enumerate(
+        scrollable_contents[:maximum_scrolls]
+    ):
         # Read the content and predict next action, and evaluate relevance score of the content
         (
             action,

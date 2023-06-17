@@ -2,7 +2,8 @@ from typing import Any, AsyncGenerator
 
 import asyncio
 from langchain.callbacks import AsyncIteratorCallbackHandler
-
+from app.errors.chat_exceptions import ChatTextGenerationException
+from openai.error import OpenAIError
 from app.models.chat_models import MessageHistory
 
 from app.models.llms import OpenAIModel
@@ -73,6 +74,9 @@ async def agenerate_from_openai(
                 raise InterruptedError("Chat was interrupted by the user.")
             yield token
         await producer_task
+
+    except OpenAIError as e:
+        raise ChatTextGenerationException(msg=str(e))
 
     finally:
         if not producer_task.done():

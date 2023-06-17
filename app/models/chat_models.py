@@ -3,13 +3,14 @@ from datetime import datetime
 from enum import Enum
 from functools import wraps
 from inspect import iscoroutinefunction
-from typing import Any, Callable, Optional, Tuple, Union
+from typing import Any, Callable, Tuple, Union
 from uuid import uuid4
 
 from orjson import dumps as orjson_dumps
 from orjson import loads as orjson_loads
 
 from app.common.config import DEFAULT_LLM_MODEL
+from app.models.base_models import MessageHistory
 from app.models.base_models import UserChatRoles
 from app.models.llms import LLMModels
 from app.utils.date_utils import UTC
@@ -58,32 +59,6 @@ class ChatRoles(str, Enum):
             return cls._member_map_[role.upper()]  # type: ignore
         else:
             raise ValueError(f"Invalid role: {role}")
-
-from app.models.base_models import SendInitToWebsocket as MessageHistory
-
-# @dataclass
-# class MessageHistory:
-#     role: str
-#     content: str
-#     tokens: int
-#     actual_role: str
-#     timestamp: int = field(default_factory=UTC.timestamp)
-#     uuid: str = field(default_factory=lambda: uuid4().hex)
-#     model_name: Optional[str] = None
-#     summarized: Optional[str] = None  # =
-#     summarized_tokens: Optional[int] = None  # =
-
-#     def __repr__(self) -> str:
-#         if self.summarized is not None:
-#             return (
-#                 f'<{self.role} uuid="{self.uuid}" date="{self.datetime}Z" tokens="{self.tokens}" '
-#                 f'summarized="{self.summarized}">{self.content}</>'
-#             )
-#         return f'<{self.role} uuid="{self.uuid}" date="{self.datetime}Z" tokens="{self.tokens}">{self.content}</>'
-
-#     @property
-#     def datetime(self) -> datetime:
-#         return UTC.timestamp_to_datetime(self.timestamp)
 
 
 @dataclass

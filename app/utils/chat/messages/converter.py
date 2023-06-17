@@ -8,7 +8,7 @@ from langchain.schema import HumanMessage, AIMessage, SystemMessage, BaseMessage
 from app.common.constants import ChatTurnTemplates
 from app.models.chat_models import ChatRoles, MessageHistory
 from app.models.base_models import (
-    SendInitToWebsocket,
+    MessageHistory,
     UserChatRoles,
 )
 from app.utils.logger import ApiLogger
@@ -41,8 +41,24 @@ def openai_parse_method(message_history: MessageHistory) -> BaseMessage:
         raise ValueError(f"Unknown role: {message_history.role}")
 
 
+# Frontend message format:
+# message: msg["content"] ?? "",
+# isGptSpeaking: msg["actual_role"] != "user" ? true : false,
+# isFinished: true,
+# datetime: parseLocaltimeFromTimestamp(msg["timestamp"]),
+# modelName: msg["model_name"],
+# uuid: msg["uuid"],
+
+
 def init_parse_method(message_history: MessageHistory) -> dict[str, Any]:
-    return SendInitToWebsocket.from_orm(message_history).dict()
+    return MessageHistory.from_orm(message_history).dict(
+        exclude={
+            "summarized",
+            "summarized_tokens",
+            "role",
+            "tokens",
+        }
+    )
 
 
 def message_histories_to_list(
