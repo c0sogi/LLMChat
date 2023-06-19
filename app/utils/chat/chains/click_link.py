@@ -40,7 +40,7 @@ async def _parse_text_content(
         js_required = parser_definition and parser_definition.render_js
         if js_required:
             await html.arender(
-                timeout=timeout_for_render, sleep=sleep_for_render, keep_page=False
+                timeout=timeout_for_render, sleep=sleep_for_render, keep_page=True
             )
         if not parser_definition or not parser_definition.selector:
             if html.xpath("//article"):

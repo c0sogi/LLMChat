@@ -1,3 +1,11 @@
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
+from threading import Event
+from threading import Thread
+from time import sleep
+from urllib import parse
+
+import requests
 from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware import Middleware
@@ -15,12 +23,63 @@ from app.database.schemas.auth import ApiKeys, ApiWhiteLists, Users
 from app.dependencies import USER_DEPENDENCY, api_service_dependency
 from app.middlewares.token_validator import access_control
 from app.middlewares.trusted_hosts import TrustedHostMiddleware
-from app.routers import auth, index, services, users, user_services, websocket
+from app.routers import auth, index, services, user_services, users, websocket
 from app.shared import Shared
 from app.utils.chat.managers.cache import CacheManager
 from app.utils.js_initializer import js_url_initializer
 from app.utils.logger import api_logger
 from app.viewmodels.admin import ApiKeyAdminView, UserAdminView
+
+
+def check_health(url: str) -> bool:
+    try:
+        schema = parse.urlparse(url).scheme
+        netloc = parse.urlparse(url).netloc
+        if requests.get(f"{schema}://{netloc}/health").status_code != 200:
+            return False
+        return True
+    except Exception:
+        return False
+
+
+def start_llama_cpp_server():
+    from app.start_llama_cpp_server import run
+
+    api_logger.critical("Starting Llama CPP server")
+    try:
+        Shared().process_pool_executor.submit(
+            run,
+            terminate_event=Shared().process_terminate_signal,
+        )
+    except BrokenProcessPool as e:
+        api_logger.exception(f"Broken Llama CPP server: {e}")
+        Shared().process_pool_executor.shutdown(wait=False)
+        Shared().process_pool_executor = ProcessPoolExecutor()
+        start_llama_cpp_server()
+    except Exception as e:
+        api_logger.exception(f"Failed to start Llama CPP server: {e}")
+
+
+def shutdown_llama_cpp_server():
+    api_logger.critical("Shutting down Llama CPP server")
+    Shared().process_terminate_signal.set()
+
+
+def monitor_llama_cpp_server(config: Config, terminate_signal: Event) -> None:
+    while not terminate_signal.is_set():
+        sleep(0.5)
+        if config.llama_cpp_api_url:
+            if not check_health(config.llama_cpp_api_url):
+                if config.is_llama_cpp_booting or terminate_signal.is_set():
+                    continue
+                api_logger.error("Llama CPP server is not available")
+                config.llama_cpp_available = False
+                config.is_llama_cpp_booting = True
+                start_llama_cpp_server()
+            else:
+                config.is_llama_cpp_booting = False
+                config.llama_cpp_available = True
+    shutdown_llama_cpp_server()
 
 
 def create_app(config: Config) -> FastAPI:
@@ -132,11 +191,38 @@ def create_app(config: Config) -> FastAPI:
         except ImportError:
             api_logger.critical("uvloop not installed!")
 
+        if config.llama_cpp_api_url:
+            # Start Llama CPP server monitoring
+            api_logger.critical("Llama CPP server monitoring started!")
+            Shared().thread = Thread(
+                target=monitor_llama_cpp_server,
+                args=(config, Shared().thread_terminate_signal),
+            )
+            Shared().thread.start()
+
     @new_app.on_event("shutdown")
     async def shutdown():
         # await CacheManager.delete_user(f"testaccount@{HOST_MAIN}")
-        Shared().process_manager.shutdown()
-        Shared().process_pool_executor.shutdown()
+        Shared().thread_terminate_signal.set()
+        Shared().process_terminate_signal.set()
+
+        process_manager = Shared()._process_manager
+        if process_manager is not None:
+            process_manager.shutdown()
+
+        process_pool_executor = Shared()._process_pool_executor
+        if process_pool_executor is not None:
+            process_pool_executor.shutdown(wait=False)
+
+        process = Shared()._process
+        if process is not None:
+            process.terminate()
+            process.join()
+
+        thread = Shared()._thread
+        if thread is not None:
+            thread.join()
+
         await db.close()
         await cache.close()
         api_logger.critical("DB & CACHE connection closed!")

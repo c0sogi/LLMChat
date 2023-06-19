@@ -11,7 +11,7 @@ class QueryTemplates:
             "\n---\n"
             "{context}"
             "\n---\n"
-            "Answer the question in detail: {question}\n"
+            "Answer the question in as much detail as possible: {question}\n"
         ),
         input_variables=["context", "question"],
         template_format="f-string",
@@ -23,7 +23,7 @@ class QueryTemplates:
             "{context}"
             "\n---\n"
             "Given the context information and not prior knowledge, "
-            "answer the question in detail: {question}\n"
+            "answer the question in as much detail as possible:: {question}\n"
         ),
         input_variables=["context", "question"],
         template_format="f-string",

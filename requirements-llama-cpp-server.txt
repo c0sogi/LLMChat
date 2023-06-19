@@ -1,0 +1,4 @@
+langchain
+jinja2
+orjson
+python-dotenv

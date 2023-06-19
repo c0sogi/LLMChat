@@ -1,28 +1,24 @@
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
-from multiprocessing import Manager
+from multiprocessing import Manager, Process
 from multiprocessing.managers import SyncManager
+from threading import Event, Thread
 
 from langchain.chains.combine_documents.map_reduce import MapReduceDocumentsChain
 from langchain.chains.combine_documents.stuff import StuffDocumentsChain
 from langchain.chains.summarize import load_summarize_chain, stuff_prompt
-
 from langchain.utilities import SearxSearchWrapper
 
 from app.common.config import OPENAI_API_KEY, ChatConfig, SingletonMetaClass, config
 from app.common.constants import SummarizationTemplates
 from app.models.openai_functions import OpenAIFunctions
-from app.utils.langchain.web_search import DuckDuckGoSearchAPIWrapper
-from app.utils.langchain.token_text_splitter import CustomTokenTextSplitter
 from app.utils.langchain.chat_openai import CustomChatOpenAI
+from app.utils.langchain.token_text_splitter import CustomTokenTextSplitter
+from app.utils.langchain.web_search import DuckDuckGoSearchAPIWrapper
 
 
 @dataclass
 class Shared(metaclass=SingletonMetaClass):
-    process_manager: SyncManager = field(default_factory=Manager)
-    process_pool_executor: ProcessPoolExecutor = field(
-        default_factory=ProcessPoolExecutor
-    )
     llm: CustomChatOpenAI = field(init=False)
     browsing_llm: CustomChatOpenAI = field(init=False)
     web_search_llm: CustomChatOpenAI = field(init=False)
@@ -41,6 +37,12 @@ class Shared(metaclass=SingletonMetaClass):
     )
 
     def __post_init__(self):
+        self._process_manager = None
+        self._process_pool_executor = None
+        self._process = None
+        self._process_terminate_signal = None
+        self._thread = None
+        self._thread_terminate_signal = None
         common_llm_kwargs = {
             "model_name": ChatConfig.global_openai_model,  # type: ignore
             "openai_api_key": OPENAI_API_KEY,
@@ -88,3 +90,51 @@ class Shared(metaclass=SingletonMetaClass):
             prompt=SummarizationTemplates.TEXT__MARKUP,
             verbose=config.debug,
         )
+
+    @property
+    def process_manager(self) -> SyncManager:
+        if not self._process_manager:
+            self._process_manager = Manager()
+        return self._process_manager
+
+    @property
+    def process_pool_executor(self) -> ProcessPoolExecutor:
+        if not self._process_pool_executor:
+            self._process_pool_executor = ProcessPoolExecutor()
+        return self._process_pool_executor
+
+    @process_pool_executor.setter
+    def process_pool_executor(self, value: ProcessPoolExecutor) -> None:
+        self._process_pool_executor = value
+
+    @property
+    def process(self) -> Process:
+        if not self._process:
+            self._process = Process()
+        return self._process
+
+    @process.setter
+    def process(self, value: Process) -> None:
+        self._process = value
+
+    @property
+    def thread(self) -> Thread:
+        if not self._thread:
+            self._thread = Thread()
+        return self._thread
+
+    @thread.setter
+    def thread(self, value: Thread) -> None:
+        self._thread = value
+
+    @property
+    def process_terminate_signal(self) -> Event:
+        if not self._process_terminate_signal:
+            self._process_terminate_signal = Manager().Event()
+        return self._process_terminate_signal
+
+    @property
+    def thread_terminate_signal(self) -> Event:
+        if not self._thread_terminate_signal:
+            self._thread_terminate_signal = Event()
+        return self._thread_terminate_signal

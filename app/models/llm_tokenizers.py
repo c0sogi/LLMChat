@@ -1,13 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Type
+from typing import TYPE_CHECKING, Type
 
-from tiktoken import Encoding, encoding_for_model
-from transformers.models.llama import LlamaTokenizer as _LlamaTokenizer
-
-from app.utils.chat.llama_cpp import LlamaTokenizerAdapter
 
 from app.utils.logger import api_logger
-from app.shared import Shared
+
+if TYPE_CHECKING:
+    from tiktoken import Encoding
+    from app.utils.chat.text_generations._llama_cpp import LlamaTokenizerAdapter
 
 
 class BaseTokenizer(ABC):
@@ -39,11 +38,16 @@ class BaseTokenizer(ABC):
             chunk_ids = input_ids[start_idx:cur_idx]
         return splits
 
+    def get_chunk_of(self, text: str, tokens: int) -> str:
+        """Split incoming text and return chunks."""
+        input_ids = self.encode(text)
+        return self.decode(input_ids[: min(tokens, len(input_ids))])
+
 
 class OpenAITokenizer(BaseTokenizer):
     def __init__(self, model_name: str):
         self.model_name = model_name
-        self._tokenizer: Encoding | None = None
+        self._tokenizer: "Encoding" | None = None
 
     def encode(self, message: str, /) -> list[int]:
         return self.tokenizer.encode(message)
@@ -59,7 +63,9 @@ class OpenAITokenizer(BaseTokenizer):
         return self.tokenizer.n_vocab
 
     @property
-    def tokenizer(self) -> Encoding:
+    def tokenizer(self) -> "Encoding":
+        from tiktoken import encoding_for_model
+
         if self._tokenizer is None:
             print("Loading tokenizer: ", self.model_name)
             self._tokenizer = encoding_for_model(self.model_name)
@@ -69,7 +75,7 @@ class OpenAITokenizer(BaseTokenizer):
 class LlamaTokenizer(BaseTokenizer):
     def __init__(self, model_name: str):
         self.model_name = model_name
-        self._tokenizer: Encoding | None = None
+        self._tokenizer: "Encoding" | None = None
 
     def encode(self, message: str, /) -> list[int]:
         return self.tokenizer.encode(message)
@@ -85,7 +91,9 @@ class LlamaTokenizer(BaseTokenizer):
         return self.tokenizer.n_vocab
 
     @property
-    def tokenizer(self) -> Encoding:
+    def tokenizer(self) -> "Encoding":
+        from transformers.models.llama import LlamaTokenizer as _LlamaTokenizer
+
         if self._tokenizer is None:
             split_str = self.model_name.split("/")
 
@@ -118,6 +126,7 @@ class LlamaTokenizerSlow(BaseTokenizer):
     def encode(self, message: str, /) -> list[int]:
         from app.models.llms import LLMModels
         from app.models.llms import LlamaCppModel
+        from app.shared import Shared
 
         llama_cpp_model = LLMModels.find_model_by_name(self.llama_cpp_model_name)
         assert isinstance(llama_cpp_model, LlamaCppModel), type(llama_cpp_model)
@@ -135,5 +144,7 @@ class LlamaTokenizerSlow(BaseTokenizer):
         return len(self.encode(message))
 
     @property
-    def tokenizer(self) -> Type[LlamaTokenizerAdapter]:
+    def tokenizer(self) -> Type["LlamaTokenizerAdapter"]:
+        from app.utils.chat.text_generations._llama_cpp import LlamaTokenizerAdapter
+
         return LlamaTokenizerAdapter

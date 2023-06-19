@@ -39,7 +39,12 @@
     You can change your chat title by clicking the title of the chat. This will be stored until you change or delete it!
     > ![Change your chat title](app/contents/edit_title_demo.png)
 ---
++ ### LLaMa.cpp
+    > ![llama api](app/contents/llama_api.png)
+    
+    For the llama CPP model, it is assumed to work only in the local environment and uses the `http://localhost:8002/v1/completions` endpoint.  It continuously checks the status of the llama API server by connecting to `http://localhost:8002/health` once a second to see if a 200 OK response is returned, and if not, it automatically runs the `app.start_llama_cpp_server` module as a separate process to create a the API server.
 
+---
 
 ## Key Features
 - **FastAPI** - High-performance `web framework` for building APIs with Python.

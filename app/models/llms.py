@@ -1,8 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from re import sub
-from typing import Optional, Union
-
+from typing import Literal, Optional, Union
 from langchain import PromptTemplate
 from app.common.config import OPENAI_API_KEY, ChatConfig
 from app.common.constants import ChatTurnTemplates, DescriptionTemplates
@@ -25,6 +23,8 @@ class LLMModel:
     suffix_template: Optional[
         Union[PromptTemplate, str]
     ] = None  # A suffix to prepend to the generated text. If None, no suffix is prepended.
+    prefix: Optional[str] = field(init=False, repr=False, default=None)
+    suffix: Optional[str] = field(init=False, repr=False, default=None)
 
     @staticmethod
     def _prepare_format(
@@ -112,8 +112,8 @@ class LLMModel:
 @dataclass
 class LlamaCppModel(LLMModel):
     model_path: str = field(
-        default="./llama_models/ggml/YOUR_GGML.bin"
-    )  # The path to the Llama model file.
+        default="YOUR_GGML.bin"
+    )  # The path to the model. Must end with .bin. You must put .bin file into "llama_models/ggml"
     user_chat_roles: UserChatRoles = field(
         default_factory=lambda: UserChatRoles(
             ai="ASSISTANT",
@@ -121,7 +121,7 @@ class LlamaCppModel(LLMModel):
             user="USER",
         ),
     )
-    prefix_template: PromptTemplate = field(
+    prefix_template: Optional[PromptTemplate] = field(
         default_factory=lambda: DescriptionTemplates.USER_AI__DEFAULT,
     )
     chat_turn_prompt: PromptTemplate = field(
@@ -150,6 +150,7 @@ class LlamaCppModel(LLMModel):
     lora_path: Optional[
         str
     ] = None  # The path to the Llama LoRA. If None, no LoRa is loaded.
+    cache_type: Optional[Literal["disk", "ram"]] = "ram"
     cache_size: Optional[int] = (
         2 << 30
     )  # The size of the cache in bytes. Only used if cache is True.
@@ -169,6 +170,8 @@ class LlamaCppModel(LLMModel):
     )  # A list of strings to stop generation when encountered.
     repeat_penalty: Optional[float] = 1.1  # The penalty to apply to repeated tokens.
     top_k: Optional[int] = 40  # The top-k value to use for sampling.
+    low_vram: bool = False  # Whether to use less VRAM.
+    embedding: bool = False  # Whether to use the embedding layer.
 
 
 @dataclass
@@ -230,7 +233,7 @@ class LLMModels(Enum):
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
         tokenizer=LlamaTokenizer("ehartford/Wizard-Vicuna-13B-Uncensored"),
-        model_path="./llama_models/ggml/Wizard-Vicuna-13B-Uncensored.ggmlv3.q5_1.bin",
+        model_path="Wizard-Vicuna-13B-Uncensored.ggmlv3.q5_1.bin",  # The filename of model. Must end with .bin.
         prefix_template=DescriptionTemplates.USER_AI__DEFAULT,
     )
     gpt4_x_vicuna_13b = LlamaCppModel(
@@ -239,7 +242,7 @@ class LLMModels(Enum):
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
         tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
-        model_path="./llama_models/ggml/gpt4-x-vicuna-13B.ggml.q4_0.bin",
+        model_path="gpt4-x-vicuna-13B.ggml.q4_0.bin",  # The filename of model. Must end with .bin.
         prefix_template=DescriptionTemplates.USER_AI__DEFAULT,
     )
     manticore_13b_uncensored = LlamaCppModel(
@@ -248,7 +251,7 @@ class LLMModels(Enum):
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
         tokenizer=LlamaTokenizer("openaccess-ai-collective/manticore-13b"),
-        model_path="./llama_models/ggml/Manticore-13B.ggmlv2.q5_1.bin",
+        model_path="Manticore-13B.ggmlv2.q5_1.bin",  # The filename of model. Must end with .bin.
     )
     kovicuna_7b = LlamaCppModel(
         name="kovicuna_7b",
@@ -256,16 +259,16 @@ class LLMModels(Enum):
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
         tokenizer=LlamaTokenizer("digitous/13B-HyperMantis"),
-        model_path="./llama_models/ggml/kovicuna_q4km.bin",
+        model_path="kovicuna_q4km.bin",  # The filename of model. Must end with .bin.
         prefix_template=DescriptionTemplates.USER_AI__SHORT,
     )
-    wizard_lm_13b = LlamaCppModel(
-        name="wizardLM-13B-1.0-GGML",
+    wizard_lm_uncensored_13b = LlamaCppModel(
+        name="wizardLM-13B-Uncensored",
         max_total_tokens=2048,  # context tokens (n_ctx)
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
         tokenizer=LlamaTokenizer("victor123/WizardLM-13B-1.0"),
-        model_path="./llama_models/ggml/WizardLM-13B-1.0.ggmlv3.q5_1.bin",
+        model_path="wizardLM-13B-Uncensored.ggmlv3.q5_K_M.bin",  # The filename of model. Must end with .bin.
         user_chat_roles=UserChatRoles(
             user="Instruction",
             ai="Response",
@@ -280,7 +283,7 @@ class LLMModels(Enum):
         tokenizer=LlamaTokenizer(
             "timdettmers/guanaco-65b-merged"
         ),  # timdettmers/guanaco-13b
-        model_path="./llama_models/ggml/guanaco-13B.ggmlv3.q5_1.bin",
+        model_path="guanaco-13B.ggmlv3.q5_1.bin",  # The filename of model. Must end with .bin.
         prefix_template=DescriptionTemplates.USER_AI__SHORT,
         user_chat_roles=UserChatRoles(
             user="Human",
@@ -294,7 +297,7 @@ class LLMModels(Enum):
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
         tokenizer=LlamaTokenizer("digitous/13B-HyperMantis"),
-        model_path="./llama_models/ggml/13B-HyperMantis.ggmlv3.q5_1.bin",
+        model_path="13B-HyperMantis.ggmlv3.q5_1.bin",  # The filename of model. Must end with .bin.
         prefix_template=DescriptionTemplates.USER_AI__GAME,
         user_chat_roles=UserChatRoles(
             user="Player",
@@ -308,7 +311,7 @@ class LLMModels(Enum):
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
         tokenizer=LlamaTokenizer("FPHam/Karen_theEditor_13b_HF"),
-        model_path="./llama_models/ggml/Karen-The-Editor.ggmlv3.q5_1.bin",
+        model_path="Karen-The-Editor.ggmlv3.q5_1.bin",  # The filename of model. Must end with .bin.
         prefix_template=DescriptionTemplates.USER_AI__GAME,
         user_chat_roles=UserChatRoles(
             user="USER",
@@ -322,7 +325,7 @@ class LLMModels(Enum):
         max_tokens_per_request=2048,  # The maximum number of tokens to generate.
         token_margin=8,
         tokenizer=LlamaTokenizer("jondurbin/airoboros-13b-gpt4"),
-        model_path="./llama_models/ggml/airoboros-13b-gpt4.ggmlv3.q5_1.bin",
+        model_path="airoboros-13b-gpt4.ggmlv3.q5_1.bin",  # The filename of model. Must end with .bin.
         prefix_template=DescriptionTemplates.USER_AI__SHORT,
     )
     selfee_7b = LlamaCppModel(
@@ -331,8 +334,18 @@ class LLMModels(Enum):
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
         tokenizer=LlamaTokenizer("kaist-ai/selfee-7b-delta"),
-        model_path="./llama_models/ggml/selfee-7B.ggmlv3.q4_1.bin",
+        model_path="selfee-7B.ggmlv3.q4_1.bin",  # The filename of model. Must end with .bin.
         prefix_template=DescriptionTemplates.USER_AI__SHORT,
+    )
+    llama_7b = LlamaCppModel(
+        name="llama-7b-GGML",
+        max_total_tokens=2048,  # context tokens (n_ctx)
+        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
+        token_margin=8,
+        tokenizer=LlamaTokenizer("HuggingFaceM4/llama-7b-tokenizer"),
+        model_path="llama-7b.ggmlv3.q5_K_M.bin",  # The filename of model. Must end with .bin.
+        prefix_template=None,
+        embedding=True,
     )
 
     @classmethod

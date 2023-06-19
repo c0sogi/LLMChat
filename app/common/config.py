@@ -6,9 +6,11 @@ from os import environ
 from pathlib import Path
 from re import Pattern, compile
 from typing import Optional
+from urllib import parse
+
+import requests
 from aiohttp import ClientTimeout
 from dotenv import load_dotenv
-from urllib import parse
 
 load_dotenv()
 
@@ -141,8 +143,11 @@ class Config(metaclass=SingletonMetaClass):
     shared_vectorestore_name: str = QDRANT_COLLECTION
     trusted_hosts: list[str] = field(default_factory=lambda: ["*"])
     allowed_sites: list[str] = field(default_factory=lambda: ["*"])
+    llama_cpp_api_url: Optional[str] = "http://localhost:8002/v1/completions"
 
     def __post_init__(self):
+        self.llama_cpp_available: bool = self.llama_cpp_api_url is not None
+        self.is_llama_cpp_booting: bool = False
         if not DOCKER_MODE:
             self.port = 8001
             self.mysql_host = "localhost"
@@ -248,7 +253,12 @@ class ChatConfig:
     timeout: ClientTimeout = ClientTimeout(sock_connect=30.0, sock_read=20.0)
     read_timeout: float = 30.0  # wait for this time before timeout
     wait_for_reconnect: float = 3.0  # wait for this time before reconnecting
-    api_regex_pattern: Pattern = compile(r"data:\s*({.+?})\n\n")
+    api_regex_pattern_openai: Pattern = compile(
+        r"data:\s*({.+?})\n\n"
+    )  # regex pattern to extract json from openai api response
+    api_regex_pattern_llama_cpp: Pattern = compile(
+        r"data:\s*({.+?})\r\n\r\n"
+    )  # regex pattern to extract json from llama cpp api response
     extra_token_margin: int = (
         512  # number of tokens to remove when tokens exceed token limit
     )

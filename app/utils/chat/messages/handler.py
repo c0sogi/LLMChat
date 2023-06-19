@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from fastapi.concurrency import run_in_threadpool
 
-from app.common.config import ChatConfig
+from app.common.config import ChatConfig, config
 from app.errors.chat_exceptions import (
     ChatException,
     ChatStreamingInterruptedException,
@@ -19,9 +19,12 @@ from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.managers.cache import CacheManager
 from app.utils.chat.chains.translate import translate_chain
 from app.utils.chat.managers.message import MessageManager
+from app.utils.chat.text_generations.completion_api import (
+    agenerate_from_chat_completion_api,
+    agenerate_from_text_completion_api,
+)
 from app.utils.chat.text_generations.summarization import get_summarization
 from app.utils.chat.text_generations.openai import agenerate_from_openai
-from app.utils.chat.text_generations.llama_cpp import generate_from_llama_cpp
 from app.utils.chat.managers.websocket import SendToWebsocket
 from app.utils.date_utils import UTC
 from app.utils.logger import api_logger
@@ -123,27 +126,45 @@ class MessageHandler:
         stream_progress = StreamProgress(uuid=uuid4().hex)
         try:
             if isinstance(current_model, OpenAIModel):
-                await SendToWebsocket.stream(
-                    buffer=buffer,
-                    stream_func=agenerate_from_openai,
-                    stream_progress=stream_progress,
-                    model_name=current_model.name,
-                    wait_next_query=True if translate else None,
-                )
+                stream_func = agenerate_from_openai
 
             elif isinstance(current_model, LlamaCppModel):
-                await SendToWebsocket.stream(
-                    buffer=buffer,
-                    stream_func=generate_from_llama_cpp,
-                    stream_progress=stream_progress,
-                    model_name=current_model.name,
-                    wait_next_query=True if translate else None,
-                )
+                if config.llama_cpp_available and config.llama_cpp_api_url:
+                    # Use llama_cpp API
+                    if "/v1/chat/completions" in config.llama_cpp_api_url:
+                        stream_func = agenerate_from_chat_completion_api
+                    elif "/v1/completions" in config.llama_cpp_api_url:
+                        stream_func = agenerate_from_text_completion_api
+                    else:
+                        raise ChatModelNotImplementedException(
+                            msg=f"Model {buffer.current_user_chat_context.llm_model.value.name} not implemented."
+                        )
+                else:
+                    raise ChatModelNotImplementedException(
+                        msg=f"Model {buffer.current_user_chat_context.llm_model.value.name} not implemented."
+                    )
+                    # Use llama_cpp process pool directly
+                    # try:
+                    #     from app.utils.chat.text_generations.llama_cpp import (
+                    #         generate_from_llama_cpp,
+                    #     )
+
+                    #     stream_func = generate_from_llama_cpp
+                    # except ImportError:
+                    #     raise ChatModelNotImplementedException(
+                    #         msg=f"Model {buffer.current_user_chat_context.llm_model.value.name} not implemented."
+                    #     )
             else:
                 raise ChatModelNotImplementedException(
                     msg=f"Model {buffer.current_user_chat_context.llm_model.value.name} not implemented."
                 )
-
+            await SendToWebsocket.stream(
+                buffer=buffer,
+                stream_func=stream_func,
+                stream_progress=stream_progress,
+                model_name=current_model.name,
+                wait_next_query=True if translate else None,
+            )
             await MessageManager.add_message_history_safely(
                 user_chat_context=buffer.current_user_chat_context,
                 content=stream_progress.response,

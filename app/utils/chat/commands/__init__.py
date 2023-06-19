@@ -10,7 +10,6 @@ from fastapi.concurrency import run_in_threadpool
 
 from app.common.config import config
 from app.common.constants import SystemPrompts
-from app.database.schemas.auth import UserStatus
 from app.errors.api_exceptions import InternalServerError
 from app.models.chat_models import (
     ChatRoles,
@@ -30,6 +29,7 @@ from app.utils.chat.messages.handler import MessageHandler
 from app.utils.chat.managers.message import MessageManager
 from app.utils.chat.managers.vectorstore import VectorStoreManager
 from app.utils.chat.managers.websocket import SendToWebsocket
+from app.viewmodels.status import UserStatus
 
 
 async def create_new_chat_room(

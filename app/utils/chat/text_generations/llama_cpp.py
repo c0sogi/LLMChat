@@ -6,19 +6,17 @@ from typing import Any, Generator, Optional
 from app.models.chat_models import MessageHistory
 
 from app.shared import Shared
-from app.errors.chat_exceptions import (
-    ChatConnectionException,
-    ChatTextGenerationException,
-)
+from app.errors.chat_exceptions import ChatConnectionException
 from app.models.llms import LlamaCppModel
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.llama_cpp import llama_cpp_generation
+from app.utils.chat.text_generations._llama_cpp import llama_cpp_generation
 from app.utils.chat.messages.converter import (
     message_histories_to_str,
 )
 from app.utils.logger import api_logger
 
 
+# raise NotImplementedError("This file is not used anymore. Please use main-llama-cpp-server instead.")
 def generate_from_llama_cpp(
     buffer: BufferedUserContext,
     user_message_histories: list[MessageHistory],
@@ -45,7 +43,7 @@ def generate_from_llama_cpp(
             suffix_prompt_tokens=llama_cpp_model.suffix_tokens,
             chat_turn_prompt=llama_cpp_model.chat_turn_prompt,
         )
-        api_logger.info(f"Sending this prompt to llama_cpp:\n{prompt}")
+        # api_logger.info(f"Sending this prompt to llama_cpp:\n{prompt}")
         future_exception: Optional[BaseException] = None
         future: Future[None] = process_pool_executor.submit(
             llama_cpp_generation,

@@ -68,26 +68,24 @@ def make_formatted_query(
     Token limit is calculated based on the number of messages in the user, AI, and system message histories.
     """
     llm_model = user_chat_context.llm_model.value
-    token_limit: int = get_token_limit_with_n_messages(
-        user_chat_context=user_chat_context,
-        n_ai_messages=0,
-        n_system_messages=0,
-        n_user_messages=0,
-        suffix_prompt_tokens=llm_model.suffix_tokens,
-        prefix_prompt_tokens=llm_model.prefix_tokens,
+    token_limit: int = (
+        get_token_limit_with_n_messages(
+            user_chat_context=user_chat_context,
+            n_ai_messages=0,
+            n_system_messages=0,
+            n_user_messages=0,
+            suffix_prompt_tokens=llm_model.suffix_tokens,
+            prefix_prompt_tokens=llm_model.prefix_tokens,
+        )
+        - 100
     )
-    left_tokens: int = (
-        token_limit
+    context = llm_model.tokenizer.get_chunk_of(
+        context,
+        tokens=token_limit
         - user_chat_context.get_tokens_of(
             query_template.format(context="", question=question)
-        )
-        - llm_model.token_margin
+        ),
     )
-    context = llm_model.tokenizer.split_text_on_tokens(
-        context,
-        tokens_per_chunk=left_tokens - llm_model.token_margin,
-        chunk_overlap=0,
-    )[0]
     return query_template.format(context=context, question=question)
 
 
@@ -137,10 +135,5 @@ def cutoff_message_histories(
         else:
             break
         idx += 1
-
-    # if extra_token_margin is not None:
-    #     deleted_tokens: int = 0
-    #     while user_results and ai_results and deleted_tokens < extra_token_margin:
-    #         deleted_tokens += user_results.pop().tokens + ai_results.pop().tokens
 
     return list(reversed(user_results)), list(reversed(ai_results))

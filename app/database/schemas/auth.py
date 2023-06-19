@@ -11,21 +11,10 @@ from sqlalchemy.orm import (
     Mapped,
     mapped_column,
 )
+
+from app.viewmodels.status import ApiKeyStatus, UserStatus
 from .. import Base
 from . import Mixin
-
-
-class UserStatus(str, enum.Enum):
-    admin = "admin"
-    active = "active"
-    deleted = "deleted"
-    blocked = "blocked"
-
-
-class ApiKeyStatus(str, enum.Enum):
-    active = "active"
-    stopped = "stopped"
-    deleted = "deleted"
 
 
 class Users(Base, Mixin):
@@ -37,7 +26,9 @@ class Users(Base, Mixin):
     phone_number: Mapped[str | None] = mapped_column(String(length=20))
     profile_img: Mapped[str | None] = mapped_column(String(length=100))
     marketing_agree: Mapped[bool] = mapped_column(Boolean, default=True)
-    api_keys: Mapped["ApiKeys"] = relationship(back_populates="users", cascade="all, delete-orphan", lazy=True)
+    api_keys: Mapped["ApiKeys"] = relationship(
+        back_populates="users", cascade="all, delete-orphan", lazy=True
+    )
     # chat_rooms: Mapped["ChatRooms"] = relationship(back_populates="users", cascade="all, delete-orphan", lazy=True)
     # chat_messages: Mapped["ChatMessages"] = relationship(
     #     back_populates="users", cascade="all, delete-orphan", lazy=True
@@ -56,12 +47,16 @@ class ApiKeys(Base, Mixin):
     is_whitelisted: Mapped[bool] = mapped_column(default=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     users: Mapped["Users"] = relationship(back_populates="api_keys")
-    whitelists: Mapped["ApiWhiteLists"] = relationship(backref="api_keys", cascade="all, delete-orphan")
+    whitelists: Mapped["ApiWhiteLists"] = relationship(
+        backref="api_keys", cascade="all, delete-orphan"
+    )
 
 
 class ApiWhiteLists(Base, Mixin):
     __tablename__ = "api_whitelists"
-    api_key_id: Mapped[int] = mapped_column(Integer, ForeignKey("api_keys.id", ondelete="CASCADE"))
+    api_key_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("api_keys.id", ondelete="CASCADE")
+    )
     ip_address: Mapped[str] = mapped_column(String(length=64))
 
 

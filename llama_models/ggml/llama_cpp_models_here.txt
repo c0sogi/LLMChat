@@ -1,0 +1,4 @@
+The LLama.cpp GGML model must be put here as a folder.
+
+For example, if you downloaded a q4_0 quantized model from "https://huggingface.co/TheBloke/robin-7B-v2-GGML",
+The path of the model has to be "robin-7b.ggmlv3.q4_0.bin".

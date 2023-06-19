@@ -6,8 +6,8 @@ from uuid import uuid4
 from pydantic import Field
 from pydantic.main import BaseModel
 
-from app.database.schemas.auth import UserStatus
 from app.utils.date_utils import UTC
+from app.viewmodels.status import UserStatus
 
 JSON_TYPES = Union[int, float, str, bool, dict, list, None]
 
@@ -135,7 +135,7 @@ class CreateChatRoom(BaseModel):  # stub
         orm_mode = True
 
 
-class OpenAIChatMessage(BaseModel):
+class APIChatMessage(BaseModel):
     role: str
     content: str
 
@@ -146,10 +146,10 @@ class OpenAIChatMessage(BaseModel):
 class MessageHistory(BaseModel):
     role: str
     content: str
-    tokens: int
-    actual_role: str
+    tokens: int = 0
     timestamp: int = Field(default_factory=UTC.timestamp)
     uuid: str = Field(default_factory=lambda: uuid4().hex)
+    actual_role: Optional[str] = None
     model_name: Optional[str] = None
     summarized: Optional[str] = None
     summarized_tokens: Optional[int] = None
