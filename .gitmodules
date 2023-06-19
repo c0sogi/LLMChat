@@ -1,3 +1,6 @@
 [submodule "frontend"]
 	path = frontend
 	url = https://github.com/c0sogi/LLMChat-frontend
+[submodule "repositories/llama_cpp"]
+	path = repositories/llama_cpp
+	url = https://github.com/abetlen/llama-cpp-python
