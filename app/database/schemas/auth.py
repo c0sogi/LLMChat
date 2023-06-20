@@ -14,10 +14,10 @@ from sqlalchemy.orm import (
 
 from app.viewmodels.status import ApiKeyStatus, UserStatus
 from .. import Base
-from . import Mixin
+from . import TableMixin
 
 
-class Users(Base, Mixin):
+class Users(Base, TableMixin):
     __tablename__ = "users"
     status: Mapped[str] = mapped_column(Enum(UserStatus), default=UserStatus.active)
     email: Mapped[str] = mapped_column(String(length=50))
@@ -38,7 +38,7 @@ class Users(Base, Mixin):
     # )
 
 
-class ApiKeys(Base, Mixin):
+class ApiKeys(Base, TableMixin):
     __tablename__ = "api_keys"
     status: Mapped[str] = mapped_column(Enum(ApiKeyStatus), default=ApiKeyStatus.active)
     access_key: Mapped[str] = mapped_column(String(length=64), index=True, unique=True)
@@ -52,7 +52,7 @@ class ApiKeys(Base, Mixin):
     )
 
 
-class ApiWhiteLists(Base, Mixin):
+class ApiWhiteLists(Base, TableMixin):
     __tablename__ = "api_whitelists"
     api_key_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("api_keys.id", ondelete="CASCADE")

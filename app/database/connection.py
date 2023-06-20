@@ -1,9 +1,7 @@
 from asyncio import current_task
 from collections.abc import Iterable
-from typing import Any, AsyncGenerator, Callable, Optional, Type
+from typing import Any, AsyncGenerator, Callable, Optional, Type, TypeVar
 
-import openai
-from langchain.embeddings import OpenAIEmbeddings
 from qdrant_client import QdrantClient
 from redis.asyncio import Redis, from_url
 from sqlalchemy import (
@@ -26,13 +24,13 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy_utils import create_database, database_exists
 
-from app.common.config import OPENAI_API_KEY, Config, SingletonMetaClass, logging_config
+from app.common.config import Config, SingletonMetaClass, logging_config
 from app.errors.api_exceptions import Responses_500
 from app.shared import Shared
 from app.utils.langchain.qdrant_vectorstore import Qdrant
 from app.utils.logger import CustomLogger
 
-from . import Base, DeclarativeMeta
+from . import Base, TableGeneric
 
 
 class MySQL(metaclass=SingletonMetaClass):
@@ -285,24 +283,24 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
     async def _add(  # To be decorated
         self,
         session: AsyncSession,
-        instance: DeclarativeMeta,
-    ) -> DeclarativeMeta:
+        instance: TableGeneric,
+    ) -> TableGeneric:
         session.add(instance)
         return instance
 
     async def _add_all(  # To be decorated
         self,
         session: AsyncSession,
-        instances: Iterable[DeclarativeMeta],
-    ) -> Iterable[DeclarativeMeta]:
+        instances: Iterable[TableGeneric],
+    ) -> Iterable[TableGeneric]:
         session.add_all(instances)
         return instances
 
     async def _delete(  # To be decorated
         self,
         session: AsyncSession,
-        instance: DeclarativeMeta,
-    ) -> DeclarativeMeta:
+        instance: TableGeneric,
+    ) -> TableGeneric:
         await session.delete(instance)
         return instance
 
@@ -327,25 +325,25 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
 
     async def add(
         self,
-        schema: Type[DeclarativeMeta],
+        schema: Type[TableGeneric],
         autocommit: bool = False,
         refresh: bool = False,
         session: AsyncSession | None = None,
         **kwargs: Any,
-    ) -> DeclarativeMeta:
-        instance = schema(**kwargs)  # type: ignore
+    ) -> TableGeneric:
+        instance = schema(**kwargs)
         return await self.run_in_session(self._add)(
             session, autocommit=autocommit, refresh=refresh, instance=instance
         )
 
     async def add_all(
         self,
-        schema: Type[DeclarativeMeta],
+        schema: Type[TableGeneric],
         *args: dict,
         autocommit: bool = False,
         refresh: bool = False,
         session: AsyncSession | None = None,
-    ) -> list[DeclarativeMeta]:
+    ) -> list[TableGeneric]:
         instances = [schema(**arg) for arg in args]  # type: ignore
         return await self.run_in_session(self._add_all)(
             session, autocommit=autocommit, refresh=refresh, instances=instances
@@ -353,33 +351,33 @@ class SQLAlchemy(metaclass=SingletonMetaClass):
 
     async def delete(
         self,
-        instance: DeclarativeMeta,
+        instance: TableGeneric,
         autocommit: bool = False,
         refresh: bool = False,
         session: AsyncSession | None = None,
-    ) -> DeclarativeMeta:
+    ) -> TableGeneric:
         return await self.run_in_session(self._delete)(
             session, autocommit=autocommit, refresh=refresh, instance=instance
         )
 
     async def scalars__fetchall(
         self, stmt: Select, session: AsyncSession | None = None
-    ) -> list[DeclarativeMeta]:
+    ) -> list[TableGeneric]:  # type: ignore
         return (await self.run_in_session(self._scalars)(session, stmt=stmt)).fetchall()
 
     async def scalars__one(
         self, stmt: Select, session: AsyncSession | None = None
-    ) -> DeclarativeMeta:
+    ) -> TableGeneric:  # type: ignore
         return (await self.run_in_session(self._scalars)(session, stmt=stmt)).one()
 
     async def scalars__first(
         self, stmt: Select, session: AsyncSession | None = None
-    ) -> DeclarativeMeta:
+    ) -> TableGeneric:  # type: ignore
         return (await self.run_in_session(self._scalars)(session, stmt=stmt)).first()
 
     async def scalars__one_or_none(
         self, stmt: Select, session: AsyncSession | None = None
-    ) -> Optional[DeclarativeMeta]:
+    ) -> Optional[TableGeneric]:  # type: ignore
         return (
             await self.run_in_session(self._scalars)(session, stmt=stmt)
         ).one_or_none()

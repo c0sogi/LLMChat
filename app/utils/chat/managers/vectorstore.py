@@ -191,7 +191,7 @@ class VectorStoreManager:
 
         grpc_collections = cache.vectorstore.client.async_grpc_collections
         response = await grpc_collections.List(grpc.ListCollectionsRequest())
-        return [collection.name for collection in response.collections]  # type: ignore
+        return [collection.name for collection in response.collections]
 
     @classmethod
     async def create_collection(

@@ -19,7 +19,7 @@ from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
 from app.models.llms import LlamaCppModel, LLMModels
 
 # from app.models.llm_tokenizers import LlamaTokenizer
-
+PORT = 8002
 ANSI_COLORS = {
     "black": "\u001b[30m",
     "red": "\u001b[31m",
@@ -243,7 +243,7 @@ def create_app():
         body: CreateChatCompletionRequest | CreateCompletionRequest,
     ) -> llama_cpp_server.Settings:
         assert body.model is not None
-        llama_cpp_model = LLMModels._member_map_[body.model].value
+        llama_cpp_model = LLMModels.get_value(body.model)
         assert isinstance(llama_cpp_model, LlamaCppModel)
         return convert_llama_cpp_model_to_settings(llama_cpp_model)
 
@@ -297,7 +297,7 @@ def create_app():
                     cache = llama_cpp.LlamaRAMCache(capacity_bytes=settings.cache_size)
 
                 cache = llama_cpp.LlamaCache(capacity_bytes=settings.cache_size)
-                client.set_cache(cache)  # type: ignore
+                client.set_cache(cache)
             assert isinstance(client, llama_cpp.Llama)
             llama_clients[settings.model_alias] = client
         return llama_clients[settings.model_alias]
@@ -312,7 +312,7 @@ def create_app():
     ) -> Union[llama_cpp.ChatCompletion, EventSourceResponse]:
         with llama_cpp_server.llama_lock:
             try:
-                llama_client = get_llama(get_settings(body))  # type: ignore
+                llama_client = get_llama(get_settings(body))
                 exclude = {
                     "n",
                     "logit_bias",
@@ -325,7 +325,7 @@ def create_app():
                     kwargs["logits_processor"] = llama_cpp.LogitsProcessorList(
                         [
                             llama_cpp_server.make_logit_bias_processor(
-                                llama_client,  # type: ignore
+                                llama_client,
                                 body.logit_bias,
                                 body.logit_bias_type,
                             ),
@@ -389,7 +389,7 @@ def create_app():
     ) -> Union[llama_cpp.Completion, EventSourceResponse]:
         with llama_cpp_server.llama_lock:
             try:
-                llama_client = get_llama(get_settings(body))  # type: ignore
+                llama_client = get_llama(get_settings(body))
                 if isinstance(body.prompt, list):
                     assert len(body.prompt) <= 1
                     body.prompt = body.prompt[0] if len(body.prompt) > 0 else ""
@@ -407,7 +407,7 @@ def create_app():
                     kwargs["logits_processor"] = llama_cpp.LogitsProcessorList(
                         [
                             llama_cpp_server.make_logit_bias_processor(
-                                llama_client,  # type: ignore
+                                llama_client,
                                 body.logit_bias,
                                 body.logit_bias_type,
                             ),
@@ -452,7 +452,9 @@ def create_app():
                         data_sender_callable=partial(event_publisher, send_chan),
                     )
                 else:
-                    completion: llama.Completion = await run_in_threadpool(llama_client, **kwargs)  # type: ignore
+                    completion: llama_cpp.Completion = await run_in_threadpool(
+                        llama_client, **kwargs  # type: ignore
+                    )
                     return completion
             except OSError:
                 exit(1)
@@ -473,7 +475,7 @@ def create_app():
                 "intfloat/e5-base-v2",
                 "intfloat/e5-large",
             ):
-                llama_cpp_model = LLMModels._member_map_[request.model].value
+                llama_cpp_model = LLMModels.get_value(request.model)
                 assert isinstance(llama_cpp_model, LlamaCppModel)
                 if not llama_cpp_model.embedding:
                     raise HTTPException(
@@ -598,7 +600,7 @@ def create_app():
 
     @app.on_event("startup")
     def startup_event():
-        cprint("🦙 Llama.cpp server is running!", "green")
+        cprint("🦙 Llama.cpp server is running", "green")
 
     @app.on_event("shutdown")
     def shutdown_event():
@@ -621,7 +623,7 @@ def run(terminate_event: Optional[ProcessEventClass] = None):
 
     server = uvicorn.Server(
         config=uvicorn.Config(
-            create_app(), host="0.0.0.0", port=8002, log_level="warning"
+            create_app(), host="0.0.0.0", port=PORT, log_level="warning"
         )
     )
 

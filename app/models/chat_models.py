@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 from functools import wraps
 from inspect import iscoroutinefunction
-from typing import Any, Callable, Tuple, Union
+from typing import Any, Callable, Tuple, Type, TypeVar, Union
 from uuid import uuid4
 
 from orjson import dumps as orjson_dumps
@@ -13,52 +13,14 @@ from app.common.config import DEFAULT_LLM_MODEL
 from app.models.base_models import MessageHistory
 from app.models.base_models import UserChatRoles
 from app.models.llms import LLMModels
+from app.common.mixins import EnumMixin
 from app.utils.date_utils import UTC
 
 
-class ChatRoles(str, Enum):
+class ChatRoles(EnumMixin):
     AI = "assistant"
     SYSTEM = "system"
     USER = "user"
-
-    @classmethod
-    def get_name(cls, role: Union["ChatRoles", str]) -> str:
-        if isinstance(role, cls):  # when role is member
-            return role.name
-        elif not isinstance(role, str):
-            raise ValueError(f"Invalid role: {role}")
-        elif role in cls._value2member_map_:  # when role is value
-            return cls._value2member_map_[role].name
-        elif role.upper() in cls._member_map_:  # when role is name
-            return role
-        else:
-            raise ValueError(f"Invalid role: {role}")
-
-    @classmethod
-    def get_value(cls, role: Union["ChatRoles", str]) -> str:
-        if isinstance(role, cls):  # when role is member
-            return role.value
-        elif not isinstance(role, str):
-            raise ValueError(f"Invalid role: {role}")
-        elif role in cls._value2member_map_:  # when role is value
-            return role
-        elif role.upper() in cls._member_map_:  # when role is name
-            return cls._member_map_[role.upper()].value
-        else:
-            raise ValueError(f"Invalid role: {role}")
-
-    @classmethod
-    def get_member(cls, role: Union["ChatRoles", str]) -> "ChatRoles":
-        if isinstance(role, cls):  # when role is member
-            return role
-        elif role in cls._value2member_map_:  # when role is value
-            return cls._value2member_map_[role]  # type: ignore
-        elif not isinstance(role, str):
-            raise ValueError(f"Invalid role: {role}")
-        elif role.upper() in cls._member_map_:  # when role is name
-            return cls._member_map_[role.upper()]  # type: ignore
-        else:
-            raise ValueError(f"Invalid role: {role}")
 
 
 @dataclass
@@ -100,7 +62,9 @@ class UserChatContext:
         stored: dict = orjson_loads(stred_json)
         return cls(
             user_chat_profile=UserChatProfile(**stored["user_chat_profile"]),
-            llm_model=LLMModels._member_map_[stored["llm_model"].replace(".", "_").replace("-", "_")],  # type: ignore
+            llm_model=LLMModels.get_member(
+                stored["llm_model"].replace(".", "_").replace("-", "_")
+            ),
             user_message_histories=[
                 MessageHistory(**m) for m in stored["user_message_histories"]
             ],

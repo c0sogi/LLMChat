@@ -75,7 +75,7 @@ async def login_header(random_user: dict[str, str]) -> dict[str, str]:
     """
     테스트 전 사용자 미리 등록
     """
-    new_user = await Users.add_one(autocommit=True, refresh=True, **random_user)
+    new_user = await Users.add_one(autocommit=True, refresh=True, **random_user)  # type: ignore
     access_token = create_access_token(
         data=UserToken.from_orm(new_user).dict(exclude={"password", "marketing_agree"}),
         expires_delta=24,

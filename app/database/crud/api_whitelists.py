@@ -35,8 +35,8 @@ async def create_api_key_whitelist(
         return new_whitelist
 
 
-async def get_api_key_whitelist(api_key_id: int) -> list[ApiKeys]:
-    return await ApiWhiteLists.fetchall_filtered_by(api_key_id=api_key_id)  # type: ignore
+async def get_api_key_whitelist(api_key_id: int) -> list[ApiWhiteLists]:
+    return await ApiWhiteLists.fetchall_filtered_by(api_key_id=api_key_id)
 
 
 async def delete_api_key_whitelist(

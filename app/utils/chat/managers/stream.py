@@ -256,57 +256,63 @@ class ChatStreamManager:
     async def _websocket_receiver(buffer: BufferedUserContext) -> None:
         filename: str = ""
         while True:  # loop until connection is closed
-            rcvd = await buffer.websocket.receive()
-            received_text: str | None = rcvd.get("text")
-            received_bytes: bytes | None = rcvd.get("bytes")
+            try:
+                rcvd = await buffer.websocket.receive()
+                received_text: str | None = rcvd.get("text")
+                received_bytes: bytes | None = rcvd.get("bytes")
 
-            if received_text is not None:
-                try:
-                    received_json: dict = orjson_loads(received_text)
-                    assert isinstance(received_json, dict)
-                except (JSONDecodeError, AssertionError):
-                    if received_text == "stop":
-                        buffer.done.set()
-                else:
+                if received_text is not None:
                     try:
-                        await buffer.queue.put(MessageFromWebsocket(**received_json))
-                    except ValidationError:
-                        if "filename" in received_json:
-                            # if received json has filename, it is a file
-                            filename = received_json["filename"]
-                        elif "chat_room_name" in received_json:
-                            buffer.current_user_chat_context.user_chat_profile.chat_room_name = received_json[
-                                "chat_room_name"
-                            ][
-                                :20
-                            ]
-                            await CacheManager.update_profile(
-                                user_chat_context=buffer.current_user_chat_context
+                        received_json: dict = orjson_loads(received_text)
+                        assert isinstance(received_json, dict)
+                    except (JSONDecodeError, AssertionError):
+                        if received_text == "stop":
+                            buffer.done.set()
+                    else:
+                        try:
+                            await buffer.queue.put(
+                                MessageFromWebsocket(**received_json)
                             )
-                            await SendToWebsocket.init(
-                                buffer=buffer,
-                                send_previous_chats=True,
-                            )
-                        elif "model" in received_json:
-                            found_model = LLMModels._member_map_.get(
-                                received_json["model"]
-                            )
-                            if found_model is not None:
-                                buffer.current_user_chat_context.llm_model = found_model  # type: ignore
+                        except ValidationError:
+                            if "filename" in received_json:
+                                # if received json has filename, it is a file
+                                filename = received_json["filename"]
+                            elif "chat_room_name" in received_json:
+                                buffer.current_user_chat_context.user_chat_profile.chat_room_name = received_json[
+                                    "chat_room_name"
+                                ][
+                                    :20
+                                ]
+                                await CacheManager.update_profile(
+                                    user_chat_context=buffer.current_user_chat_context
+                                )
+                                await SendToWebsocket.init(
+                                    buffer=buffer,
+                                    send_previous_chats=True,
+                                )
+                            elif "model" in received_json:
+                                found_model = LLMModels.get_member(
+                                    received_json["model"]
+                                )
+                                buffer.current_user_chat_context.llm_model = found_model
                                 await SendToWebsocket.init(
                                     buffer=buffer, send_selected_model=True
                                 )
                                 await CacheManager.update_model(
                                     user_chat_context=buffer.current_user_chat_context
                                 )
-            elif received_bytes is not None:
-                await buffer.queue.put(
-                    await VectorStoreManager.embed_file_to_vectorstore(
-                        file=received_bytes,
-                        filename=filename,
-                        collection_name=buffer.current_user_chat_context.user_id,
+                elif received_bytes is not None:
+                    await buffer.queue.put(
+                        await VectorStoreManager.embed_file_to_vectorstore(
+                            file=received_bytes,
+                            filename=filename,
+                            collection_name=buffer.current_user_chat_context.user_id,
+                        )
                     )
-                )
+            except (WebSocketDisconnect, RuntimeError):
+                return
+            except Exception:
+                api_logger.exception("Exception in websocket receiver")
 
     @classmethod
     async def _websocket_sender(cls, buffer: BufferedUserContext) -> None:
@@ -365,6 +371,8 @@ class ChatStreamManager:
                 await chat_exception_handler(
                     buffer=buffer, chat_exception=chat_exception
                 )
+            except (WebSocketDisconnect, RuntimeError):
+                return
             except Exception as e:
                 api_logger.exception(e)
 

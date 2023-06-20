@@ -7,6 +7,7 @@ from app.common.constants import ChatTurnTemplates, DescriptionTemplates
 
 from app.models.llm_tokenizers import BaseTokenizer, LlamaTokenizer, OpenAITokenizer
 from app.models.base_models import UserChatRoles
+from app.common.mixins import EnumMixin
 
 
 @dataclass
@@ -187,7 +188,7 @@ class OpenAIModel(LLMModel):
     )
 
 
-class LLMModels(Enum):
+class LLMModels(EnumMixin):
     #  OpenAI models
     gpt_3_5_turbo = OpenAIModel(
         name="gpt-3.5-turbo",

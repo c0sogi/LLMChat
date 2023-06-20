@@ -65,7 +65,7 @@ class Shared(metaclass=SingletonMetaClass):
         self._thread = None
         self._thread_terminate_signal = None
         common_llm_kwargs = {
-            "model_name": ChatConfig.global_openai_model,  # type: ignore
+            "model_name": ChatConfig.global_openai_model,
             "openai_api_key": OPENAI_API_KEY,
             "streaming": False,
         }

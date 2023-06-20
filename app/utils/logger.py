@@ -41,11 +41,11 @@ class CustomLogger(logging.Logger):
 
 
 class ApiLogger(CustomLogger):
-    _instances: dict[str, CustomLogger] = {}
+    _instances: dict[str, "ApiLogger"] = {}
 
     def __new__(
         cls, name: str, logging_config: LoggingConfig = LoggingConfig()
-    ) -> CustomLogger:
+    ) -> "ApiLogger":
         """Singleton pattern for ApiLogger class"""
         if name not in cls._instances:
             cls._instances[name] = super().__new__(cls)
@@ -133,7 +133,7 @@ class ApiLogger(CustomLogger):
         ) if error and error.status_code >= 500 else self.info(log)
 
 
-api_logger = ApiLogger("FastAPI", logging_config=logging_config)
+api_logger: ApiLogger = ApiLogger("FastAPI", logging_config=logging_config)
 
 if __name__ == "__main__":
     api_logger.debug("Testing logger: debug")

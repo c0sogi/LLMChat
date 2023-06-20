@@ -2,9 +2,15 @@ from asyncio import gather
 from dataclasses import asdict, fields
 from orjson import dumps as orjson_dumps
 from orjson import loads as orjson_loads
+from app.common.config import DEFAULT_LLM_MODEL
 from app.database.connection import cache
 from app.models.llms import LLMModels
-from app.models.chat_models import ChatRoles, MessageHistory, UserChatContext, UserChatProfile
+from app.models.chat_models import (
+    ChatRoles,
+    MessageHistory,
+    UserChatContext,
+    UserChatProfile,
+)
 from app.utils.logger import api_logger
 
 
@@ -13,7 +19,9 @@ class CacheManager:
         "user_chat_profile",
         "llm_model",
     )
-    _list_fields: tuple[str] = tuple(f"{role.name.lower()}_message_histories" for role in ChatRoles)
+    _list_fields: tuple[str] = tuple(
+        f"{role.name.lower()}_message_histories" for role in ChatRoles
+    )
 
     # Helper methods
     @staticmethod
@@ -22,11 +30,17 @@ class CacheManager:
 
     @classmethod
     def _get_string_fields(cls, user_id: str, chat_room_id: str) -> dict[str, str]:
-        return {field: cls._generate_key(user_id, chat_room_id, field) for field in cls._string_fields}
+        return {
+            field: cls._generate_key(user_id, chat_room_id, field)
+            for field in cls._string_fields
+        }
 
     @classmethod
     def _get_list_fields(cls, user_id: str, chat_room_id: str) -> dict[str, str]:
-        return {field: cls._generate_key(user_id, chat_room_id, field) for field in cls._list_fields}
+        return {
+            field: cls._generate_key(user_id, chat_room_id, field)
+            for field in cls._list_fields
+        }
 
     @classmethod
     async def _load_chat_profile(cls, key: bytes) -> UserChatProfile | None:
@@ -35,7 +49,9 @@ class CacheManager:
             loaded = await cache.redis.get(key)
             assert loaded is not None
             kwargs = {
-                k: v for k, v in orjson_loads(loaded).items() if any(f.name == k for f in fields(UserChatProfile))
+                k: v
+                for k, v in orjson_loads(loaded).items()
+                if any(f.name == k for f in fields(UserChatProfile))
             }
             return UserChatProfile(**kwargs)
         except Exception:
@@ -49,16 +65,22 @@ class CacheManager:
         keys: list[bytes] = []
         cursor: int = 0  # Start with cursor 0.
         while True:
-            cursor, batch_keys = await cache.redis.scan(cursor, match=f"chat:{user_id}:*:user_chat_profile")
+            cursor, batch_keys = await cache.redis.scan(
+                cursor, match=f"chat:{user_id}:*:user_chat_profile"
+            )
             keys.extend(batch_keys)
             if cursor == 0:
                 break
         return [
-            profile for profile in await gather(*(cls._load_chat_profile(key) for key in keys)) if profile is not None
+            profile
+            for profile in await gather(*(cls._load_chat_profile(key) for key in keys))
+            if profile is not None
         ]
 
     @classmethod
-    async def read_context_from_profile(cls, user_chat_profile: UserChatProfile) -> UserChatContext:
+    async def read_context_from_profile(
+        cls, user_chat_profile: UserChatProfile
+    ) -> UserChatContext:
         user_id: str = user_chat_profile.user_id
         chat_room_id: str = user_chat_profile.chat_room_id
 
@@ -87,16 +109,24 @@ class CacheManager:
             for field, value in stored_list.items():
                 if value is not None:
                     stored_list[field] = [orjson_loads(v) for v in value]
+            if stored_string["llm_model"] not in LLMModels._member_names_:
+                stored_string["llm_model"] = DEFAULT_LLM_MODEL
             return UserChatContext(
-                user_chat_profile=user_chat_profile,  # type: ignore
-                llm_model=LLMModels._member_map_[stored_string["llm_model"]],  # type: ignore
-                user_message_histories=[MessageHistory(**m) for m in stored_list["user_message_histories"]]
+                user_chat_profile=user_chat_profile,
+                llm_model=LLMModels.get_member(stored_string["llm_model"]),
+                user_message_histories=[
+                    MessageHistory(**m) for m in stored_list["user_message_histories"]
+                ]
                 if stored_list["user_message_histories"] is not None
                 else [],
-                ai_message_histories=[MessageHistory(**m) for m in stored_list["ai_message_histories"]]
+                ai_message_histories=[
+                    MessageHistory(**m) for m in stored_list["ai_message_histories"]
+                ]
                 if stored_list["ai_message_histories"] is not None
                 else [],
-                system_message_histories=[MessageHistory(**m) for m in stored_list["system_message_histories"]]
+                system_message_histories=[
+                    MessageHistory(**m) for m in stored_list["system_message_histories"]
+                ]
                 if stored_list["system_message_histories"] is not None
                 else [],
             )
@@ -118,7 +148,9 @@ class CacheManager:
     ) -> bool:
         json_data = user_chat_context.json()
         success: bool = True
-        for field, key in cls._get_string_fields(user_chat_context.user_id, user_chat_context.chat_room_id).items():
+        for field, key in cls._get_string_fields(
+            user_chat_context.user_id, user_chat_context.chat_room_id
+        ).items():
             result = await cache.redis.set(
                 key,
                 orjson_dumps(json_data[field]),
@@ -126,7 +158,9 @@ class CacheManager:
                 nx=only_if_not_exists,
             )
             success &= bool(result)
-        for field, key in cls._get_list_fields(user_chat_context.user_id, user_chat_context.chat_room_id).items():
+        for field, key in cls._get_list_fields(
+            user_chat_context.user_id, user_chat_context.chat_room_id
+        ).items():
             result = await cache.redis.delete(key)
             for item in json_data[field]:
                 result = await cache.redis.rpush(key, orjson_dumps(item))
@@ -183,7 +217,10 @@ class CacheManager:
     @classmethod
     async def delete_chat_room(cls, user_id: str, chat_room_id: str) -> int:
         # delete all keys starting with "chat:{user_id}:{chat_room_id}:"
-        keys = [key async for key in cache.redis.scan_iter(f"chat:{user_id}:{chat_room_id}:*")]
+        keys = [
+            key
+            async for key in cache.redis.scan_iter(f"chat:{user_id}:{chat_room_id}:*")
+        ]
         if not keys:
             return 0
         return await cache.redis.delete(*keys)
@@ -267,7 +304,10 @@ class CacheManager:
     ) -> bool:
         field = f"{ChatRoles.get_name(role).lower()}_message_histories"
         key = cls._generate_key(user_id, chat_room_id, field)
-        message_histories_json = [orjson_dumps(message_history.__dict__) for message_history in message_histories]
+        message_histories_json = [
+            orjson_dumps(message_history.__dict__)
+            for message_history in message_histories
+        ]
         result = await cache.redis.delete(key)
         result &= await cache.redis.rpush(key, *message_histories_json)
         return bool(result)
@@ -303,7 +343,9 @@ class CacheManager:
     ) -> MessageHistory | list[MessageHistory] | None:
         field = f"{ChatRoles.get_name(role).lower()}_message_histories"
         assert count is None or count > 0
-        message_history_json = await cache.redis.rpop(cls._generate_key(user_id, chat_room_id, field), count=count)
+        message_history_json = await cache.redis.rpop(
+            cls._generate_key(user_id, chat_room_id, field), count=count
+        )
         if message_history_json is None:
             return None
         # if message_history_json is instance of list, then it is a list of message histories
@@ -343,7 +385,10 @@ class CacheManager:
         raw_message_histories = await cache.redis.lrange(key, 0, -1)
         if raw_message_histories is None:
             return []
-        return [MessageHistory(**orjson_loads(raw_message_history)) for raw_message_history in raw_message_histories]
+        return [
+            MessageHistory(**orjson_loads(raw_message_history))
+            for raw_message_history in raw_message_histories
+        ]
 
     @classmethod
     async def delete_message_history(
@@ -365,7 +410,7 @@ class CacheManager:
         cls,
         user_id: str,
         chat_room_id: str,
-        roles: list[ChatRoles] | list[str],
+        roles: list[ChatRoles],
     ) -> bool:
         keys: list[str] = [
             cls._generate_key(
@@ -390,5 +435,7 @@ class CacheManager:
         key = cls._generate_key(user_id, chat_room_id, field)
         # value in redis is a list of message histories
         # set the last element of the list to the new message history
-        result = await cache.redis.lset(key, index, orjson_dumps(message_history.__dict__))
+        result = await cache.redis.lset(
+            key, index, orjson_dumps(message_history.__dict__)
+        )
         return bool(result)

@@ -38,8 +38,8 @@ async def register_new_user(
             email=email,
             password=hashed_password,
         )
-    )  # type: ignore
+    )
 
 
 async def find_matched_user(email: str) -> Users:
-    return await Users.first_filtered_by(email=email)  # type: ignore
+    return await Users.first_filtered_by(email=email)

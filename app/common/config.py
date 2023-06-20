@@ -8,7 +8,6 @@ from re import Pattern, compile
 from typing import Optional
 from urllib import parse
 
-import requests
 from aiohttp import ClientTimeout
 from dotenv import load_dotenv
 

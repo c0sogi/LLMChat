@@ -10,7 +10,7 @@ class MyAuthProvider(AuthProvider):
         self,
         username: str,
         password: str,
-        remember_me: bool,  # noqa: U100
+        remember_me: bool,
         request: Request,
         response: Response,
     ) -> Response:

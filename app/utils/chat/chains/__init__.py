@@ -76,7 +76,7 @@ async def aget_json(
 ) -> Optional[Any]:
     try:
         json_query = JSON_PATTERN.search(
-            await Shared().llm.apredict(  # type: ignore
+            await Shared().llm.apredict(
                 query_template.format(**kwargs_to_format)
             )
         )

@@ -1,17 +1,16 @@
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, Type
 
 from sqlalchemy import Column, Select, String, func, select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql._typing import _ColumnExpressionArgument
 from sqlalchemy.sql.roles import ExpressionElementRole
-
-from .. import DeclarativeMeta
 from ..connection import db
+from .. import TableGeneric
 
 
-class Mixin:
+class TableMixin:
     id: Mapped[int] = mapped_column(primary_key=True)
     created_at: Mapped[datetime] = mapped_column(default=func.utc_timestamp())
     updated_at: Mapped[datetime] = mapped_column(
@@ -42,14 +41,14 @@ class Mixin:
 
     @classmethod
     async def add_all(
-        cls,
+        cls: Type[TableGeneric],
         *args: dict,
         autocommit: bool = False,
         refresh: bool = False,
         session: AsyncSession | None = None,
-    ) -> list[DeclarativeMeta]:
+    ) -> list[TableGeneric]:
         return await db.add_all(
-            cls,  # type: ignore
+            cls,
             *args,
             autocommit=autocommit,
             refresh=refresh,
@@ -58,14 +57,14 @@ class Mixin:
 
     @classmethod
     async def add_one(
-        cls,
+        cls: Type[TableGeneric],
         autocommit: bool = False,
         refresh: bool = False,
         session: AsyncSession | None = None,
         **kwargs: Any,
-    ) -> DeclarativeMeta:
+    ) -> TableGeneric:
         return await db.add(
-            cls,  # type: ignore
+            cls,
             autocommit=autocommit,
             refresh=refresh,
             session=session,
@@ -74,13 +73,13 @@ class Mixin:
 
     @classmethod
     async def update_filtered(
-        cls,
+        cls: Type[TableGeneric],
         *criteria: ExpressionElementRole[bool],
         updated: dict,
         autocommit: bool = False,
         refresh: bool = False,
         session: AsyncSession | None = None,
-    ) -> DeclarativeMeta:
+    ) -> TableGeneric:
         stmt = update(cls).filter(*criteria).values(**updated)
         return await db.run_in_session(db._execute)(
             session,
@@ -91,12 +90,12 @@ class Mixin:
 
     @classmethod
     async def delete_filtered(
-        cls,
+        cls: Type[TableGeneric],
         *criteria: ExpressionElementRole[bool],
         autocommit: bool = False,
         refresh: bool = False,
         session: AsyncSession | None = None,
-    ) -> DeclarativeMeta:
+    ) -> TableGeneric:
         stmt = delete(cls).filter(*criteria)
         return await db.run_in_session(db._execute)(
             session,
@@ -107,64 +106,64 @@ class Mixin:
 
     @classmethod
     async def fetchall_filtered_by(
-        cls, session: AsyncSession | None = None, **kwargs: Any
-    ) -> list[DeclarativeMeta]:
+        cls: Type[TableGeneric], session: AsyncSession | None = None, **kwargs: Any
+    ) -> list[TableGeneric]:
         stmt: Select[tuple] = select(cls).filter_by(**kwargs)
         return await db.scalars__fetchall(stmt=stmt, session=session)
 
     @classmethod
     async def one_filtered_by(
-        cls, session: AsyncSession | None = None, **kwargs: Any
-    ) -> DeclarativeMeta:
+        cls: Type[TableGeneric], session: AsyncSession | None = None, **kwargs: Any
+    ) -> TableGeneric:
         stmt: Select[tuple] = select(cls).filter_by(**kwargs)
         return await db.scalars__one(stmt=stmt, session=session)
 
     @classmethod
     async def first_filtered_by(
-        cls, session: AsyncSession | None = None, **kwargs: Any
-    ) -> DeclarativeMeta:
+        cls: Type[TableGeneric], session: AsyncSession | None = None, **kwargs: Any
+    ) -> TableGeneric:
         stmt: Select[tuple] = select(cls).filter_by(**kwargs)
         return await db.scalars__first(stmt=stmt, session=session)
 
     @classmethod
     async def one_or_none_filtered_by(
-        cls, session: AsyncSession | None = None, **kwargs: Any
-    ) -> Optional[DeclarativeMeta]:
+        cls: Type[TableGeneric], session: AsyncSession | None = None, **kwargs: Any
+    ) -> Optional[TableGeneric]:
         stmt: Select[tuple] = select(cls).filter_by(**kwargs)
         return await db.scalars__one_or_none(stmt=stmt, session=session)
 
     @classmethod
     async def fetchall_filtered(
-        cls,
+        cls: Type[TableGeneric],
         *criteria: _ColumnExpressionArgument[bool],
         session: AsyncSession | None = None,
-    ) -> list[DeclarativeMeta]:
+    ) -> list[TableGeneric]:
         stmt: Select[tuple] = select(cls).filter(*criteria)
         return await db.scalars__fetchall(stmt=stmt, session=session)
 
     @classmethod
     async def one_filtered(
-        cls,
+        cls: Type[TableGeneric],
         *criteria: _ColumnExpressionArgument[bool],
         session: AsyncSession | None = None,
-    ) -> DeclarativeMeta:
+    ) -> TableGeneric:
         stmt: Select[tuple] = select(cls).filter(*criteria)
         return await db.scalars__one(stmt=stmt, session=session)
 
     @classmethod
     async def first_filtered(
-        cls,
+        cls: Type[TableGeneric],
         *criteria: _ColumnExpressionArgument[bool],
         session: AsyncSession | None = None,
-    ) -> DeclarativeMeta:
+    ) -> TableGeneric:
         stmt: Select[tuple] = select(cls).filter(*criteria)
         return await db.scalars__first(stmt=stmt, session=session)
 
     @classmethod
     async def one_or_none_filtered(
-        cls,
+        cls: Type[TableGeneric],
         *criteria: _ColumnExpressionArgument[bool],
         session: AsyncSession | None = None,
-    ) -> Optional[DeclarativeMeta]:
+    ) -> Optional[TableGeneric]:
         stmt: Select[tuple] = select(cls).filter(*criteria)
         return await db.scalars__one_or_none(stmt=stmt, session=session)

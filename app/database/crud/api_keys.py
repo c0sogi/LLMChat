@@ -42,7 +42,7 @@ async def create_api_key(
 
 
 async def get_api_keys(user_id: int) -> list[ApiKeys]:
-    return await ApiKeys.fetchall_filtered_by(user_id=user_id)  # type: ignore
+    return await ApiKeys.fetchall_filtered_by(user_id=user_id)
 
 
 async def get_api_key_owner(access_key: str) -> Users:
@@ -54,7 +54,7 @@ async def get_api_key_owner(access_key: str) -> Users:
         )
         if matched_api_key is None:
             raise Responses_404.not_found_access_key
-        owner: Users = await Users.first_filtered_by(id=matched_api_key.user_id)  # type: ignore
+        owner: Users = await Users.first_filtered_by(id=matched_api_key.user_id)
         if owner is None:
             raise Responses_404.not_found_user
         return owner

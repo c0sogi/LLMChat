@@ -425,7 +425,7 @@ class ChatCommands:
         /changemodel <model>"""
         if model not in LLMModels._member_names_:
             return f"Model must be one of {', '.join(LLMModels._member_names_)}"
-        llm_model: LLMModels = LLMModels._member_map_[model]  # type: ignore
+        llm_model: LLMModels = LLMModels.get_member(model)
         user_chat_context.llm_model = llm_model
         await CacheManager.update_profile_and_model(user_chat_context)
         return f"Model changed to {model}. Actual model: {llm_model.value.name}"
