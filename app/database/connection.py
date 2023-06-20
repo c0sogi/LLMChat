@@ -28,6 +28,7 @@ from sqlalchemy_utils import create_database, database_exists
 
 from app.common.config import OPENAI_API_KEY, Config, SingletonMetaClass, logging_config
 from app.errors.api_exceptions import Responses_500
+from app.shared import Shared
 from app.utils.langchain.qdrant_vectorstore import Qdrant
 from app.utils.logger import CustomLogger
 
@@ -406,10 +407,7 @@ class CacheFactory(metaclass=SingletonMetaClass):
                 prefer_grpc=True,
             ),
             collection_name=config.shared_vectorestore_name,
-            embeddings=OpenAIEmbeddings(
-                client=openai.Embedding,
-                openai_api_key=OPENAI_API_KEY,
-            ),
+            embeddings=Shared().embeddings,
         )
         self.is_initiated = True
 

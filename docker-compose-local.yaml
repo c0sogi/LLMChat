@@ -61,7 +61,7 @@ services:
         ipv4_address: 172.16.0.13 # static IP
 
   api:
-    image: cosogi/llmchat:230616
+    image: llmchat:230619
     restart: always
     env_file:
       - .env

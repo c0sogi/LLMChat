@@ -1,12 +1,13 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING
 
 
 from app.utils.logger import api_logger
 
 if TYPE_CHECKING:
     from tiktoken import Encoding
-    from app.utils.chat.text_generations._llama_cpp import LlamaTokenizerAdapter
+
+    # from app.utils.chat.text_generations._llama_cpp import LlamaTokenizerAdapter
 
 
 class BaseTokenizer(ABC):
@@ -119,32 +120,32 @@ class LlamaTokenizer(BaseTokenizer):
         return self._tokenizer
 
 
-class LlamaTokenizerSlow(BaseTokenizer):
-    def __init__(self, llama_cpp_model_name: str):
-        self.llama_cpp_model_name = llama_cpp_model_name
+# class LlamaTokenizerSlow(BaseTokenizer):
+#     def __init__(self, llama_cpp_model_name: str):
+#         self.llama_cpp_model_name = llama_cpp_model_name
 
-    def encode(self, message: str, /) -> list[int]:
-        from app.models.llms import LLMModels
-        from app.models.llms import LlamaCppModel
-        from app.shared import Shared
+#     def encode(self, message: str, /) -> list[int]:
+#         from app.models.llms import LLMModels
+#         from app.models.llms import LlamaCppModel
+#         from app.shared import Shared
 
-        llama_cpp_model = LLMModels.find_model_by_name(self.llama_cpp_model_name)
-        assert isinstance(llama_cpp_model, LlamaCppModel), type(llama_cpp_model)
-        return (
-            Shared()
-            .process_pool_executor.submit(
-                self.tokenizer.encode,
-                text=message,
-                llama_cpp_model=llama_cpp_model,
-            )
-            .result()
-        )
+#         llama_cpp_model = LLMModels.find_model_by_name(self.llama_cpp_model_name)
+#         assert isinstance(llama_cpp_model, LlamaCppModel), type(llama_cpp_model)
+#         return (
+#             Shared()
+#             .process_pool_executor.submit(
+#                 self.tokenizer.encode,
+#                 text=message,
+#                 llama_cpp_model=llama_cpp_model,
+#             )
+#             .result()
+#         )
 
-    def tokens_of(self, message: str) -> int:
-        return len(self.encode(message))
+#     def tokens_of(self, message: str) -> int:
+#         return len(self.encode(message))
 
-    @property
-    def tokenizer(self) -> Type["LlamaTokenizerAdapter"]:
-        from app.utils.chat.text_generations._llama_cpp import LlamaTokenizerAdapter
+#     @property
+#     def tokenizer(self) -> Type["LlamaTokenizerAdapter"]:
+#         from app.utils.chat.text_generations._llama_cpp import LlamaTokenizerAdapter
 
-        return LlamaTokenizerAdapter
+#         return LlamaTokenizerAdapter

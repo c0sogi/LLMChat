@@ -8,7 +8,6 @@ from qdrant_client import QdrantClient
 from app.common.config import (
     EMBEDDING_TOKEN_CHUNK_OVERLAP,
     EMBEDDING_TOKEN_CHUNK_SIZE,
-    EMBEDDING_VECTOR_DIMENSION,
 )
 from app.database.connection import cache
 from app.utils.chat.file_loader import read_bytes_to_text
@@ -34,12 +33,15 @@ from app.utils.chat.file_loader import read_bytes_to_text
 
 class VectorStoreManager:
     @staticmethod
+    async def get_vector_size() -> int:
+        return len(await cache.vectorstore._aembed_query("foo"))
+
+    @staticmethod
     async def create_documents(
         text: str,
         collection_name: str,
         chunk_size: int = EMBEDDING_TOKEN_CHUNK_SIZE,
         chunk_overlap: int = EMBEDDING_TOKEN_CHUNK_OVERLAP,
-        dimension: int = EMBEDDING_VECTOR_DIMENSION,
         tokenizer_model: str = "gpt-3.5-turbo",
     ) -> list[str]:
         texts = TokenTextSplitter(
@@ -51,7 +53,6 @@ class VectorStoreManager:
         if collection_name not in await VectorStoreManager.get_all_collection_names():
             await VectorStoreManager.create_collection(
                 collection_name=collection_name,
-                dim=dimension,
             )
 
         await cache.vectorstore.aadd_texts(texts, collection_name=collection_name)
@@ -192,10 +193,10 @@ class VectorStoreManager:
         response = await grpc_collections.List(grpc.ListCollectionsRequest())
         return [collection.name for collection in response.collections]  # type: ignore
 
-    @staticmethod
+    @classmethod
     async def create_collection(
+        cls,
         collection_name: str,
-        dim: int = 1536,
         distance: str = "cosine",
     ) -> None:
         """Create a collection, asynchronously.
@@ -222,7 +223,7 @@ class VectorStoreManager:
                 collection_name=collection_name,
                 vectors_config=grpc.VectorsConfig(
                     params=grpc.VectorParams(  # type: ignore
-                        size=dim,
+                        size=await cls.get_vector_size(),
                         distance=distance,
                     )
                 ),  # type: ignore

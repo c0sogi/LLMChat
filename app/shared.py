@@ -1,24 +1,33 @@
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
+from multiprocessing import Event as ProcessEvent
 from multiprocessing import Manager, Process
 from multiprocessing.managers import SyncManager
-from threading import Event, Thread
+from multiprocessing.synchronize import Event as ProcessEventClass
+from threading import Event as ThreadEvent
+from threading import Thread
+from typing import Optional
 
 from langchain.chains.combine_documents.map_reduce import MapReduceDocumentsChain
 from langchain.chains.combine_documents.stuff import StuffDocumentsChain
 from langchain.chains.summarize import load_summarize_chain, stuff_prompt
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.embeddings.base import Embeddings
 from langchain.utilities import SearxSearchWrapper
 
 from app.common.config import OPENAI_API_KEY, ChatConfig, SingletonMetaClass, config
 from app.common.constants import SummarizationTemplates
 from app.models.openai_functions import OpenAIFunctions
 from app.utils.langchain.chat_openai import CustomChatOpenAI
+from app.utils.langchain.embeddings_api import APIEmbeddings
 from app.utils.langchain.token_text_splitter import CustomTokenTextSplitter
 from app.utils.langchain.web_search import DuckDuckGoSearchAPIWrapper
 
 
 @dataclass
 class Shared(metaclass=SingletonMetaClass):
+    openai_embeddings: OpenAIEmbeddings = field(init=False)
+    local_embeddings: Optional[APIEmbeddings] = field(init=False)
     llm: CustomChatOpenAI = field(init=False)
     browsing_llm: CustomChatOpenAI = field(init=False)
     web_search_llm: CustomChatOpenAI = field(init=False)
@@ -37,6 +46,18 @@ class Shared(metaclass=SingletonMetaClass):
     )
 
     def __post_init__(self):
+        self.openai_embeddings = OpenAIEmbeddings(
+            client=None,
+            openai_api_key=OPENAI_API_KEY,
+        )
+        if config.llama_cpp_embedding_url and config.local_embedding_model:
+            self.local_embeddings = APIEmbeddings(
+                client=None,
+                model=config.local_embedding_model,
+                embedding_api_url=config.llama_cpp_embedding_url,
+            )
+        else:
+            self.local_embeddings = None
         self._process_manager = None
         self._process_pool_executor = None
         self._process = None
@@ -128,13 +149,19 @@ class Shared(metaclass=SingletonMetaClass):
         self._thread = value
 
     @property
-    def process_terminate_signal(self) -> Event:
+    def process_terminate_signal(self) -> ProcessEventClass:
         if not self._process_terminate_signal:
-            self._process_terminate_signal = Manager().Event()
+            self._process_terminate_signal = ProcessEvent()
         return self._process_terminate_signal
 
     @property
-    def thread_terminate_signal(self) -> Event:
+    def thread_terminate_signal(self) -> ThreadEvent:
         if not self._thread_terminate_signal:
-            self._thread_terminate_signal = Event()
+            self._thread_terminate_signal = ThreadEvent()
         return self._thread_terminate_signal
+
+    @property
+    def embeddings(self) -> Embeddings:
+        if self.local_embeddings and config.is_llama_cpp_available:
+            return self.local_embeddings
+        return self.openai_embeddings

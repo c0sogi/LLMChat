@@ -51,7 +51,7 @@ async def agenerate_from_chat_completion_api(
     ) as session:  # initialize client
         try:
             if isinstance(current_model, LlamaCppModel):
-                api_url = config.llama_cpp_api_url
+                api_url = config.llama_cpp_completion_url
                 assert api_url is not None
                 model = buffer.current_llm_model.name
                 api_regex_pattern = ChatConfig.api_regex_pattern_llama_cpp
@@ -186,7 +186,7 @@ async def agenerate_from_text_completion_api(
     ) as session:  # initialize client
         try:
             if isinstance(current_model, LlamaCppModel):
-                api_url = config.llama_cpp_api_url
+                api_url = config.llama_cpp_completion_url
                 assert api_url is not None
                 model = buffer.current_llm_model.name
                 api_regex_pattern = ChatConfig.api_regex_pattern_llama_cpp

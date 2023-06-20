@@ -129,11 +129,11 @@ class MessageHandler:
                 stream_func = agenerate_from_openai
 
             elif isinstance(current_model, LlamaCppModel):
-                if config.llama_cpp_available and config.llama_cpp_api_url:
+                if config.is_llama_cpp_available and config.llama_cpp_completion_url:
                     # Use llama_cpp API
-                    if "/v1/chat/completions" in config.llama_cpp_api_url:
+                    if "/v1/chat/completions" in config.llama_cpp_completion_url:
                         stream_func = agenerate_from_chat_completion_api
-                    elif "/v1/completions" in config.llama_cpp_api_url:
+                    elif "/v1/completions" in config.llama_cpp_completion_url:
                         stream_func = agenerate_from_text_completion_api
                     else:
                         raise ChatModelNotImplementedException(

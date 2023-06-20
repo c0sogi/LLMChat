@@ -1,5 +1,6 @@
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
+from multiprocessing import Process
 from threading import Event
 from threading import Thread
 from time import sleep
@@ -45,40 +46,36 @@ def check_health(url: str) -> bool:
 def start_llama_cpp_server():
     from app.start_llama_cpp_server import run
 
+    if Shared().process is not None and Shared().process.is_alive():
+        api_logger.warning("Terminating existing Llama CPP server")
+        Shared().process.terminate()
+        Shared().process.join()
+
     api_logger.critical("Starting Llama CPP server")
-    try:
-        Shared().process_pool_executor.submit(
-            run,
-            terminate_event=Shared().process_terminate_signal,
-        )
-    except BrokenProcessPool as e:
-        api_logger.exception(f"Broken Llama CPP server: {e}")
-        Shared().process_pool_executor.shutdown(wait=False)
-        Shared().process_pool_executor = ProcessPoolExecutor()
-        start_llama_cpp_server()
-    except Exception as e:
-        api_logger.exception(f"Failed to start Llama CPP server: {e}")
+    Shared().process = Process(target=run, args=(Shared().process_terminate_signal,))
+    Shared().process.start()
 
 
 def shutdown_llama_cpp_server():
     api_logger.critical("Shutting down Llama CPP server")
     Shared().process_terminate_signal.set()
+    Shared().process.join()
 
 
 def monitor_llama_cpp_server(config: Config, terminate_signal: Event) -> None:
     while not terminate_signal.is_set():
         sleep(0.5)
-        if config.llama_cpp_api_url:
-            if not check_health(config.llama_cpp_api_url):
+        if config.llama_cpp_completion_url:
+            if not check_health(config.llama_cpp_completion_url):
                 if config.is_llama_cpp_booting or terminate_signal.is_set():
                     continue
                 api_logger.error("Llama CPP server is not available")
-                config.llama_cpp_available = False
+                config.is_llama_cpp_available = False
                 config.is_llama_cpp_booting = True
                 start_llama_cpp_server()
             else:
                 config.is_llama_cpp_booting = False
-                config.llama_cpp_available = True
+                config.is_llama_cpp_available = True
     shutdown_llama_cpp_server()
 
 
@@ -191,7 +188,7 @@ def create_app(config: Config) -> FastAPI:
         except ImportError:
             api_logger.critical("uvloop not installed!")
 
-        if config.llama_cpp_api_url:
+        if config.llama_cpp_completion_url:
             # Start Llama CPP server monitoring
             api_logger.critical("Llama CPP server monitoring started!")
             Shared().thread = Thread(

@@ -1,5 +1,7 @@
 """Wrapper around the Milvus vector database."""
 
+from asyncio import gather
+import warnings
 from hashlib import md5
 from operator import itemgetter
 from typing import (
@@ -13,17 +15,17 @@ from typing import (
     Tuple,
     Union,
 )
-import warnings
 
+import numpy as np
+from fastapi.concurrency import run_in_threadpool
 from langchain.docstore.document import Document
 from langchain.embeddings.base import Embeddings
 from langchain.vectorstores.qdrant import Qdrant as _Qdrant
 from langchain.vectorstores.utils import maximal_marginal_relevance
-import numpy as np
 
 if TYPE_CHECKING:
-    from qdrant_client.conversions import common_types
     from qdrant_client import grpc
+    from qdrant_client.conversions import common_types
 
     DictFilter = Dict[str, Union[str, int, bool, dict, list]]
     MetadataFilter = Union[DictFilter, common_types.Filter]
@@ -84,9 +86,10 @@ class Qdrant(_Qdrant):
         Returns:
             List of ids from adding the texts into the vectorstore.
         """
+        from itertools import islice
+
         from qdrant_client import grpc
         from qdrant_client.conversions.conversion import payload_to_grpc
-        from itertools import islice
 
         grpc_points = self.client.async_grpc_points
 
@@ -106,7 +109,7 @@ class Qdrant(_Qdrant):
                 )
                 for id, vector, payload in zip(
                     batch_ids,
-                    self._embed_texts(batch_texts),
+                    await self._aembed_texts(batch_texts),
                     self._build_payloads(
                         batch_texts,
                         batch_metadatas,
@@ -174,7 +177,7 @@ class Qdrant(_Qdrant):
                 collection_name=self.collection_name
                 if collection_name is None
                 else collection_name,
-                vector=self._embed_query(query),
+                vector=await self._aembed_query(query),
                 filter=qdrant_filter,
                 with_payload=grpc.WithPayloadSelector(enable=True),  # type: ignore
                 limit=k,
@@ -252,7 +255,7 @@ class Qdrant(_Qdrant):
         from qdrant_client.http.models import models as rest
 
         grpc_points = self.client.async_grpc_points
-        embedding = self._embed_query(query)
+        embedding = await self._aembed_query(query)
 
         response = await grpc_points.Search(
             grpc.SearchPoints(  # type: ignore
@@ -333,6 +336,56 @@ class Qdrant(_Qdrant):
                 for condition in self._build_condition_grpc(key, value)
             ]
         )
+
+    async def _aembed_query(self, query: str) -> List[float]:
+        """Embed query text.
+
+        Used to provide backward compatibility with `embedding_function` argument.
+
+        Args:
+            query: Query text.
+
+        Returns:
+            List of floats representing the query embedding.
+        """
+        if self.embeddings is not None:
+            embedding = await run_in_threadpool(self.embeddings.embed_query, query)
+        else:
+            if self._embeddings_function is not None:
+                embedding = await run_in_threadpool(self._embeddings_function, query)
+            else:
+                raise ValueError("Neither of embeddings or embedding_function is set")
+        return embedding.tolist() if hasattr(embedding, "tolist") else embedding  # type: ignore
+
+    async def _aembed_texts(self, texts: Iterable[str]) -> List[List[float]]:
+        """Embed search texts.
+
+        Used to provide backward compatibility with `embedding_function` argument.
+
+        Args:
+            texts: Iterable of texts to embed.
+
+        Returns:
+            List of floats representing the texts embedding.
+        """
+        if self.embeddings is not None:
+            embeddings = await run_in_threadpool(
+                self.embeddings.embed_documents, list(texts)
+            )
+            if hasattr(embeddings, "tolist"):
+                embeddings = embeddings.tolist()  # type: ignore
+        elif self._embeddings_function is not None:
+            embeddings = await gather(
+                *[run_in_threadpool(self._embeddings_function, text) for text in texts]
+            )
+
+            for embedding_idx in range(len(embeddings)):
+                if hasattr(embeddings[embedding_idx], "tolist"):
+                    embeddings[embedding_idx] = embeddings[embedding_idx].tolist()
+        else:
+            raise ValueError("Neither of embeddings or embedding_function is set")
+
+        return embeddings
 
     @staticmethod
     def _document_from_scored_point_grpc(

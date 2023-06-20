@@ -23,7 +23,7 @@ iniconfig
 jinja2
 jmespath
 langchain
-llama-cpp-python
+llama-cpp-python[server]
 lxml
 orjson
 openai

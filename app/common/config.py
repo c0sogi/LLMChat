@@ -74,7 +74,6 @@ if GLOBAL_PREFIX in ("", "None"):
 if GLOBAL_SUFFIX in ("", "None"):
     GLOBAL_SUFFIX = None
 
-EMBEDDING_VECTOR_DIMENSION: int = 1536
 EMBEDDING_TOKEN_CHUNK_SIZE: int = int(environ.get("EMBEDDING_TOKEN_CHUNK_SIZE", 512))
 EMBEDDING_TOKEN_CHUNK_OVERLAP: int = int(
     environ.get("EMBEDDING_TOKEN_CHUNK_OVERLAP", 128)
@@ -143,10 +142,12 @@ class Config(metaclass=SingletonMetaClass):
     shared_vectorestore_name: str = QDRANT_COLLECTION
     trusted_hosts: list[str] = field(default_factory=lambda: ["*"])
     allowed_sites: list[str] = field(default_factory=lambda: ["*"])
-    llama_cpp_api_url: Optional[str] = "http://localhost:8002/v1/completions"
+    llama_cpp_completion_url: Optional[str] = "http://localhost:8002/v1/completions"
+    llama_cpp_embedding_url: Optional[str] = "http://localhost:8002/v1/embeddings"
+    local_embedding_model: Optional[str] = "intfloat/e5-large-v2"
 
     def __post_init__(self):
-        self.llama_cpp_available: bool = self.llama_cpp_api_url is not None
+        self.is_llama_cpp_available: bool = self.llama_cpp_completion_url is not None
         self.is_llama_cpp_booting: bool = False
         if not DOCKER_MODE:
             self.port = 8001
