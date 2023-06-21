@@ -13,7 +13,7 @@ from app.utils.chat.text_generations._llama_cpp import llama_cpp_generation
 from app.utils.chat.messages.converter import (
     message_histories_to_str,
 )
-from app.utils.logger import api_logger
+from app.utils.logger import ApiLogger
 
 
 # raise NotImplementedError("This file is not used anymore. Please use main-llama-cpp-server instead.")
@@ -43,7 +43,7 @@ def generate_from_llama_cpp(
             suffix_prompt_tokens=llama_cpp_model.suffix_tokens,
             chat_turn_prompt=llama_cpp_model.chat_turn_prompt,
         )
-        # api_logger.info(f"Sending this prompt to llama_cpp:\n{prompt}")
+        # ApiLogger.cinfo(f"Sending this prompt to llama_cpp:\n{prompt}")
         future_exception: Optional[BaseException] = None
         future: Future[None] = process_pool_executor.submit(
             llama_cpp_generation,
@@ -67,7 +67,7 @@ def generate_from_llama_cpp(
             if isinstance(generation, str):
                 yield generation
             elif isinstance(generation, BaseException):
-                api_logger.exception(
+                ApiLogger.cexception(
                     f"An error occurred during llama_cpp_generation: {generation} {type(generation)}"
                 )
                 future_exception = generation
@@ -78,5 +78,5 @@ def generate_from_llama_cpp(
     except BrokenProcessPool as e:
         process_pool_executor.shutdown(wait=False)
         shared.process_pool_executor = ProcessPoolExecutor()
-        api_logger.exception(f"BrokenProcessPool: {e}")
+        ApiLogger.cexception(f"BrokenProcessPool: {e}")
         raise ChatConnectionException(msg="BrokenProcessPool")

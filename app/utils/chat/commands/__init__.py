@@ -10,6 +10,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from app.common.config import config
 from app.common.constants import SystemPrompts
+from app.common.lotties import Lotties
 from app.errors.api_exceptions import InternalServerError
 from app.models.chat_models import (
     ChatRoles,
@@ -477,7 +478,7 @@ class ChatCommands:
         await VectorStoreManager.create_documents(
             text=text_to_embed, collection_name=buffer.user_id
         )
-        return "\n```lottie-ok\n### Embedding successful!\n```\n"
+        return Lotties.OK.format("Embedding successful!")
 
     @staticmethod
     @command_response.send_message_and_stop
@@ -487,7 +488,9 @@ class ChatCommands:
         await VectorStoreManager.create_documents(
             text=text_to_embed, collection_name=config.shared_vectorestore_name
         )
-        return "\n```lottie-ok\n### Embedding successful!\nThis data will be shared for everyone.\n```\n"
+        return Lotties.OK.format(
+            "Embedding successful!\nThis data will be shared for everyone."
+        )
 
     @staticmethod
     @command_response.send_message_and_stop

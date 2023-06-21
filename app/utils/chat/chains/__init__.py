@@ -62,7 +62,7 @@ async def aget_query_to_search(
     ]
     await SendToWebsocket.message(
         websocket=buffer.websocket,
-        msg="---\n{query_to_search}\n```\n".format(
+        msg="\n---\n{query_to_search}\n```\n".format(
             query_to_search=query_to_search.replace("```", "'''")
         ),
         chat_room_id=buffer.current_chat_room_id,

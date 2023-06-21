@@ -1,9 +1,8 @@
+from contextlib import asynccontextmanager
 import json
 import multiprocessing
 import time
 from functools import partial
-from multiprocessing import Event as ProcessEvent
-from multiprocessing.synchronize import Event as ProcessEventClass
 from os import path
 from typing import Union, Optional, Iterator
 
@@ -18,7 +17,6 @@ from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
 
 from app.models.llms import LlamaCppModel, LLMModels
 
-# from app.models.llm_tokenizers import LlamaTokenizer
 PORT = 8002
 ANSI_COLORS = {
     "black": "\u001b[30m",
@@ -127,29 +125,29 @@ def get_embeddings_and_num_of_tokens(
     )
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    cprint("🦙 Llama.cpp server is running", "green")
+    yield
+    cprint("🦙 Shutting down llama.cpp server...", "red")
+
+
 def create_app():
     ### ============= Importing llama-cpp-python ============= ###
     try:
         from repositories.llama_cpp.llama_cpp.server import app as llama_cpp_server
         from repositories.llama_cpp.llama_cpp.server.app import llama_cpp
-    except Exception as e:
-        if isinstance(e, ImportError) and __name__ == "__main__":
-            cprint(
-                "🦙 Could not find llama-cpp-python repository. "
-                "Please pull the repository with: "
-                "git submodule update --recursive\n"
-                f"[[[ Received error: {e} ]]]\n"
-                f"In {__file__} with name {__name__}\n",
-                "yellow",
-            )
 
-        elif __name__ == "__main__":
-            cprint(
-                "🦙 Some other error occurred while importing llama-cpp-python repository.\n"
-                f"[[[ Received error: {e} ]]]\n"
-                f"In {__file__} with name {__name__}\n",
-                "yellow",
-            )
+        print("🦙 llama-cpp-python repository found!")
+    except Exception as e:
+        cprint(
+            "🦙 Could not import llama-cpp-python repository. "
+            "Please pull the repository with: "
+            "git submodule update --recursive\n"
+            f"[[[ Received error: {e} ]]]\n"
+            f"In {__file__} with name {__name__}\n",
+            "yellow",
+        )
         from llama_cpp.server import app as llama_cpp_server
         from llama_cpp.server.app import llama_cpp
 
@@ -188,6 +186,7 @@ def create_app():
     app = FastAPI(
         title="🦙 llama.cpp Python API",
         version="0.0.1",
+        lifespan=lifespan,
     )
     app.add_middleware(
         CORSMiddleware,
@@ -236,7 +235,7 @@ def create_app():
             vocab_only=llama_cpp_model.vocab_only,
             verbose=llama_cpp_model.echo,
             host="localhost",
-            port=8002,
+            port=PORT,
         )
 
     def get_settings(
@@ -343,12 +342,14 @@ def create_app():
                                 ] = await run_in_threadpool(
                                     llama_client.create_chat_completion, **kwargs  # type: ignore
                                 )
+                                cprint(
+                                    "\n[🦙 I'm talking now]", color="cyan", flush=True
+                                )
                                 async for chat_chunk in iterate_in_threadpool(iterator):
-                                    cprint(
+                                    print(
                                         chat_chunk["choices"][0]["delta"].get(
                                             "content", ""
                                         ),
-                                        color="cyan",
                                         end="",
                                         flush=True,
                                     )
@@ -366,6 +367,10 @@ def create_app():
                                     )
                                     await inner_send_chan.send(dict(closing=True))
                                     raise e
+                            finally:
+                                cprint(
+                                    "\n[🦙 I'm done talking]", color="cyan", flush=True
+                                )
 
                     return EventSourceResponse(
                         recv_chan,
@@ -425,10 +430,12 @@ def create_app():
                                 ] = await run_in_threadpool(
                                     llama_client, **kwargs  # type: ignore
                                 )
+                                cprint(
+                                    "\n[🦙 I'm talking now]", color="cyan", flush=True
+                                )
                                 async for chunk in iterate_in_threadpool(iterator):
-                                    cprint(
+                                    print(
                                         chunk["choices"][0]["text"],
-                                        color="cyan",
                                         end="",
                                         flush=True,
                                     )
@@ -446,6 +453,10 @@ def create_app():
                                     )
                                     await inner_send_chan.send(dict(closing=True))
                                     raise e
+                            finally:
+                                cprint(
+                                    "\n[🦙 I'm done talking]", color="cyan", flush=True
+                                )
 
                     return EventSourceResponse(
                         recv_chan,
@@ -515,65 +526,6 @@ def create_app():
                     },
                 }
 
-    # @router.post(
-    #     "/v1/encodings",
-    #     response_model=CreateEncodingResponse,
-    # )
-    # async def encoding(
-    #     request: CreateEncodingRequest,
-    # ) -> Encoding:
-    #     with llama_cpp_server.llama_lock:
-    #         assert request.model is not None
-    #         if request.model not in (
-    #             "intfloat/e5-large-v2",
-    #             "hkunlp/instructor-xl",
-    #             "hkunlp/instructor-large",
-    #             "intfloat/e5-base-v2",
-    #             "intfloat/e5-large",
-    #         ):
-    #             tokenizer = LlamaTokenizer(model_name=request.model)
-    #             if isinstance(request.input, list):
-    #                 results: list[list[int]] = await gather(
-    #                     *[
-    #                         run_in_threadpool(
-    #                             tokenizer.encode,
-    #                             input_text,
-    #                         )
-    #                         for input_text in request.input
-    #                     ]
-    #                 )
-    #             else:
-    #                 results: list[list[int]] = [
-    #                     await run_in_threadpool(
-    #                         tokenizer.encode,
-    #                         request.input,
-    #                     )
-    #                 ]
-    #         else:
-    #             results: list[list[int]] = get_encodings(
-    #                 pretrained_name=request.model,
-    #                 input_texts=request.input
-    #                 if isinstance(request.input, list)
-    #                 else [request.input],
-    #             )
-    #         total_tokens: int = sum(len(result) for result in results)
-    #         return {
-    #             "object": "list",
-    #             "data": [
-    #                 {
-    #                     "index": idx,
-    #                     "object": "encoding",
-    #                     "encoding": result,
-    #                 }
-    #                 for idx, result in enumerate(results)
-    #             ],
-    #             "model": request.model,
-    #             "usage": {
-    #                 "prompt_tokens": total_tokens,
-    #                 "total_tokens": total_tokens,
-    #             },
-    #         }
-
     @router.get("/v1/models", response_model=llama_cpp_server.GetModelResponse)
     async def get_models() -> llama_cpp_server.ModelList:
         llama_cpp_models: list[LlamaCppModel] = [
@@ -598,14 +550,6 @@ def create_app():
     async def health():
         return "ok"
 
-    @app.on_event("startup")
-    def startup_event():
-        cprint("🦙 Llama.cpp server is running", "green")
-
-    @app.on_event("shutdown")
-    def shutdown_event():
-        cprint("🦙 Shutting down llama.cpp server...", "red")
-
     app.include_router(router)
     return app
 
@@ -613,31 +557,20 @@ def create_app():
 ### ============= SERVER =============
 
 
-def run(terminate_event: Optional[ProcessEventClass] = None):
-    from asyncio import gather, get_event_loop, sleep
+def run() -> None:
+    from maintools import initialize_before_launch
+    from uvicorn import Config, Server
 
-    import uvicorn
+    initialize_before_launch()
 
-    if terminate_event is None:
-        terminate_event = ProcessEvent()
-
-    server = uvicorn.Server(
-        config=uvicorn.Config(
-            create_app(), host="0.0.0.0", port=PORT, log_level="warning"
+    Server(
+        config=Config(
+            create_app(),
+            host="0.0.0.0",
+            port=PORT,
+            log_level="warning",
         )
-    )
-
-    async def shutdown_when_event_set():
-        while not terminate_event.is_set():
-            await sleep(0.5)  # sleep for a while before checking again
-        await server.shutdown()
-
-    get_event_loop().run_until_complete(
-        gather(
-            server.serve(),
-            shutdown_when_event_set(),
-        )
-    )
+    ).run()
 
 
 # class EncodingUsage(TypedDict):
@@ -695,6 +628,65 @@ def run(terminate_event: Optional[ProcessEventClass] = None):
 #         return_tensors="pt",
 #     )
 #     return batch_dict["input_ids"].tolist()  # type: ignore
+
+# @router.post(
+#     "/v1/encodings",
+#     response_model=CreateEncodingResponse,
+# )
+# async def encoding(
+#     request: CreateEncodingRequest,
+# ) -> Encoding:
+#     with llama_cpp_server.llama_lock:
+#         assert request.model is not None
+#         if request.model not in (
+#             "intfloat/e5-large-v2",
+#             "hkunlp/instructor-xl",
+#             "hkunlp/instructor-large",
+#             "intfloat/e5-base-v2",
+#             "intfloat/e5-large",
+#         ):
+#             tokenizer = LlamaTokenizer(model_name=request.model)
+#             if isinstance(request.input, list):
+#                 results: list[list[int]] = await gather(
+#                     *[
+#                         run_in_threadpool(
+#                             tokenizer.encode,
+#                             input_text,
+#                         )
+#                         for input_text in request.input
+#                     ]
+#                 )
+#             else:
+#                 results: list[list[int]] = [
+#                     await run_in_threadpool(
+#                         tokenizer.encode,
+#                         request.input,
+#                     )
+#                 ]
+#         else:
+#             results: list[list[int]] = get_encodings(
+#                 pretrained_name=request.model,
+#                 input_texts=request.input
+#                 if isinstance(request.input, list)
+#                 else [request.input],
+#             )
+#         total_tokens: int = sum(len(result) for result in results)
+#         return {
+#             "object": "list",
+#             "data": [
+#                 {
+#                     "index": idx,
+#                     "object": "encoding",
+#                     "encoding": result,
+#                 }
+#                 for idx, result in enumerate(results)
+#             ],
+#             "model": request.model,
+#             "usage": {
+#                 "prompt_tokens": total_tokens,
+#                 "total_tokens": total_tokens,
+#             },
+#         }
 
 
 if __name__ == "__main__":

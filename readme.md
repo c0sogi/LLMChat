@@ -406,7 +406,7 @@ The `date_utils.py` file contains the `UTC` class with utility functions for wor
 
 ### Logger
 
-The `logger.py` file contains the `api_logger` function, which logs API request and response information, including the request URL, method, status code, client information, processing time, and error details (if applicable). The logger function is called at the end of the `access_control` function to log the processed request and response.
+The `logger.py` file contains the `ApiLogger` class, which logs API request and response information, including the request URL, method, status code, client information, processing time, and error details (if applicable). The logger function is called at the end of the `access_control` function to log the processed request and response.
 
 ## Usage
 

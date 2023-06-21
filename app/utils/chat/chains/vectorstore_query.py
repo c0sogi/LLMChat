@@ -2,6 +2,7 @@ from typing import Optional, Tuple
 
 from app.common.config import ChatConfig, config
 from app.common.constants import QueryTemplates
+from app.common.lotties import Lotties
 from app.shared import Shared
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.managers.vectorstore import Document, VectorStoreManager
@@ -21,7 +22,7 @@ async def vectorstore_query_chain(
 ) -> Optional[str]:
     await SendToWebsocket.message(
         websocket=buffer.websocket,
-        msg=f"\n```lottie-search-doc\n### Searching vectorstore\n",
+        msg=Lotties.SEARCH_DOC.format("### Searching vectorstore", end=False),
         chat_room_id=buffer.current_chat_room_id,
         finish=False,
     )
@@ -54,7 +55,8 @@ async def vectorstore_query_chain(
         )
         await SendToWebsocket.message(
             websocket=buffer.websocket,
-            msg=f"\n```lottie-ok\n### Finished searching vectorstore\n```\n{found_text if show_result else ''}",
+            msg=Lotties.OK.format("### Finished searching vectorstore")
+            + (found_text if show_result else ""),
             chat_room_id=buffer.current_chat_room_id,
             finish=finish,
             wait_next_query=wait_next_query,
@@ -64,7 +66,7 @@ async def vectorstore_query_chain(
     except Exception as e:
         ApiLogger("||vectorstore_query_chain||").exception(e)
         await SendToWebsocket.message(
-            msg=f"\n```lottie-fail\n### Failed to search vectorstore\n```\n",
+            msg=Lotties.FAIL.format("### Failed to search vectorstore"),
             websocket=buffer.websocket,
             chat_room_id=buffer.current_chat_room_id,
             finish=finish,

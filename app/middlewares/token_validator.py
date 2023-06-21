@@ -19,7 +19,7 @@ from app.errors.api_exceptions import (
 from app.models.base_models import UserToken
 from app.utils.auth.token import token_decode
 from app.utils.date_utils import UTC
-from app.utils.logger import api_logger
+from app.utils.logger import ApiLogger
 from app.utils.params_utils import hash_params
 
 
@@ -138,7 +138,7 @@ async def access_control(request: Request, call_next: RequestResponseEndpoint):
                 "code": error.code if not isinstance(error, HTTPException) else None,
             },
         )
-        api_logger.log_api(
+        ApiLogger.clog(
             request=request,
             response=response,
             error=error,
@@ -150,7 +150,7 @@ async def access_control(request: Request, call_next: RequestResponseEndpoint):
     else:
         # Log error or service info
         if url.startswith("/api/services"):
-            api_logger.log_api(
+            ApiLogger.clog(
                 request=request,
                 response=response,
                 cookies=request.cookies,

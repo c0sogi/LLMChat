@@ -26,7 +26,7 @@ from app.utils.chat.messages.handler import MessageHandler
 from app.utils.chat.managers.message import MessageManager
 from app.utils.chat.managers.vectorstore import VectorStoreManager
 from app.utils.chat.managers.websocket import SendToWebsocket
-from app.utils.logger import api_logger
+from app.utils.logger import ApiLogger
 from app.models.base_models import MessageFromWebsocket, SummarizedResult
 
 
@@ -80,22 +80,22 @@ async def harvest_done_tasks(buffer: BufferedUserContext) -> None:
                     )
                 )
         except Exception as e:
-            api_logger.exception(
+            ApiLogger.cexception(
                 f"Some error occurred while harvesting done tasks: {e}"
             )
 
     if update_tasks:
-        api_logger.info(f"Running update tasks: {update_tasks}")
+        ApiLogger.cinfo(f"Running update tasks: {update_tasks}")
 
     try:
         results = await asyncio.gather(*update_tasks, return_exceptions=True)
         for result in results:
             if isinstance(result, Exception):
-                api_logger.exception(
+                ApiLogger.cexception(
                     f"Some error occurred while running update tasks: {result}"
                 )
     except Exception as e:
-        api_logger.exception(
+        ApiLogger.cexception(
             f"Unexpected error occurred while running update tasks: {e}"
         )
     finally:
@@ -148,36 +148,6 @@ async def chat_exception_handler(
         )  # send too much token exception message to websocket
 
 
-# async def interruption_event_watcher(
-#     task: asyncio.Task,
-#     event: asyncio.Event,
-#     hold_interruption_event: asyncio.Event,
-# ):
-#     condition = asyncio.Condition()
-
-#     async def check_conditions():
-#         async with condition:
-#             print("check conditions")
-#             await condition.wait_for(
-#                 lambda: event.is_set() and not hold_interruption_event.is_set()
-#             )
-#             print("condition is set")
-
-#     condition_task = asyncio.create_task(check_conditions())
-#     done, pending = await asyncio.wait(
-#         [task, condition_task],
-#         return_when=asyncio.FIRST_COMPLETED,
-#     )
-#     for t in pending:
-#         t.cancel()
-#     for t in done:
-#         if t is task:
-#             return t.result()
-#         elif t is condition_task:
-#             event.clear()
-#             raise ChatGeneralInterruptedException(msg="Chat interrupted by user")
-
-
 async def interruption_event_watcher(
     task: asyncio.Task,
     event: asyncio.Event,
@@ -224,95 +194,75 @@ class ChatStreamManager:
             send_models=True,
             send_selected_model=True,
         )
+        producer_task = asyncio.create_task(cls._websocket_receiver(buffer=buffer))
+        consumer_task = asyncio.create_task(cls._websocket_sender(buffer=buffer))
         try:
-            await asyncio.gather(
-                cls._websocket_receiver(buffer=buffer),
-                cls._websocket_sender(buffer=buffer),
-            )
-        except (
-            ChatOtherException,
-            ChatTextGenerationException,
-            ChatTooMuchTokenException,
-        ) as e:
-            api_logger.error(e)
-            await SendToWebsocket.message(
-                websocket=buffer.websocket,
-                msg="An error occurred. Please try again.",
-                chat_room_id=buffer.current_chat_room_id,
-            )
-        except WebSocketDisconnect:
-            return
-        except RuntimeError:
-            return
+            await producer_task
+        except (WebSocketDisconnect, RuntimeError):
+            pass
         except Exception as e:
-            api_logger.error(f"Exception in chat: {e}", exc_info=True)
+            ApiLogger.cerror(f"Exception in chat: {e}", exc_info=True)
             await SendToWebsocket.message(
                 websocket=buffer.websocket,
                 msg="Internal server error. Please try again.",
                 chat_room_id=buffer.current_chat_room_id,
             )
+            raise e
+        finally:
+            consumer_task.cancel()
 
     @staticmethod
     async def _websocket_receiver(buffer: BufferedUserContext) -> None:
         filename: str = ""
         while True:  # loop until connection is closed
-            try:
-                rcvd = await buffer.websocket.receive()
-                received_text: str | None = rcvd.get("text")
-                received_bytes: bytes | None = rcvd.get("bytes")
+            rcvd = await buffer.websocket.receive()
+            received_text: str | None = rcvd.get("text")
+            received_bytes: bytes | None = rcvd.get("bytes")
 
-                if received_text is not None:
+            if received_text is not None:
+                try:
+                    received_json: dict = orjson_loads(received_text)
+                    assert isinstance(received_json, dict)
+                except (JSONDecodeError, AssertionError):
+                    if received_text == "stop":
+                        buffer.done.set()
+                else:
                     try:
-                        received_json: dict = orjson_loads(received_text)
-                        assert isinstance(received_json, dict)
-                    except (JSONDecodeError, AssertionError):
-                        if received_text == "stop":
-                            buffer.done.set()
-                    else:
-                        try:
-                            await buffer.queue.put(
-                                MessageFromWebsocket(**received_json)
+                        await buffer.queue.put(MessageFromWebsocket(**received_json))
+                    except ValidationError:
+                        if "filename" in received_json:
+                            # if received json has filename, it is a file
+                            filename = received_json["filename"]
+                        elif "chat_room_name" in received_json:
+                            buffer.current_user_chat_context.user_chat_profile.chat_room_name = received_json[
+                                "chat_room_name"
+                            ][
+                                :20
+                            ]
+                            await CacheManager.update_profile(
+                                user_chat_context=buffer.current_user_chat_context
                             )
-                        except ValidationError:
-                            if "filename" in received_json:
-                                # if received json has filename, it is a file
-                                filename = received_json["filename"]
-                            elif "chat_room_name" in received_json:
-                                buffer.current_user_chat_context.user_chat_profile.chat_room_name = received_json[
-                                    "chat_room_name"
-                                ][
-                                    :20
-                                ]
-                                await CacheManager.update_profile(
-                                    user_chat_context=buffer.current_user_chat_context
-                                )
-                                await SendToWebsocket.init(
-                                    buffer=buffer,
-                                    send_previous_chats=True,
-                                )
-                            elif "model" in received_json:
-                                found_model = LLMModels.get_member(
-                                    received_json["model"]
-                                )
-                                buffer.current_user_chat_context.llm_model = found_model
-                                await SendToWebsocket.init(
-                                    buffer=buffer, send_selected_model=True
-                                )
-                                await CacheManager.update_model(
-                                    user_chat_context=buffer.current_user_chat_context
-                                )
-                elif received_bytes is not None:
-                    await buffer.queue.put(
-                        await VectorStoreManager.embed_file_to_vectorstore(
-                            file=received_bytes,
-                            filename=filename,
-                            collection_name=buffer.current_user_chat_context.user_id,
-                        )
+                            await SendToWebsocket.init(
+                                buffer=buffer,
+                                send_chat_rooms=True,
+                            )
+                        elif "model" in received_json:
+                            found_model = LLMModels.get_member(received_json["model"])
+                            buffer.current_user_chat_context.llm_model = found_model
+                            await SendToWebsocket.init(
+                                buffer=buffer, send_selected_model=True
+                            )
+                            await CacheManager.update_model(
+                                user_chat_context=buffer.current_user_chat_context
+                            )
+            elif received_bytes is not None:
+                await buffer.queue.put(
+                    await VectorStoreManager.embed_file_to_vectorstore(
+                        file=received_bytes,
+                        filename=filename,
+                        collection_name=buffer.current_user_chat_context.user_id,
                     )
-            except (WebSocketDisconnect, RuntimeError):
-                return
-            except Exception:
-                api_logger.exception("Exception in websocket receiver")
+                )
 
     @classmethod
     async def _websocket_sender(cls, buffer: BufferedUserContext) -> None:
@@ -371,10 +321,6 @@ class ChatStreamManager:
                 await chat_exception_handler(
                     buffer=buffer, chat_exception=chat_exception
                 )
-            except (WebSocketDisconnect, RuntimeError):
-                return
-            except Exception as e:
-                api_logger.exception(e)
 
     @staticmethod
     async def _change_context(

@@ -9,6 +9,7 @@ from app.common.config import (
     EMBEDDING_TOKEN_CHUNK_OVERLAP,
     EMBEDDING_TOKEN_CHUNK_SIZE,
 )
+from app.common.lotties import Lotties
 from app.database.connection import cache
 from app.utils.chat.file_loader import read_bytes_to_text
 
@@ -178,12 +179,13 @@ class VectorStoreManager:
             doc_sample_without_triple_backticks: str = docs[0][:100].replace(
                 "```", "'''"
             )
-            return (
-                f"\n```lottie-ok\n### Successfully Embedded\n"
-                f'`"{doc_sample_without_triple_backticks}"`\n```\n'
+            return Lotties.OK.format(
+                f'### Successfully Embedded\n`"{doc_sample_without_triple_backticks}"`'
             )
         except Exception:
-            return "\n```lottie-fail\n### Can't embed this type of file\nTry another file.\n```\n"
+            return Lotties.FAIL.format(
+                "### Can't embed this type of file\nTry another file."
+            )
 
     @staticmethod
     async def get_all_collection_names() -> list[str]:

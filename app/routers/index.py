@@ -36,4 +36,4 @@ async def favicon():
 #         )
 
 #     except Exception as exception:
-#         api_logger.error(exception, exc_info=True)
+#         ApiLogger.cerror(exception, exc_info=True)

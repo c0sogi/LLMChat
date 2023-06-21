@@ -25,7 +25,7 @@ class APIEmbeddings(BaseModel, Embeddings):
     model: str = "intfloat/e5-large-v2"
     embedding_api_url: str = "http://localhost:8002/v1/embeddings"
     request_timeout: Optional[Union[float, Tuple[float, float]]] = None
-    """Timeout in seconds for the OpenAPI request."""
+    """Timeout in seconds for the API request."""
     headers: Any = None
 
     class Config:
@@ -34,12 +34,10 @@ class APIEmbeddings(BaseModel, Embeddings):
         extra = Extra.forbid
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """Call out to OpenAI's embedding endpoint for embedding search docs.
+        """Call out to embedding endpoint for embedding search docs.
 
         Args:
             texts: The list of texts to embed.
-            chunk_size: The chunk size of embeddings. If None, will use the chunk size
-                specified by the class.
 
         Returns:
             List of embeddings, one for each text.

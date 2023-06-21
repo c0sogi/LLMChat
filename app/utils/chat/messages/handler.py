@@ -27,7 +27,7 @@ from app.utils.chat.text_generations.summarization import get_summarization
 from app.utils.chat.text_generations.openai import agenerate_from_openai
 from app.utils.chat.managers.websocket import SendToWebsocket
 from app.utils.date_utils import UTC
-from app.utils.logger import api_logger
+from app.utils.logger import ApiLogger
 from app.models.base_models import StreamProgress, SummarizedResult
 
 
@@ -202,7 +202,7 @@ class MessageHandler:
             raise ChatStreamingInterruptedException(msg=str(interrupted_error))
 
         except Exception as exception:
-            api_logger.error(f"unexpected chat exception: {exception}", exc_info=True)
+            ApiLogger.cerror(f"unexpected chat exception: {exception}", exc_info=True)
             buffer.current_user_chat_context.copy_from(backup_context)
             raise ChatTextGenerationException()
 

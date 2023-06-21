@@ -3,7 +3,7 @@ import httpx
 import orjson
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.managers.websocket import SendToWebsocket
-from app.utils.logger import api_logger
+from app.utils.logger import ApiLogger
 from app.common.config import (
     GOOGLE_TRANSLATE_API_KEY,
     PAPAGO_CLIENT_ID,
@@ -31,12 +31,10 @@ class Translator:
     ]
 
     @classmethod
-    async def translate(
-        cls, text: str, src_lang: str, trg_lang: str = "en"
-    ) -> str:
+    async def translate(cls, text: str, src_lang: str, trg_lang: str = "en") -> str:
         if cls.cached_function is not None:
             try:
-                api_logger.info(
+                ApiLogger.cinfo(
                     f"Using cached translate function: {cls.cached_function}"
                 )
                 return await cls.cached_function(
@@ -60,12 +58,12 @@ class Translator:
                         trg_lang=trg_lang,
                         **args,
                     )
-                    api_logger.info(f"Succeeded to translate using {cfg['function']}")
+                    ApiLogger.cinfo(f"Succeeded to translate using {cfg['function']}")
                     cls.cached_function = function
                     cls.cached_args = args
                     return result
                 except Exception:
-                    api_logger.error(
+                    ApiLogger.cerror(
                         f"Failed to translate using {cfg['function']}", exc_info=True
                     )
                     pass

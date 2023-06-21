@@ -237,13 +237,13 @@ class LLMModels(EnumMixin):
         model_path="Wizard-Vicuna-13B-Uncensored.ggmlv3.q5_1.bin",  # The filename of model. Must end with .bin.
         prefix_template=DescriptionTemplates.USER_AI__DEFAULT,
     )
-    gpt4_x_vicuna_13b = LlamaCppModel(
-        name="gpt4-x-vicuna-13B-GGML",
+    gorilla_7b = LlamaCppModel(
+        name="gorilla-7B-GGML",
         max_total_tokens=2048,  # context tokens (n_ctx)
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
-        tokenizer=LlamaTokenizer("junelee/wizard-vicuna-13b"),
-        model_path="gpt4-x-vicuna-13B.ggml.q4_0.bin",  # The filename of model. Must end with .bin.
+        tokenizer=LlamaTokenizer("gorilla-llm/gorilla-7b-hf-delta-v0"),
+        model_path="Gorilla-7B.ggmlv3.q3_K_S.bin",  # The filename of model. Must end with .bin.
         prefix_template=DescriptionTemplates.USER_AI__DEFAULT,
     )
     manticore_13b_uncensored = LlamaCppModel(
@@ -273,7 +273,7 @@ class LLMModels(EnumMixin):
         user_chat_roles=UserChatRoles(
             user="Instruction",
             ai="Response",
-            system="Instruction",
+            system="System",
         ),
     )
     guanaco_13b = LlamaCppModel(
@@ -313,7 +313,7 @@ class LLMModels(EnumMixin):
         token_margin=8,
         tokenizer=LlamaTokenizer("FPHam/Karen_theEditor_13b_HF"),
         model_path="Karen-The-Editor.ggmlv3.q5_1.bin",  # The filename of model. Must end with .bin.
-        prefix_template=DescriptionTemplates.USER_AI__GAME,
+        prefix_template=DescriptionTemplates.USER_AI__ENGLISH,
         user_chat_roles=UserChatRoles(
             user="USER",
             ai="ASSISTANT",

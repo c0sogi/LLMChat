@@ -45,14 +45,14 @@ async def browse(
         show_result=False,
     )
     if browsing_result:
-        summarized_browsing_result: str = await run_in_threadpool(
-            get_summarization,
-            to_summarize=browsing_result,
-        )
+        # browsing_result = await run_in_threadpool(
+        #     get_summarization,
+        #     to_summarize=browsing_result,
+        # )
         query_to_send: str = make_formatted_query(
             user_chat_context=buffer.current_user_chat_context,
             question=user_query,
-            context=summarized_browsing_result,
+            context=browsing_result,
             query_template=QueryTemplates.CONTEXT_QUESTION__WEB_BROWSING,
         )
     else:

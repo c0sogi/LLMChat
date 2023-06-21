@@ -1,16 +1,78 @@
-from orjson import dumps as orjson_dumps
+"""Logger module for the API"""
+
 import logging
 import os
 from datetime import datetime, timedelta
+from sys import exc_info
 from time import time
 from typing import Optional
-from sys import exc_info
+
 from fastapi import HTTPException
+from orjson import dumps as orjson_dumps
 from starlette.requests import Request
 from starlette.responses import Response
-
-from app.common.config import LoggingConfig, logging_config
+from app.common.config import LoggingConfig
 from app.errors.api_exceptions import APIException, InternalServerError
+from app.utils.colorama import Fore, Style
+
+
+def _hide_email(email: str) -> str:
+    separated_email = email.split("@")
+    if len(separated_email) == 2:
+        local_parts, domain = separated_email
+        return "**" + local_parts[2:-1] + "*@" + domain[1]
+    else:
+        return "".join(separated_email)
+
+
+def _generate_error_log(
+    error: InternalServerError | HTTPException | APIException,
+    request: Request,
+) -> dict[str, str | None]:
+    if request.state.inspect is not None:
+        inspection = request.state.inspect
+        error_file = inspection.f_code.co_filename
+        error_func = inspection.f_code.co_name
+        error_line = inspection.f_lineno
+    else:
+        _, _, traceback = exc_info()
+        if traceback is not None:
+            while traceback.tb_next is not None:
+                traceback = traceback.tb_next
+            error_file = traceback.tb_frame.f_code.co_filename
+            error_func = traceback.tb_frame.f_code.co_name
+            error_line = traceback.tb_lineno
+        else:
+            error_func = error_file = error_line = "UNKNOWN"
+
+    return {
+        "errorFunc": str(error_func),
+        "location": f"{error_line} line in {error_file}",
+        "raised": str(error.__class__.__name__),
+        "msg": error.msg if not isinstance(error, HTTPException) else None,
+        "detail": error.detail
+        if not isinstance(error, HTTPException)
+        else error.detail,
+    }
+
+
+class ColoredFormatter(logging.Formatter):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Define color codes
+        self.colors = {
+            "DEBUG": Fore.CYAN,
+            "INFO": Fore.GREEN,
+            "WARNING": Fore.YELLOW,
+            "ERROR": Fore.RED,
+            "CRITICAL": Fore.MAGENTA + Style.BRIGHT,
+        }
+
+    def format(self, record):
+        # Apply color to the entire log message
+        message = super().format(record)
+        return f"{self.colors.get(record.levelname, Fore.WHITE + Style.BRIGHT)}{message}{Style.RESET_ALL}"
 
 
 class CustomLogger(logging.Logger):
@@ -18,7 +80,7 @@ class CustomLogger(logging.Logger):
         self, name: str, logging_config: LoggingConfig = LoggingConfig()
     ) -> None:
         super().__init__(name=name, level=logging_config.logger_level)
-        formatter = logging.Formatter(logging_config.logging_format)
+        formatter = ColoredFormatter(logging_config.logging_format)
 
         console = logging.StreamHandler()
         console.setLevel(logging_config.console_log_level)
@@ -56,52 +118,55 @@ class ApiLogger(CustomLogger):
     ) -> None:
         super().__init__(name=name, logging_config=logging_config)
 
-    def _hide_email(self, email: str) -> str:
-        separated_email = email.split("@")
-        if len(separated_email) == 2:
-            local_parts, domain = separated_email
-            return "**" + local_parts[2:-1] + "*@" + domain[1]
-        else:
-            return "".join(separated_email)
+    @classmethod
+    def cinfo(cls, msg: str, *args, **kwargs) -> None:
+        if cls.__name__ not in cls._instances:
+            cls(cls.__name__)
+        super(ApiLogger, cls._instances[cls.__name__]).info(msg=msg, *args, **kwargs)
 
-    def _generate_error_log(
-        self,
-        error: InternalServerError | HTTPException | APIException,
-        request: Request,
-    ) -> dict[str, str | None]:
-        if request.state.inspect is not None:
-            inspection = request.state.inspect
-            error_file = inspection.f_code.co_filename
-            error_func = inspection.f_code.co_name
-            error_line = inspection.f_lineno
-        else:
-            _, _, traceback = exc_info()
-            if traceback is not None:
-                while traceback.tb_next is not None:
-                    traceback = traceback.tb_next
-                error_file = traceback.tb_frame.f_code.co_filename
-                error_func = traceback.tb_frame.f_code.co_name
-                error_line = traceback.tb_lineno
-            else:
-                error_func = error_file = error_line = "UNKNOWN"
+    @classmethod
+    def cdebug(cls, msg: str, *args, **kwargs) -> None:
+        if cls.__name__ not in cls._instances:
+            cls(cls.__name__)
+        super(ApiLogger, cls._instances[cls.__name__]).debug(msg=msg, *args, **kwargs)
 
-        return {
-            "errorFunc": str(error_func),
-            "location": f"{error_line} line in {error_file}",
-            "raised": str(error.__class__.__name__),
-            "msg": error.msg if not isinstance(error, HTTPException) else None,
-            "detail": error.detail
-            if not isinstance(error, HTTPException)
-            else error.detail,
-        }
+    @classmethod
+    def cwarning(cls, msg: str, *args, **kwargs) -> None:
+        if cls.__name__ not in cls._instances:
+            cls(cls.__name__)
+        super(ApiLogger, cls._instances[cls.__name__]).warning(msg=msg, *args, **kwargs)
 
-    def log_api(
-        self,
+    @classmethod
+    def cerror(cls, msg: str, *args, **kwargs) -> None:
+        if cls.__name__ not in cls._instances:
+            cls(cls.__name__)
+        super(ApiLogger, cls._instances[cls.__name__]).error(msg=msg, *args, **kwargs)
+
+    @classmethod
+    def cexception(cls, msg: str, *args, **kwargs) -> None:
+        if cls.__name__ not in cls._instances:
+            cls(cls.__name__)
+        super(ApiLogger, cls._instances[cls.__name__]).exception(
+            msg=msg, *args, **kwargs
+        )
+
+    @classmethod
+    def ccritical(cls, msg: str, *args, **kwargs) -> None:
+        if cls.__name__ not in cls._instances:
+            cls(cls.__name__)
+        super(ApiLogger, cls._instances[cls.__name__]).critical(
+            msg=msg, *args, **kwargs
+        )
+
+    @classmethod
+    def clog(
+        cls,
         request: Request,
         response: Response,
         error: Optional[InternalServerError | HTTPException | APIException] = None,
         **kwargs,
     ) -> None:
+        """Log request and response data to console and file"""
         processed_time = (
             time() - request.state.start if hasattr(request.state, "start") else -1
         )
@@ -113,35 +178,31 @@ class ApiLogger(CustomLogger):
             else request.url.path,
             "method": str(request.method),
             "statusCode": error.status_code if error else response.status_code,
-            "errorDetail": self._generate_error_log(error=error, request=request)
+            "errorDetail": _generate_error_log(error=error, request=request)
             if error is not None
             else None,
             "client": {
                 "client": request.state.ip,
                 "user": user.id if user and user.id else None,
-                "email": self._hide_email(email=user.email)
-                if user and user.email
-                else None,
+                "email": _hide_email(email=user.email) if user and user.email else None,
             },
             "processedTime": str(round(processed_time * 1000, 5)) + "ms",
             "datetimeUTC": utc_now.strftime("%Y/%m/%d %H:%M:%S"),
             "datetimeKST": (utc_now + timedelta(hours=9)).strftime("%Y/%m/%d %H:%M:%S"),
         } | kwargs
         log: str = orjson_dumps(json_data).decode("utf-8")
-        self.error(
+        cls.cerror(
             log, exc_info=True
-        ) if error and error.status_code >= 500 else self.info(log)
+        ) if error and error.status_code >= 500 else cls.cinfo(log)
 
-
-api_logger: ApiLogger = ApiLogger("FastAPI", logging_config=logging_config)
 
 if __name__ == "__main__":
-    api_logger.debug("Testing logger: debug")
-    api_logger.info("Testing logger: info")
-    api_logger.warning("Testing logger: warning")
+    ApiLogger.cdebug("Testing logger: debug")
+    ApiLogger.cinfo("Testing logger: info")
+    ApiLogger.cwarning("Testing logger: warning")
     try:
         raise Exception("Test exception")
     except Exception:
-        api_logger.error("Testing logger: error", exc_info=True)
-    api_logger.critical("Testing logger: critical")
-api_logger.info
+        ApiLogger.cerror("Testing logger: error", exc_info=True)
+    ApiLogger.ccritical("Testing logger: critical")
+ApiLogger.cinfo

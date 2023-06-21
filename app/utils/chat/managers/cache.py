@@ -11,7 +11,7 @@ from app.models.chat_models import (
     UserChatContext,
     UserChatProfile,
 )
-from app.utils.logger import api_logger
+from app.utils.logger import ApiLogger
 
 
 class CacheManager:
@@ -55,7 +55,7 @@ class CacheManager:
             }
             return UserChatProfile(**kwargs)
         except Exception:
-            api_logger.error("Error reading profile from cache", exc_info=True)
+            ApiLogger.cerror("Error reading profile from cache", exc_info=True)
             return None
 
     # Public methods
@@ -131,7 +131,7 @@ class CacheManager:
                 else [],
             )
         except Exception:
-            api_logger.error("Error reading context from cache", exc_info=True)
+            ApiLogger.cerror("Error reading context from cache", exc_info=True)
             default: UserChatContext = UserChatContext.construct_default(
                 user_id=user_id,
                 chat_room_id=chat_room_id,

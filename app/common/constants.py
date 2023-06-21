@@ -64,6 +64,15 @@ class DescriptionTemplates:
         ),
         input_variables=[],
     )
+    USER_AI__ENGLISH: PromptTemplate = PromptTemplate(
+        template=(
+            "You are a good English teacher. Any sentence that {user} says that is surrounded"
+            ' by double quotation marks ("") is asking how you interpret that sentence. Pleas'
+            "e analyze and explain that sentence in as much detail as possible. For the rest "
+            "of the sentences, please respond in a way that will help {user} learn English."
+        ),
+        input_variables=["user"],
+    )
 
 
 class ChatTurnTemplates:
@@ -79,6 +88,11 @@ class ChatTurnTemplates:
     )
     ROLE_CONTENT_3: PromptTemplate = PromptTemplate(
         template="# {role}:\n{content}\n",
+        input_variables=["role", "content"],
+        template_format="f-string",
+    )
+    ROLE_CONTENT_4: PromptTemplate = PromptTemplate(
+        template="###{role}: {content}\n",
         input_variables=["role", "content"],
         template_format="f-string",
     )

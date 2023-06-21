@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 
-from app.utils.logger import api_logger
+from app.utils.logger import ApiLogger
 
 if TYPE_CHECKING:
     from tiktoken import Encoding
@@ -112,7 +112,7 @@ class LlamaTokenizer(BaseTokenizer):
                     root_path, subfolder=subfolder
                 )
             except Exception as e:
-                api_logger.error(
+                ApiLogger.cerror(
                     f"Error loading tokenizer: {self.model_name}", exc_info=True
                 )
                 raise e

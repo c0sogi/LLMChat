@@ -27,7 +27,7 @@ from app.utils.chat.messages.converter import (
     message_histories_to_list,
 )
 from app.utils.chat.tokens import cutoff_message_histories
-from app.utils.logger import api_logger
+from app.utils.logger import ApiLogger
 from app.models.base_models import (
     InitMessage,
     MessageToWebsocket,
@@ -67,7 +67,7 @@ class SyncToAsyncGenerator:
                 break
             except Exception as e:
                 # Other exceptions are unexpected and should propagate up
-                api_logger.exception(
+                ApiLogger.cexception(
                     f"Unexpected exception in SyncToAsyncGenerator: {e}"
                 )
                 raise e
@@ -175,7 +175,6 @@ class SendToWebsocket:
 
         async def consumer(async_stream: AsyncIterator) -> None:
             """Helper function to send chunks of data"""
-            api_logger.info("Sending stream to websocket")
             iteration: int = 0
             try:
                 buffer.is_stream_in_progress.set()

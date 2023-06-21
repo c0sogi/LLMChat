@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 from fastapi.concurrency import run_in_threadpool
 from langchain.schema import HumanMessage, SystemMessage
 from requests_html import HTML, AsyncHTMLSession
+from app.common.lotties import Lotties
 from app.models.base_models import ParserDefinitions
 
 from app.shared import Shared
@@ -162,14 +163,14 @@ async def click_link_chain(
     # most_relevant_content_and_score: Optional[tuple[str, int]] = None
     await SendToWebsocket.message(
         websocket=buffer.websocket,
-        msg=f"\n```lottie-click\n### Clicking link \n---\n {link}\n```\n",
+        msg=Lotties.CLICK.format(f"### Clicking link \n---\n{link}"),
         chat_room_id=buffer.current_chat_room_id,
         finish=False,
     )
     # Get content from link
     await SendToWebsocket.message(
         websocket=buffer.websocket,
-        msg=f"\n```lottie-read\n### Reading content\n```\n",
+        msg=Lotties.READ.format(f"### Reading content"),
         chat_room_id=buffer.current_chat_room_id,
         finish=False,
     )
@@ -212,7 +213,7 @@ async def click_link_chain(
             previous_actions.append("scroll_down")
             await SendToWebsocket.message(
                 websocket=buffer.websocket,
-                msg=f"\n```lottie-scroll-down\n### Scrolling down\n```\n",
+                msg=Lotties.SCROLL_DOWN.format("### Scrolling down"),
                 chat_room_id=buffer.current_chat_room_id,
                 finish=False,
             )
@@ -220,7 +221,7 @@ async def click_link_chain(
         elif action == "go_back":
             await SendToWebsocket.message(
                 websocket=buffer.websocket,
-                msg=f"\n```lottie-go-back\n### Going back\n```\n",
+                msg=Lotties.GO_BACK.format("### Going back"),
                 chat_room_id=buffer.current_chat_room_id,
                 finish=False,
             )

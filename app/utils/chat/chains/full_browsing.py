@@ -8,6 +8,7 @@ from langchain.schema import HumanMessage, SystemMessage
 from requests_html import AsyncHTMLSession
 
 from app.common.config import ChatConfig
+from app.common.lotties import Lotties
 from app.models.openai_functions import OpenAIFunctions
 from app.shared import Shared
 from app.utils.chat.buffer import BufferedUserContext
@@ -131,7 +132,7 @@ async def full_web_browsing_chain(
     # Begin browsing
     await SendToWebsocket.message(
         websocket=buffer.websocket,
-        msg=f"\n```lottie-search-web\n### Browsing web\n",
+        msg=Lotties.SEARCH_WEB.format("### Browsing web", end=False),
         chat_room_id=buffer.current_chat_room_id,
         finish=False,
     )
@@ -198,7 +199,7 @@ async def full_web_browsing_chain(
                         # Found the best result!
                         await SendToWebsocket.message(
                             websocket=buffer.websocket,
-                            msg=f"\n```lottie-ok\n### I found the result!\n```\n",
+                            msg=Lotties.OK.format("### I found the result!"),
                             chat_room_id=buffer.current_chat_room_id,
                             finish=False,
                         )
@@ -210,7 +211,7 @@ async def full_web_browsing_chain(
                     # Click failed, continue browsing
                     await SendToWebsocket.message(
                         websocket=buffer.websocket,
-                        msg=f"\n```lottie-fail\n### Reading content failed\n```\n",
+                        msg=Lotties.FAIL.format("### Reading content failed"),
                         chat_room_id=buffer.current_chat_room_id,
                         finish=False,
                     )
@@ -219,7 +220,7 @@ async def full_web_browsing_chain(
                 # A sufficient amount of information has been provided or there is no more information to find.
                 await SendToWebsocket.message(
                     websocket=buffer.websocket,
-                    msg=f"\n```lottie-ok\n### Finishing browsing\n```\n",
+                    msg=Lotties.OK.format("### Finishing browsing"),
                     chat_room_id=buffer.current_chat_room_id,
                     finish=False,
                 )
@@ -228,7 +229,7 @@ async def full_web_browsing_chain(
         # Exhausted all snippets. No more links to click
         await SendToWebsocket.message(
             websocket=buffer.websocket,
-            msg=f"\n```lottie-ok\n### Finished browsing, but I couldn't find the result.\n```\n",
+            msg=Lotties.OK.format("### Finished browsing, but I couldn't find the result."),
             chat_room_id=buffer.current_chat_room_id,
             finish=finish,
             wait_next_query=wait_next_query,
@@ -237,7 +238,7 @@ async def full_web_browsing_chain(
     except Exception as e:
         ApiLogger("||full_web_browsing_chain||").exception(e)
         await SendToWebsocket.message(
-            msg=f"\n```lottie-fail\n### Failed to browse web\n```\n",
+            msg=Lotties.FAIL.format("### Failed to browse web"),
             websocket=buffer.websocket,
             chat_room_id=buffer.current_chat_room_id,
             finish=finish,
