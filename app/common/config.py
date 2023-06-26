@@ -73,6 +73,9 @@ if GLOBAL_PREFIX in ("", "None"):
 if GLOBAL_SUFFIX in ("", "None"):
     GLOBAL_SUFFIX = None
 
+LOCAL_EMBEDDING_MODEL: Optional[str] = environ.get("LOCAL_EMBEDDING_MODEL", None)
+if str(LOCAL_EMBEDDING_MODEL).lower() in ("", "none"):
+    LOCAL_EMBEDDING_MODEL = None
 EMBEDDING_TOKEN_CHUNK_SIZE: int = int(environ.get("EMBEDDING_TOKEN_CHUNK_SIZE", 512))
 EMBEDDING_TOKEN_CHUNK_OVERLAP: int = int(
     environ.get("EMBEDDING_TOKEN_CHUNK_OVERLAP", 128)
@@ -143,7 +146,6 @@ class Config(metaclass=SingletonMetaClass):
     allowed_sites: list[str] = field(default_factory=lambda: ["*"])
     llama_cpp_completion_url: Optional[str] = "http://localhost:8002/v1/completions"
     llama_cpp_embedding_url: Optional[str] = "http://localhost:8002/v1/embeddings"
-    local_embedding_model: Optional[str] = "intfloat/e5-large-v2"
 
     def __post_init__(self):
         self.is_llama_cpp_available: bool = self.llama_cpp_completion_url is not None
@@ -283,6 +285,7 @@ class ChatConfig:
     vectorstore_n_results_limit: int = 10
     global_prefix: Optional[str] = GLOBAL_PREFIX  # prefix for global chat
     global_suffix: Optional[str] = GLOBAL_SUFFIX  # suffix for global chat
+    local_embedding_model: Optional[str] = LOCAL_EMBEDDING_MODEL
 
 
 config = Config.get()

@@ -50,10 +50,10 @@ class Shared(metaclass=SingletonMetaClass):
             client=None,
             openai_api_key=OPENAI_API_KEY,
         )
-        if config.llama_cpp_embedding_url and config.local_embedding_model:
+        if config.llama_cpp_embedding_url and ChatConfig.local_embedding_model:
             self.local_embeddings = APIEmbeddings(
                 client=None,
-                model=config.local_embedding_model,
+                model=ChatConfig.local_embedding_model,
                 embedding_api_url=config.llama_cpp_embedding_url,
             )
         else:
