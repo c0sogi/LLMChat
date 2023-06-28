@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional, Union
 
 from fastapi import WebSocket
 
@@ -29,6 +29,9 @@ class ContextList:
 
     def __iter__(self):
         return iter(self.data)
+
+    def __getitem__(self, index: int) -> Union[UserChatContext, UserChatProfile]:
+        return self.data[index]
 
     async def at(self, index: int) -> UserChatContext:
         if isinstance(self.data[index], UserChatProfile):
@@ -60,6 +63,9 @@ class BufferedUserContext:
     def __len__(self):
         return len(self._sorted_ctxts)
 
+    def __getitem__(self, index: int) -> Union[UserChatContext, UserChatProfile]:
+        return self._sorted_ctxts[index]
+
     async def init(self):
         self._sorted_ctxts = ContextList(
             initial_list=await self.initialize_callback(self.user.email),
@@ -75,7 +81,7 @@ class BufferedUserContext:
     def delete_context(self, index: int) -> None:
         self._sorted_ctxts.delete(index=index)
 
-    def find_index_of_chatroom(self, chat_room_id: str) -> int | None:
+    def find_index_of_chatroom(self, chat_room_id: str) -> Optional[int]:
         try:
             return self.sorted_chat_room_ids.index(chat_room_id)
         except ValueError:
@@ -86,7 +92,7 @@ class BufferedUserContext:
         user_chat_context: UserChatContext,
         role: ChatRoles,
         message_history_uuid: str,
-    ) -> int | None:  # =
+    ) -> Optional[int]:
         try:
             if role is ChatRoles.USER:
                 message_histories = user_chat_context.user_message_histories

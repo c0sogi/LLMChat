@@ -49,6 +49,10 @@ class DescriptionTemplates:
         ),
         input_variables=[],
     )
+    USER_AI__VERT_SHORT: PromptTemplate = PromptTemplate(
+        template="You are a helpful AI assistant.",
+        input_variables=[],
+    )
 
     USER_AI__GAME: PromptTemplate = PromptTemplate(
         template=(
@@ -93,6 +97,11 @@ class ChatTurnTemplates:
     )
     ROLE_CONTENT_4: PromptTemplate = PromptTemplate(
         template="###{role}: {content}\n",
+        input_variables=["role", "content"],
+        template_format="f-string",
+    )
+    ROLE_CONTENT_5: PromptTemplate = PromptTemplate(
+        template="{role}: {content}\n",
         input_variables=["role", "content"],
         template_format="f-string",
     )

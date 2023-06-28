@@ -61,7 +61,7 @@ class MessageHandler:
         ):
             buffer.current_chat_room_name = msg[:20]
             await CacheManager.update_profile(
-                user_chat_context=buffer.current_user_chat_context
+                user_chat_profile=buffer.current_user_chat_profile,
             )
             await SendToWebsocket.init(
                 buffer=buffer, send_chat_rooms=True, wait_next_query=True
@@ -98,7 +98,6 @@ class MessageHandler:
             role=ChatRoles.USER,
             calculated_tokens_to_use=user_token + current_llm_model.token_margin,
         )
-        # asyncio.create_task(asyncio.sleep(10))
         if (
             ChatConfig.summarize_for_chat
             and buffer.current_user_message_histories[-1].tokens

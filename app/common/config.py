@@ -146,9 +146,10 @@ class Config(metaclass=SingletonMetaClass):
     allowed_sites: list[str] = field(default_factory=lambda: ["*"])
     llama_cpp_completion_url: Optional[str] = "http://localhost:8002/v1/completions"
     llama_cpp_embedding_url: Optional[str] = "http://localhost:8002/v1/embeddings"
+    llama_cpp_server_port: Optional[int] = 8002
 
     def __post_init__(self):
-        self.is_llama_cpp_available: bool = self.llama_cpp_completion_url is not None
+        self.is_llama_cpp_available: bool = False
         self.is_llama_cpp_booting: bool = False
         if not DOCKER_MODE:
             self.port = 8001

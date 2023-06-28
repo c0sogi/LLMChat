@@ -257,19 +257,19 @@ class CacheManager:
     @classmethod
     async def update_profile(
         cls,
-        user_chat_context: UserChatContext,
+        user_chat_profile: UserChatProfile,
         only_if_exists: bool = True,
     ) -> bool:
         key: str = cls._generate_key(
-            user_id=user_chat_context.user_id,
-            chat_room_id=user_chat_context.chat_room_id,
+            user_id=user_chat_profile.user_id,
+            chat_room_id=user_chat_profile.chat_room_id,
             field="user_chat_profile",
         )
 
         return (
             await cache.redis.set(
                 key,
-                orjson_dumps(asdict(user_chat_context.user_chat_profile)),
+                orjson_dumps(asdict(user_chat_profile)),
                 xx=only_if_exists,
             )
         ) is True

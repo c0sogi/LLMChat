@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from multiprocessing import Process
 from os import kill
 from signal import SIGINT
@@ -16,6 +17,7 @@ from starlette_admin.contrib.sqla.view import ModelView
 from starlette_admin.views import DropDown, Link
 
 from app.auth.admin import MyAuthProvider
+from app.common.app_settings_llama_cpp import monitor_llama_cpp_server
 from app.common.config import JWT_SECRET, Config
 from app.database.connection import cache, db
 from app.database.schemas.auth import ApiKeys, ApiWhiteLists, Users
@@ -28,72 +30,6 @@ from app.utils.chat.managers.cache import CacheManager
 from app.utils.js_initializer import js_url_initializer
 from app.utils.logger import ApiLogger
 from app.viewmodels.admin import ApiKeyAdminView, UserAdminView
-
-
-def check_health(url: str) -> bool:
-    """Check if the given url is available or not"""
-    try:
-        schema = parse.urlparse(url).scheme
-        netloc = parse.urlparse(url).netloc
-        if requests.get(f"{schema}://{netloc}/health").status_code != 200:
-            return False
-        return True
-    except Exception:
-        return False
-
-
-def start_llama_cpp_server(shared: Shared):
-    """Start Llama CPP server. if it is already running, terminate it first."""
-    from app.start_llama_cpp_server import run
-
-    if shared.process.is_alive():
-        ApiLogger.cwarning("Terminating existing Llama CPP server")
-        shared.process.terminate()
-        shared.process.join()
-
-    ApiLogger.ccritical("Starting Llama CPP server")
-    shared.process = Process(target=run, daemon=True)
-    shared.process.start()
-
-
-def shutdown_llama_cpp_server(shared: Shared):
-    """Shutdown Llama CPP server."""
-    ApiLogger.ccritical("Shutting down Llama CPP server")
-    if shared.process.is_alive() and shared.process.pid:
-        kill(shared.process.pid, SIGINT)
-        shared.process.join()
-
-
-def monitor_llama_cpp_server(
-    config: Config,
-    shared: Shared,
-) -> None:
-    """Monitors the Llama CPP server and handles server availability.
-
-    Parameters:
-    - `config: Config`: An object representing the server configuration.
-    - `shared: Shared`: An object representing shared data."""
-    thread_sigterm: Event = shared.thread_terminate_signal
-    if not config.llama_cpp_completion_url:
-        return
-    while True:
-        if not check_health(config.llama_cpp_completion_url):
-            if thread_sigterm.is_set():
-                break
-            if config.is_llama_cpp_booting:
-                continue
-            ApiLogger.cerror("Llama CPP server is not available")
-            config.is_llama_cpp_available = False
-            config.is_llama_cpp_booting = True
-            try:
-                start_llama_cpp_server(shared)
-            except ImportError:
-                ApiLogger.cerror("ImportError: Llama CPP server is not available")
-                return
-        else:
-            config.is_llama_cpp_booting = False
-            config.is_llama_cpp_available = True
-    shutdown_llama_cpp_server(shared)
 
 
 async def on_startup():
@@ -300,4 +236,9 @@ def create_app(config: Config) -> FastAPI:
     )
     new_app.state.config = config
     new_app.state.shared = Shared()
+
+    @new_app.get("/health")
+    async def health():
+        return "ok"
+
     return new_app

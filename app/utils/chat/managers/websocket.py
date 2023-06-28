@@ -242,9 +242,9 @@ class SendToWebsocket:
                             async_stream.run(executor=None),
                         )
 
-                    case _:
+                    case _ as _stream:
                         raise ChatModelNotImplementedException(
-                            msg="Stream type is not AsyncGenerator or Generator."
+                            msg=f"Stream type {type(_stream)} is not AsyncGenerator or Generator."
                         )
             except InterruptedError:
                 raise InterruptedError(

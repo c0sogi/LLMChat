@@ -268,6 +268,7 @@ class LLMModels(EnumMixin):
         max_total_tokens=2048,  # context tokens (n_ctx)
         max_tokens_per_request=1024,  # The maximum number of tokens to generate.
         token_margin=8,
+        prefix_template=None,
         tokenizer=LlamaTokenizer("victor123/WizardLM-13B-1.0"),
         model_path="wizardLM-13B-Uncensored.ggmlv3.q5_K_M.bin",  # The filename of model. Must end with .bin.
         user_chat_roles=UserChatRoles(
@@ -347,6 +348,33 @@ class LLMModels(EnumMixin):
         model_path="llama-7b.ggmlv3.q5_K_M.bin",  # The filename of model. Must end with .bin.
         prefix_template=None,
         embedding=True,
+    )
+    orca_mini_3b = LlamaCppModel(
+        name="orca_mini_3B-GGML",
+        max_total_tokens=2048,  # context tokens (n_ctx)
+        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
+        token_margin=8,
+        tokenizer=LlamaTokenizer("psmathur/orca_mini_3b"),
+        model_path="orca-mini-3b.ggmlv3.q4_1.bin",  # The filename of model. Must end with .bin.
+        chat_turn_prompt=ChatTurnTemplates.ROLE_CONTENT_2,
+        user_chat_roles=UserChatRoles(
+            user="User",
+            ai="Response",
+            system="System",
+        ),
+    )
+    guanaco_33b = LlamaCppModel(
+        name="guanaco-33B-GGML",
+        max_total_tokens=2048,  # context tokens (n_ctx)
+        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
+        token_margin=8,
+        tokenizer=LlamaTokenizer("timdettmers/guanaco-33b-merged"),
+        model_path="guanaco-33B.ggmlv3.q3_K_S.bin",  # The filename of model. Must end with .bin.
+        user_chat_roles=UserChatRoles(
+            user="Human",
+            ai="Assistant",
+            system="System",
+        ),
     )
 
     @classmethod

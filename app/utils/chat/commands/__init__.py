@@ -7,6 +7,10 @@ from uuid import uuid4
 
 from fastapi import WebSocket
 from fastapi.concurrency import run_in_threadpool
+from app.common.app_settings_llama_cpp import (
+    shutdown_llama_cpp_server,
+    start_llama_cpp_server,
+)
 
 from app.common.config import config
 from app.common.constants import SystemPrompts
@@ -530,12 +534,12 @@ class ChatCommands:
         shared.process_pool_executor = ProcessPoolExecutor()
         return "Process pool executor freed!"
 
-    @staticmethod
-    @command_response.send_message_and_stop
-    async def browse_searx(query: str, /) -> str:
-        """Search web for the query, with searxNG\n
-        /browse_searx <query>"""
-        return await Shared().searx.arun(query)
+    # @staticmethod
+    # @command_response.send_message_and_stop
+    # async def browsesearx(query: str, /) -> str:
+    #     """Search web for the query, with searxNG\n
+    #     /browsesearx <query>"""
+    #     return await Shared().searx.arun(query)
 
     @staticmethod
     async def browse(
@@ -544,6 +548,22 @@ class ChatCommands:
         """Query LLM with duckduckgo browse results\n
         /browse <query>"""
         return await browse(user_query, buffer=buffer, **kwargs)
+
+    @staticmethod
+    @command_response.send_message_and_stop
+    async def shutdownllamacpp() -> str:
+        """Shutdown the llama cpp server\n
+        /shutdownllamacpp"""
+        shutdown_llama_cpp_server(shared=Shared())
+        return "Shutdown llama cpp server!"
+
+    @staticmethod
+    @command_response.send_message_and_stop
+    async def startllamacpp() -> str:
+        """Start the llama cpp server\n
+        /startllamacpp"""
+        start_llama_cpp_server(shared=Shared(), config=config)
+        return "Started llama cpp server!"
 
 
 async def command_handler(

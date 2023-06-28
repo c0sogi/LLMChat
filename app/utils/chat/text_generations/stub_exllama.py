@@ -14,7 +14,7 @@ from repositories.exllama.generator import ExLlamaGenerator
 from repositories.exllama.model import ExLlama, ExLlamaCache, ExLlamaConfig
 from repositories.exllama.tokenizer import ExLlamaTokenizer
 
-logger = ApiLogger("||_exllama||")
+logger = ApiLogger("||exllama||")
 
 
 class ExllamaModel:

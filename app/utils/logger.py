@@ -8,7 +8,7 @@ from time import time
 from typing import Optional
 
 from fastapi import HTTPException
-from orjson import dumps as orjson_dumps
+from json import dumps
 from starlette.requests import Request
 from starlette.responses import Response
 from app.common.config import LoggingConfig
@@ -16,7 +16,7 @@ from app.errors.api_exceptions import APIException, InternalServerError
 from app.utils.colorama import Fore, Style
 
 
-def _hide_email(email: str) -> str:
+def _mask_email(email: str) -> str:
     separated_email = email.split("@")
     if len(separated_email) == 2:
         local_parts, domain = separated_email
@@ -182,15 +182,15 @@ class ApiLogger(CustomLogger):
             if error is not None
             else None,
             "client": {
-                "client": request.state.ip,
-                "user": user.id if user and user.id else None,
-                "email": _hide_email(email=user.email) if user and user.email else None,
+                "ip": request.state.ip,
+                "id": user.id if user and user.id else None,
+                "email": _mask_email(email=user.email) if user and user.email else None,
             },
-            "processedTime": str(round(processed_time * 1000, 5)) + "ms",
+            "processedTime(ms)": round(processed_time * 1000, 5),
             "datetimeUTC": utc_now.strftime("%Y/%m/%d %H:%M:%S"),
             "datetimeKST": (utc_now + timedelta(hours=9)).strftime("%Y/%m/%d %H:%M:%S"),
         } | kwargs
-        log: str = orjson_dumps(json_data).decode("utf-8")
+        log: str = dumps(json_data, indent=4)
         cls.cerror(
             log, exc_info=True
         ) if error and error.status_code >= 500 else cls.cinfo(log)
