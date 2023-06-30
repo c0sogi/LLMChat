@@ -1,13 +1,18 @@
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Literal, Optional, Union
+
 from langchain import PromptTemplate
+
 from app.common.config import OPENAI_API_KEY, ChatConfig
 from app.common.constants import ChatTurnTemplates, DescriptionTemplates
-
-from app.models.llm_tokenizers import BaseTokenizer, LlamaTokenizer, OpenAITokenizer
-from app.models.base_models import UserChatRoles
 from app.common.mixins import EnumMixin
+from app.models.base_models import UserChatRoles
+from app.models.llm_tokenizers import (
+    BaseTokenizer,
+    ExllamaTokenizer,
+    LlamaTokenizer,
+    OpenAITokenizer,
+)
 
 
 @dataclass
@@ -115,6 +120,7 @@ class LlamaCppModel(LLMModel):
     model_path: str = field(
         default="YOUR_GGML.bin"
     )  # The path to the model. Must end with .bin. You must put .bin file into "llama_models/ggml"
+    tokenizer: LlamaTokenizer
     user_chat_roles: UserChatRoles = field(
         default_factory=lambda: UserChatRoles(
             ai="ASSISTANT",
@@ -122,7 +128,7 @@ class LlamaCppModel(LLMModel):
             user="USER",
         ),
     )
-    prefix_template: Optional[PromptTemplate] = field(
+    prefix_template: Optional[Union[PromptTemplate, str]] = field(
         default_factory=lambda: DescriptionTemplates.USER_AI__DEFAULT,
     )
     chat_turn_prompt: PromptTemplate = field(
@@ -158,21 +164,47 @@ class LlamaCppModel(LLMModel):
     n_threads: Optional[
         int
     ] = None  # Number of threads to use. If None, the number of threads is automatically determined.
-    suffix: Optional[
-        str
-    ] = None  # A suffix to append to the generated text. If None, no suffix is appended.
-    temperature: Optional[float] = 0.8  # The temperature to use for sampling.
-    top_p: Optional[float] = 0.95  # The top-p value to use for sampling.
-    logprobs: Optional[
-        int
-    ] = None  # The number of logprobs to return. If None, no logprobs are returned.
-    stop: Optional[list[str]] = field(
-        default_factory=lambda: []
-    )  # A list of strings to stop generation when encountered.
-    repeat_penalty: Optional[float] = 1.1  # The penalty to apply to repeated tokens.
-    top_k: Optional[int] = 40  # The top-k value to use for sampling.
     low_vram: bool = False  # Whether to use less VRAM.
     embedding: bool = False  # Whether to use the embedding layer.
+
+
+@dataclass
+class ExllamaModel(LLMModel):
+    model_path: str = field(
+        default="YOUR_GGML.bin"
+    )  # The path to the model. Must end with .bin. You must put .bin file into "llama_models/ggml"
+    tokenizer: ExllamaTokenizer
+    user_chat_roles: UserChatRoles = field(
+        default_factory=lambda: UserChatRoles(
+            ai="ASSISTANT",
+            system="SYSTEM",
+            user="USER",
+        ),
+    )
+    prefix_template: Optional[Union[PromptTemplate, str]] = field(
+        default_factory=lambda: DescriptionTemplates.USER_AI__DEFAULT,
+    )
+    chat_turn_prompt: PromptTemplate = field(
+        default_factory=lambda: ChatTurnTemplates.ROLE_CONTENT_1
+    )  # The prompt to use for chat turns.
+    compress_pos_emb: float = (
+        1.0  # Increase to compress positional embeddings applied to sequence
+    )
+    gpu_peer_fix: bool = False  # Apparently Torch can have problems transferring tensors directly 1 GPU to another.
+    # Enable this to expliticly move tensors via system RAM instead, where needed
+    auto_map: Optional[
+        list[float]
+    ] = None  # List of floats with memory allocation in GB, per CUDA device, overrides device_map
+    matmul_recons_thd: int = 8
+    fused_mlp_thd: int = 2
+    sdp_thd: int = 8
+    fused_attn: bool = True
+    matmul_fused_remap: bool = False
+    rmsnorm_no_half2: bool = False
+    rope_no_half2: bool = False
+    matmul_no_half2: bool = False
+    silu_no_half2: bool = False
+    concurrent_streams: bool = False
 
 
 @dataclass
@@ -265,10 +297,10 @@ class LLMModels(EnumMixin):
     )
     wizard_lm_uncensored_13b = LlamaCppModel(
         name="wizardLM-13B-Uncensored",
-        max_total_tokens=2048,  # context tokens (n_ctx)
-        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
+        max_total_tokens=5120,  # context tokens (n_ctx)
+        max_tokens_per_request=2560,  # The maximum number of tokens to generate.
         token_margin=8,
-        prefix_template=None,
+        prefix_template=DescriptionTemplates.USER_AI__SHORT,
         tokenizer=LlamaTokenizer("victor123/WizardLM-13B-1.0"),
         model_path="wizardLM-13B-Uncensored.ggmlv3.q5_K_M.bin",  # The filename of model. Must end with .bin.
         user_chat_roles=UserChatRoles(
@@ -293,20 +325,6 @@ class LLMModels(EnumMixin):
             system="Instruction",
         ),
     )
-    hyper_mantis_13b = LlamaCppModel(
-        name="13B-HyperMantis-GGML",
-        max_total_tokens=2048,  # context tokens (n_ctx)
-        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
-        token_margin=8,
-        tokenizer=LlamaTokenizer("digitous/13B-HyperMantis"),
-        model_path="13B-HyperMantis.ggmlv3.q5_1.bin",  # The filename of model. Must end with .bin.
-        prefix_template=DescriptionTemplates.USER_AI__GAME,
-        user_chat_roles=UserChatRoles(
-            user="Player",
-            ai="Narrator",
-            system="Instruction",
-        ),
-    )
     karen_the_editor_13b = LlamaCppModel(
         name="Karen_theEditor_13B-GGML",
         max_total_tokens=2048,  # context tokens (n_ctx)
@@ -314,7 +332,7 @@ class LLMModels(EnumMixin):
         token_margin=8,
         tokenizer=LlamaTokenizer("FPHam/Karen_theEditor_13b_HF"),
         model_path="Karen-The-Editor.ggmlv3.q5_1.bin",  # The filename of model. Must end with .bin.
-        prefix_template=DescriptionTemplates.USER_AI__ENGLISH,
+        prefix_template=DescriptionTemplates.USER_AI__SHORT,
         user_chat_roles=UserChatRoles(
             user="USER",
             ai="ASSISTANT",
@@ -363,16 +381,62 @@ class LLMModels(EnumMixin):
             system="System",
         ),
     )
-    guanaco_33b = LlamaCppModel(
-        name="guanaco-33B-GGML",
-        max_total_tokens=2048,  # context tokens (n_ctx)
-        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
+    airoboros_33b = LlamaCppModel(
+        name="airoboros-33b-gpt4-1.4-GGML",
+        max_total_tokens=5120,  # context tokens (n_ctx)
+        max_tokens_per_request=2560,  # The maximum number of tokens to generate.
         token_margin=8,
-        tokenizer=LlamaTokenizer("timdettmers/guanaco-33b-merged"),
-        model_path="guanaco-33B.ggmlv3.q3_K_S.bin",  # The filename of model. Must end with .bin.
+        tokenizer=LlamaTokenizer("jondurbin/airoboros-33b-gpt4-1.4"),
+        model_path="airoboros-33b-gpt4-1.4.ggmlv3.q3_K_S.bin",  # The filename of model. Must end with .bin.
+        n_gpu_layers=26,
+        chat_turn_prompt=ChatTurnTemplates.ROLE_CONTENT_5,
         user_chat_roles=UserChatRoles(
-            user="Human",
+            user="USER",
+            ai="ASSISTANT",
+            system="SYSTEM",
+        ),
+    )
+    chronos_hermes_13b = LlamaCppModel(
+        name="TheBloke/chronos-hermes-13B-GGML",
+        max_total_tokens=4096,  # context tokens (n_ctx)
+        max_tokens_per_request=2048,  # The maximum number of tokens to generate.
+        token_margin=8,
+        tokenizer=LlamaTokenizer("Austism/chronos-hermes-13b"),
+        model_path="chronos-hermes-13b.ggmlv3.q4_K_M.bin",  # The filename of model. Must end with .bin.
+        chat_turn_prompt=ChatTurnTemplates.ROLE_CONTENT_6,
+        user_chat_roles=UserChatRoles(
+            user="User",
             ai="Assistant",
+            system="System",
+        ),
+    )
+    orca_mini_7b = ExllamaModel(
+        model_path="orca_mini_7b",
+        name="orca_mini_7b",
+        max_total_tokens=4096,
+        max_tokens_per_request=2048,
+        token_margin=8,
+        tokenizer=ExllamaTokenizer("orca_mini_7b"),
+        compress_pos_emb=2.0,
+        prefix_template=DescriptionTemplates.USER_AI__GAME,
+        user_chat_roles=UserChatRoles(
+            user="Player",
+            ai="Narrator",
+            system="System",
+        ),
+    )
+    longchat_7b = ExllamaModel(
+        model_path="longchat_7b",
+        name="longchat_7b",
+        max_total_tokens=16384,
+        max_tokens_per_request=8192,
+        token_margin=8,
+        tokenizer=ExllamaTokenizer("longchat_7b"),
+        compress_pos_emb=8.0,
+        prefix_template=DescriptionTemplates.USER_AI__GAME,
+        user_chat_roles=UserChatRoles(
+            user="Player",
+            ai="Narrator",
             system="System",
         ),
     )

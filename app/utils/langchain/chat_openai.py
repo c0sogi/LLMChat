@@ -113,7 +113,7 @@ class CustomChatOpenAI(ChatOpenAI):
         self,
         messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
-        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        run_manager: Optional[list[AsyncCallbackManagerForLLMRun]] = None,
         **kwargs: Any,
     ) -> ChatResult:
         message_dicts, params = self._create_message_dicts(messages, stop, **kwargs)
@@ -137,7 +137,14 @@ class CustomChatOpenAI(ChatOpenAI):
                     inner_completion += token
                     completion_tokens += 1
                     if run_manager:
-                        await run_manager.on_llm_new_token(token)
+                        await asyncio.gather(
+                            *[
+                                manager.on_llm_new_token(
+                                    token=token,
+                                )
+                                for manager in run_manager
+                            ]
+                        )
                 if function_call is not None:
                     function_name += function_call.get("name", "")
                     function_arguments_unparsed += function_call.get("arguments", "")
@@ -197,8 +204,13 @@ class CustomChatOpenAI(ChatOpenAI):
         callback_manager = AsyncCallbackManager.configure(
             callbacks, self.callbacks, self.verbose
         )
-        run_manager = await callback_manager.on_chat_model_start(
+        on_chat_model_start = await callback_manager.on_chat_model_start(
             {"name": self.__class__.__name__}, messages, invocation_params=params
+        )
+        run_managers: list[AsyncCallbackManagerForLLMRun] = (
+            on_chat_model_start
+            if isinstance(on_chat_model_start, list)
+            else [on_chat_model_start]
         )
 
         new_arg_supported = inspect.signature(self._agenerate).parameters.get(
@@ -207,21 +219,28 @@ class CustomChatOpenAI(ChatOpenAI):
         try:
             results = await asyncio.gather(
                 *[
-                    self._agenerate(m, stop=stop, run_manager=run_manager, **kwargs)
+                    self._agenerate(m, stop=stop, run_manager=run_managers, **kwargs)
                     if new_arg_supported
                     else self._agenerate(m, stop=stop)
                     for m in messages
                 ]
             )
         except (KeyboardInterrupt, Exception) as e:
-            await run_manager.on_llm_error(e)
+            await asyncio.gather(
+                *[run_manager.on_llm_error(e) for run_manager in run_managers]
+            )
             raise e
         llm_output = self._combine_llm_outputs([res.llm_output for res in results])
         generations = [res.generations for res in results]
         output = LLMResult(generations=generations, llm_output=llm_output)
-        await run_manager.on_llm_end(output)
-        if run_manager:
-            output.run = RunInfo(run_id=run_manager.run_id)
+        await asyncio.gather(
+            *[run_manager.on_llm_end(output) for run_manager in run_managers]
+        )
+        if run_managers:
+            output.run = [
+                RunInfo(run_id=run_manager.run_id) for run_manager in run_managers
+            ]
+
         return output
 
     def _combine_llm_outputs(self, llm_outputs: List[Optional[dict]]) -> dict:

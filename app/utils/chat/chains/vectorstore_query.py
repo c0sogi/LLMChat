@@ -1,13 +1,11 @@
 from typing import Optional, Tuple
 
 from app.common.config import ChatConfig, config
-from app.common.constants import QueryTemplates
 from app.common.lotties import Lotties
 from app.shared import Shared
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.managers.vectorstore import Document, VectorStoreManager
 from app.utils.chat.managers.websocket import SendToWebsocket
-from app.utils.chat.tokens import make_formatted_query
 from app.utils.logger import ApiLogger
 from . import aget_query_to_search
 
@@ -45,18 +43,15 @@ async def vectorstore_query_chain(
         if not found_text_and_score:
             raise Exception("No result found")
 
-        found_text: str = make_formatted_query(
-            user_chat_context=buffer.current_user_chat_context,
-            question=query,
-            context="\n\n".join(
-                [document.page_content for document, _ in found_text_and_score]
-            ),
-            query_template=QueryTemplates.CONTEXT_QUESTION__CONTEXT_ONLY,
+        found_text: Optional[str] = (
+            "\n\n".join([document.page_content for document, _ in found_text_and_score])
+            if found_text_and_score
+            else None
         )
         await SendToWebsocket.message(
             websocket=buffer.websocket,
             msg=Lotties.OK.format("### Finished searching vectorstore")
-            + (found_text if show_result else ""),
+            + (str(found_text) if show_result else ""),
             chat_room_id=buffer.current_chat_room_id,
             finish=finish,
             wait_next_query=wait_next_query,

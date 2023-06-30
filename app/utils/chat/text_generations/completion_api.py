@@ -16,21 +16,44 @@ from app.errors.chat_exceptions import (
     ChatLengthException,
 )
 from app.models.base_models import MessageHistory
-from app.models.llms import LlamaCppModel
+from app.models.llms import ExllamaModel, LlamaCppModel
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.messages.converter import (
     chat_completion_api_parse_method,
     message_histories_to_list,
     message_histories_to_str,
 )
+from app.utils.chat.messages.turn_templates import identify_end_of_string
 from app.utils.logger import ApiLogger
 
 
-def _get_stops(*avoids: str) -> list[str]:
-    result = []
-    for avoid in avoids:
-        result.extend(list({avoid, avoid.upper(), avoid.lower(), avoid.capitalize()}))
-    return result
+def _get_stop_strings(*roles: str, chat_turn_prompt: PromptTemplate) -> list[str]:
+    """Get stop strings for text completion API.
+    Stop strings are required to stop text completion API from generating
+    text that does not belong to the current chat turn.
+    e.g. The common stop string is "### USER:", which can prevent ai from generating
+    user's message itself."""
+
+    prompt_stop = set()
+    eos: Optional[str] = identify_end_of_string(
+        "role", "content", chat_turn_prompt=chat_turn_prompt
+    )
+    if eos:
+        prompt_stop.add(eos)
+    for role in roles:
+        avoids = (
+            chat_turn_prompt.format(role=role, content="").strip(),
+            f"{role}:",
+            f"### {role}:",
+            f"###{role}:",
+        )
+        prompt_stop.update(
+            avoids,
+            map(str.capitalize, avoids),
+            map(str.upper, avoids),
+            map(str.lower, avoids),
+        )
+    return list(prompt_stop)
 
 
 def _get_api_key(buffer: BufferedUserContext) -> Optional[str]:
@@ -45,8 +68,8 @@ def _get_api_key(buffer: BufferedUserContext) -> Optional[str]:
 
 def _get_model_info(buffer: BufferedUserContext) -> tuple[str, str, Pattern]:
     current_model = buffer.current_llm_model.value
-    if isinstance(current_model, LlamaCppModel):
-        api_url = config.llama_cpp_completion_url
+    if isinstance(current_model, (LlamaCppModel, ExllamaModel)):
+        api_url = config.llama_completion_url
         assert api_url is not None
         model = buffer.current_llm_model.name
         api_regex_pattern = ChatConfig.api_regex_pattern_llama_cpp
@@ -236,15 +259,11 @@ async def agenerate_from_text_completion_api(
                     suffix_prompt_tokens=buffer.current_llm_model.value.suffix_tokens,
                     chat_turn_prompt=chat_turn_prompt,
                 ),
-                stop=_get_stops(
-                    chat_turn_prompt.format(
-                        role=buffer.current_llm_model.value.user_chat_roles.user,
-                        content="",
-                    ).strip(),
-                    chat_turn_prompt.format(
-                        role=buffer.current_llm_model.value.user_chat_roles.ai,
-                        content="",
-                    ).strip(),
+                stop=_get_stop_strings(
+                    buffer.current_llm_model.value.user_chat_roles.user,
+                    buffer.current_llm_model.value.user_chat_roles.ai,
+                    buffer.current_llm_model.value.user_chat_roles.system,
+                    chat_turn_prompt=chat_turn_prompt,
                 ),
                 # logit_bias_type="tokens",
                 # logit_bias={

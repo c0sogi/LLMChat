@@ -1,9 +1,9 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional, Union, Type
+from typing import Any, Literal, Optional, Union, Type
 from uuid import uuid4
 
-from pydantic import Field
+from pydantic import Field, create_model_from_typeddict
 from pydantic.main import BaseModel
 
 from app.utils.date_utils import UTC
@@ -136,8 +136,10 @@ class CreateChatRoom(BaseModel):  # stub
 
 
 class APIChatMessage(BaseModel):
-    role: str
-    content: str
+    role: Literal["system", "user", "assistant"] = Field(
+        default="user", description="The role of the message."
+    )
+    content: str = Field(default="", description="The content of the message.")
 
     class Config:
         orm_mode = True
@@ -259,3 +261,201 @@ class OpenAIFunction(BaseModel):
 class ParserDefinitions(BaseModel):
     selector: Optional[str] = None
     render_js: bool = False
+
+
+class TextGenerationSettings(BaseModel):
+    completion_id: str = Field(
+        default_factory=lambda: f"cmpl-{str(uuid4())}",
+        description="The unique ID of the text generation",
+    )
+    max_tokens: int = Field(
+        default=128, ge=1, description="The maximum number of tokens to generate."
+    )
+    temperature: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=2.0,
+        description=(
+            "Adjust the randomness of the generated text."
+            "Temperature is a hyperparameter that controls the randomness of the generated te"
+            "xt. It affects the probability distribution of the model's output tokens. A high"
+            "er temperature (e.g., 1.5) makes the output more random and creative, while a lo"
+            "wer temperature (e.g., 0.5) makes the output more focused, deterministic, and co"
+            "nservative. The default value is 0.8, which provides a balance between randomnes"
+            "s and determinism. At the extreme, a temperature of 0 will always pick the most "
+            "likely next token, leading to identical outputs in each run."
+        ),
+    )
+    top_p: float = Field(
+        default=0.95,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Limit the next token selection to a subset of tokens with a cumulative probabili"
+            "ty above a threshold P. Top-p sampling, also known as nucleus sampling, "
+            "is another text generation method that selects the next token from a subset of t"
+            "okens that together have a cumulative probability of at least p. This method pro"
+            "vides a balance between diversity and quality by considering both the probabilit"
+            "ies of tokens and the number of tokens to sample from. A higher value for top_p "
+            "(e.g., 0.95) will lead to more diverse text, while a lower value (e.g., 0.5) wil"
+            "l generate more focused and conservative text."
+        ),
+    )
+    typical_p: float = Field(
+        default=0.0,
+        description="Locally typical sampling threshold, 0.0 to disable typical sampling",
+    )
+    logprobs: Optional[int] = Field(
+        default=None,
+        description="The number of logprobs to return. If None, no logprobs are returned.",
+    )
+    echo: bool = Field(
+        default=False,
+        description="If True, the input is echoed back in the output.",
+    )
+    stop: Optional[str | list[str]] = Field(
+        default=None,
+        description="A list of tokens at which to stop generation. If None, no stop tokens are used.",
+    )
+    frequency_penalty: float = Field(
+        default=0.0,
+        ge=-2.0,
+        le=2.0,
+        description=(
+            "Positive values penalize new tokens based on their existing frequency in the tex"
+            "t so far, decreasing the model's likelihood to repeat the same line verbatim."
+        ),
+    )
+
+    presence_penalty: float = Field(
+        default=0.0,
+        ge=-2.0,
+        le=2.0,
+        description=(
+            "Positive values penalize new tokens based on whether they appear in the text so far, increasing "
+            "the model's likelihood to talk about new topics."
+        ),
+    )
+    repeat_penalty: float = Field(
+        default=1.1,
+        ge=0.0,
+        description=(
+            "A penalty applied to each token that is already generated. This helps prevent th"
+            "e model from repeating itself. Repeat penalty is a hyperparameter used t"
+            "o penalize the repetition of token sequences during text generation. It helps pr"
+            "event the model from generating repetitive or monotonous text. A higher value (e"
+            ".g., 1.5) will penalize repetitions more strongly, while a lower value (e.g., 0."
+            "9) will be more lenient."
+        ),
+    )
+    top_k: int = Field(
+        default=40,
+        ge=0,
+        description=(
+            "Limit the next token selection to the K most probable tokens. Top-k samp"
+            "ling is a text generation method that selects the next token only from the top k"
+            " most likely tokens predicted by the model. It helps reduce the risk of generati"
+            "ng low-probability or nonsensical tokens, but it may also limit the diversity of"
+            " the output. A higher value for top_k (e.g., 100) will consider more tokens and "
+            "lead to more diverse text, while a lower value (e.g., 10) will focus on the most"
+            " probable tokens and generate more conservative text."
+        ),
+    )
+    tfs_z: float = Field(
+        default=1.0,
+        description="Modify probability distribution to carefully cut off least likely tokens",
+    )
+    mirostat_mode: int = Field(
+        default=0,
+        ge=0,
+        le=2,
+        description="Enable Mirostat constant-perplexity algorithm of the specified version (1 or 2; 0 = disabled)",
+    )
+    mirostat_tau: float = Field(
+        default=5.0,
+        ge=0.0,
+        le=10.0,
+        description=(
+            "Mirostat target entropy, i.e. the target perplexity - lower values produce focused and coherent text, "
+            "larger values produce more diverse and less coherent text"
+        ),
+    )
+    mirostat_eta: float = Field(
+        default=0.1, ge=0.001, le=1.0, description="Mirostat learning rate"
+    )
+    logit_bias: Optional[dict[str, float]] = Field(
+        default=None,
+        description=(
+            "A dictionary of logit bias values to use for each token. The keys are the tokens"
+            " and the values are the bias values. The bias values are added to the logits of "
+            "the model to influence the next token probabilities. For example, a bias value o"
+            "f 5.0 will make the model 10 times more likely to select that token than it woul"
+            "d be otherwise. A bias value of -5.0 will make the model 10 times less likely to"
+            " select that token than it would be otherwise. The bias values are added to the "
+            "logits of the model to influence."
+        ),
+    )
+    logit_bias_type: Literal["input_ids", "tokens"] = Field(
+        default="tokens",
+        description=(
+            "The type of logit bias to use. If 'input_ids', the bias is applied to the input"
+            " ids(integer). If 'tokens', the bias is applied to the tokens(string). If None, the bias is not "
+            "applied."
+        ),
+    )
+    ban_eos_token: bool = Field(
+        default=False,
+        description="If True, the EOS token is banned from being generated.",
+    )
+
+
+class CreateEmbeddingRequest(BaseModel):
+    model: str = Field(description="The model to use for embedding.")
+    input: Union[str, list[str]] = Field(description="The input to embed.")
+    user: Optional[str]
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "model": "llama_7b",
+                "input": "The food was delicious and the waiter...",
+            },
+        }
+
+
+class CreateCompletionRequest(TextGenerationSettings):
+    model: str = Field(default=..., description="The model to use for completion.")
+    prompt: str = Field(default="", description="The prompt to use for completion.")
+    stream: bool = Field(default=False, description="Whether to stream the response.")
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "model": "llama_7b",
+                "prompt": "\n\n### Instructions:\nWhat is the capital of France?\n\n### Response:\n",
+                "stop": ["\n", "###"],
+            }
+        }
+
+
+class CreateChatCompletionRequest(TextGenerationSettings):
+    model: str = Field(default=..., description="The model to use for completion.")
+    messages: list[APIChatMessage] = Field(
+        default=[], description="A list of messages to generate completions for."
+    )
+    stream: bool = Field(default=False, description="Whether to stream the response.")
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "model": "llama_7b",
+                "messages": [
+                    APIChatMessage(
+                        role="system", content="You are a helpful assistant."
+                    ),
+                    APIChatMessage(
+                        role="user", content="What is the capital of France?"
+                    ),
+                ],
+            }
+        }

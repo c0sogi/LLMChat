@@ -1,17 +1,20 @@
-from __future__ import annotations
-
 import logging
 from dataclasses import dataclass, field
 from os import environ
 from pathlib import Path
 from re import Pattern, compile
-from typing import Optional
+from sys import modules
+from typing import Optional, Union
 from urllib import parse
 
 from aiohttp import ClientTimeout
-from dotenv import load_dotenv
 
-load_dotenv()
+
+# API Server Variables
+API_ENV: str = environ.get("API_ENV", "local")
+print(f"- API_ENV: {API_ENV}")
+DOCKER_MODE: bool = environ.get("DOCKER_MODE", "True").lower() == "true"
+print(f"- DOCKER_MODE: {DOCKER_MODE}")
 
 
 class SingletonMetaClass(type):
@@ -22,10 +25,6 @@ class SingletonMetaClass(type):
             cls._instances[cls] = super().__call__(*args, **kwargs)
         return cls._instances[cls]
 
-
-# API Server Variables
-API_ENV: str = environ.get("API_ENV", "local")
-DOCKER_MODE: bool = environ.get("DOCKER_MODE", "True").lower() == "true"
 
 EXCEPT_PATH_LIST: tuple = (
     "/",
@@ -144,13 +143,13 @@ class Config(metaclass=SingletonMetaClass):
     shared_vectorestore_name: str = QDRANT_COLLECTION
     trusted_hosts: list[str] = field(default_factory=lambda: ["*"])
     allowed_sites: list[str] = field(default_factory=lambda: ["*"])
-    llama_cpp_completion_url: Optional[str] = "http://localhost:8002/v1/completions"
-    llama_cpp_embedding_url: Optional[str] = "http://localhost:8002/v1/embeddings"
-    llama_cpp_server_port: Optional[int] = 8002
+    llama_completion_url: Optional[str] = "http://localhost:8002/v1/completions"
+    llama_embedding_url: Optional[str] = "http://localhost:8002/v1/embeddings"
+    llama_server_port: Optional[int] = 8002
 
     def __post_init__(self):
-        self.is_llama_cpp_available: bool = False
-        self.is_llama_cpp_booting: bool = False
+        self.is_llama_available: bool = False
+        self.is_llama_booting: bool = False
         if not DOCKER_MODE:
             self.port = 8001
             self.mysql_host = "localhost"
@@ -185,25 +184,22 @@ class Config(metaclass=SingletonMetaClass):
     @staticmethod
     def get(
         option: Optional[str] = None,
-    ) -> LocalConfig | ProdConfig | TestConfig:
-        if environ.get("PYTEST_RUNNING") is not None:
-            return TestConfig()
+    ) -> Union["LocalConfig", "ProdConfig", "TestConfig"]:
+        if option is not None:
+            return {
+                "prod": ProdConfig,
+                "local": LocalConfig,
+                "test": TestConfig,
+            }[option]()
         else:
-            if option is not None:
+            if API_ENV is not None:
                 return {
                     "prod": ProdConfig,
                     "local": LocalConfig,
                     "test": TestConfig,
-                }[option]()
+                }[API_ENV.lower()]()
             else:
-                if API_ENV is not None:
-                    return {
-                        "prod": ProdConfig,
-                        "local": LocalConfig,
-                        "test": TestConfig,
-                    }[API_ENV]()
-                else:
-                    return LocalConfig()
+                return LocalConfig()
 
 
 @dataclass

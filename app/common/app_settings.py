@@ -1,11 +1,5 @@
-from contextlib import asynccontextmanager
-from multiprocessing import Process
-from os import kill
-from signal import SIGINT
-from threading import Event, Thread
-from urllib import parse
+from threading import Thread
 
-import requests
 from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware import Middleware
@@ -70,7 +64,7 @@ async def on_startup():
     except ImportError:
         ApiLogger.ccritical("uvloop not installed!")
 
-    if config.llama_cpp_completion_url:
+    if config.llama_completion_url:
         # Start Llama CPP server monitoring
         ApiLogger.ccritical("Llama CPP server monitoring started!")
         shared.thread = Thread(

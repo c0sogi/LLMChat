@@ -34,12 +34,12 @@ def start_llama_cpp_server(config: Config, shared: Shared):
         shared.process.terminate()
         shared.process.join()
 
-    if config.llama_cpp_server_port is None:
+    if config.llama_server_port is None:
         raise NotImplementedError("Llama CPP server port is not set")
 
     ApiLogger.ccritical("Starting Llama CPP server")
     shared.process = Process(
-        target=run_llama_cpp, args=(config.llama_cpp_server_port,), daemon=True
+        target=run_llama_cpp, args=(config.llama_server_port,), daemon=True
     )
     shared.process.start()
 
@@ -62,27 +62,29 @@ def monitor_llama_cpp_server(
     - `config: Config`: An object representing the server configuration.
     - `shared: Shared`: An object representing shared data."""
     thread_sigterm: Event = shared.thread_terminate_signal
-    if not config.llama_cpp_completion_url:
+    if not config.llama_completion_url:
         return
     while True:
-        if not check_health(config.llama_cpp_completion_url):
+        if not check_health(config.llama_completion_url):
             if thread_sigterm.is_set():
                 break
-            if config.is_llama_cpp_booting:
+            if config.is_llama_booting:
                 continue
             ApiLogger.cerror("Llama CPP server is not available")
-            config.is_llama_cpp_available = False
-            config.is_llama_cpp_booting = True
+            config.is_llama_available = False
+            config.is_llama_booting = True
             try:
                 start_llama_cpp_server(config=config, shared=shared)
             except (ImportError, NotImplementedError):
                 ApiLogger.cerror("ImportError: Llama CPP server is not available")
                 return
             except Exception:
+                ApiLogger.cexception("Unknown error: Llama CPP server is not available")
+                config.is_llama_booting = False
                 continue
         else:
-            config.is_llama_cpp_booting = False
-            config.is_llama_cpp_available = True
+            config.is_llama_booting = False
+            config.is_llama_available = True
     shutdown_llama_cpp_server(shared)
 
 

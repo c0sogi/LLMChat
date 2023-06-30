@@ -1,5 +1,18 @@
-from time import sleep
+from os import environ
+from sys import modules
+
+from dotenv import load_dotenv
+
 from maintools import initialize_before_launch
+
+if load_dotenv():
+    print("- Loaded .env file successfully.")
+else:
+    print("- Failed to load .env file.")
+
+if modules.get("pytest") is not None:
+    print("- Running in pytest mode.")
+    environ["API_ENV"] = "test"
 
 
 if __name__ == "__mp_main__":
@@ -12,11 +25,9 @@ elif __name__ == "__main__":
     """Option 2: Debug mode
     Running this file directly to debug the app
     Run this section if you don't want to run app in docker"""
-    from os import environ
 
-    environ[
-        "API_ENV"
-    ] = "local"  # everytime you run debugging, automatically testing db will be reset
+    if environ.get("API_ENV") != "test":
+        environ["API_ENV"] = "local"
     environ["DOCKER_MODE"] = "False"
 
     import uvicorn

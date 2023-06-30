@@ -63,7 +63,6 @@ async def agenerate_from_openai(
         model=current_model.name,
         api_key=api_key_to_use,
     )
-
     producer_task = asyncio.create_task(producer)
 
     try:
