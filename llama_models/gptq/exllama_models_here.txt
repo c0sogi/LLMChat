@@ -1,0 +1,10 @@
+The Exllama GPTQ model must be put here as a folder.
+
+For example, if you downloaded 3 files from "https://huggingface.co/TheBloke/orca_mini_7B-GPTQ/tree/main":
+
+- orca-mini-7b-GPTQ-4bit-128g.no-act.order.safetensors
+- tokenizer.model
+- config.json
+
+Then you need to put them in a folder.
+The path of the model has to be the folder name. Let's say, "orca_mini_7b", which contains the 3 files.

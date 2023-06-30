@@ -187,6 +187,24 @@ class ExllamaModel(LLMModel):
     chat_turn_prompt: PromptTemplate = field(
         default_factory=lambda: ChatTurnTemplates.ROLE_CONTENT_1
     )  # The prompt to use for chat turns.
+    compress_pos_emb: float = (
+        1.0  # Increase to compress positional embeddings applied to sequence
+    )
+    gpu_peer_fix: bool = False  # Apparently Torch can have problems transferring tensors directly 1 GPU to another.
+    # Enable this to expliticly move tensors via system RAM instead, where needed
+    auto_map: Optional[
+        list[float]
+    ] = None  # List of floats with memory allocation in GB, per CUDA device, overrides device_map
+    matmul_recons_thd: int = 8
+    fused_mlp_thd: int = 2
+    sdp_thd: int = 8
+    fused_attn: bool = True
+    matmul_fused_remap: bool = False
+    rmsnorm_no_half2: bool = False
+    rope_no_half2: bool = False
+    matmul_no_half2: bool = False
+    silu_no_half2: bool = False
+    concurrent_streams: bool = False
 
 
 @dataclass
@@ -397,10 +415,17 @@ class LLMModels(EnumMixin):
     orca_mini_7b = ExllamaModel(
         model_path="orca_mini_7b",
         name="orca_mini_7b",
-        max_total_tokens=2048,
-        max_tokens_per_request=1024,
+        max_total_tokens=4096,
+        max_tokens_per_request=2048,
         token_margin=8,
         tokenizer=ExllamaTokenizer("orca_mini_7b"),
+        compress_pos_emb=2.0,
+        prefix_template=DescriptionTemplates.USER_AI__GAME,
+        user_chat_roles=UserChatRoles(
+            user="Player",
+            ai="Narrator",
+            system="System",
+        ),
     )
 
     @classmethod

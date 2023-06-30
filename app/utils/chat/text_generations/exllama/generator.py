@@ -50,6 +50,55 @@ def _is_possible_to_generate_stops(decoded_text: str, stops: list[str]) -> bool:
     return False
 
 
+def _make_config(llm_model: ExllamaModel) -> ExLlamaConfig:
+    model_folder_path = Path(
+        resolve_model_path_to_posix(
+            llm_model.model_path,
+            default_relative_directory="llama_models/gptq",
+        ),
+    )
+    config = ExLlamaConfig((model_folder_path / "config.json").as_posix())
+
+    # Find the model checkpoint
+    model_file_found: list[Path] = []
+    for ext in (".safetensors", ".pt", ".bin"):
+        model_file_found.extend(model_folder_path.glob(f"*{ext}"))
+        if model_file_found:
+            if len(model_file_found) > 1:
+                logger.warning(
+                    f"More than one {ext} model has been found. The last one will be selected. It could be wrong."
+                )
+
+            break
+    if not model_file_found:
+        raise FileNotFoundError(f"No model has been found in {model_folder_path}.")
+    config.model_path = model_file_found[-1].as_posix()  # type: ignore
+    config.max_seq_len = (
+        llm_model.max_total_tokens
+    )  # Can also be increased, ideally while also using compress_pos_emn and a compatible model/LoRA
+    config.max_input_len = (
+        llm_model.max_total_tokens
+    )  # Maximum length of input IDs in a single forward pass,
+    # sequences longer than this will be processed in multiple steps.
+    config.max_attention_size = (
+        llm_model.max_total_tokens**2
+    )  # Sequences will be processed in chunks to keep the size of the attention weights matrix <= this
+    config.compress_pos_emb = llm_model.compress_pos_emb
+    config.gpu_peer_fix = llm_model.gpu_peer_fix
+    config.auto_map = llm_model.auto_map
+    config.matmul_fused_remap = llm_model.matmul_fused_remap
+    config.fused_mlp_thd = llm_model.fused_mlp_thd
+    config.sdp_thd = llm_model.sdp_thd
+    config.fused_attn = llm_model.fused_attn
+    config.matmul_fused_remap = llm_model.matmul_fused_remap
+    config.rmsnorm_no_half2 = llm_model.rmsnorm_no_half2
+    config.rope_no_half2 = llm_model.rope_no_half2
+    config.matmul_fused_remap = llm_model.matmul_fused_remap
+    config.silu_no_half2 = llm_model.silu_no_half2
+    config.concurrent_streams = llm_model.concurrent_streams
+    return config
+
+
 class ExllamaCompletionGenerator(BaseCompletionGenerator):
     config: Optional[ExLlamaConfig] = None
     model: Optional[ExLlama] = None
@@ -84,35 +133,11 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
 
     @classmethod
     def from_pretrained(cls, llm_model: ExllamaModel) -> Self:
-        model_folder_path = Path(
-            resolve_model_path_to_posix(
-                llm_model.model_path,
-                default_relative_directory="llama_models/gptq",
-            ),
-        )
-
-        # Find the model checkpoint
-        model_file_found: list[Path] = []
-        for ext in (".safetensors", ".pt", ".bin"):
-            model_file_found.extend(model_folder_path.glob(f"*{ext}"))
-            if model_file_found:
-                if len(model_file_found) > 1:
-                    logger.warning(
-                        f"More than one {ext} model has been found. The last one will be selected. It could be wrong."
-                    )
-
-                break
-        if not model_file_found:
-            raise FileNotFoundError(f"No model has been found in {model_folder_path}.")
-        config = ExLlamaConfig((model_folder_path / "config.json").as_posix())
-        config.model_path = model_file_found[-1].as_posix()  # type: ignore
-        model = ExLlama(config)
-
         result = cls()
-        result.config = config
-        result.model = model
+        result.config = _make_config(llm_model)
         result.tokenizer = llm_model.tokenizer.tokenizer
-        result.cache = ExLlamaCache(model)
+        result.model = ExLlama(result.config)
+        result.cache = ExLlamaCache(result.model)
         result._llm_model = llm_model
         return result
 
@@ -170,6 +195,7 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
     ) -> Iterator[CompletionChunk]:
         assert self.config is not None
         completion_id: str = f"cmpl-{str(uuid4())}"
+        model_path: str = str(self.config.model_path)
         last_token: Optional[str] = None
         n_tokens: int = 0
         for token in self._generate_text_with_streaming(prompt, settings=settings):
@@ -179,7 +205,7 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
                     id=completion_id,
                     object="text_completion",
                     created=int(time()),
-                    model=str(self.config.model_path),
+                    model=model_path,
                     choices=[
                         CompletionChoice(
                             text=last_token,
@@ -194,7 +220,7 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
             id=completion_id,
             object="text_completion",
             created=int(time()),
-            model=str(self.config.model_path),
+            model=model_path,
             choices=[
                 CompletionChoice(
                     text=last_token if last_token is not None else "",
@@ -244,6 +270,7 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
         assert self.config is not None
         prompt = self.convert_messages_into_prompt(messages, settings=settings)
         completion_id: str = f"cmpl-{str(uuid4())}"
+        model_path: str = str(self.config.model_path)
         last_token: Optional[str] = None
         n_tokens: int = 0
         for token in self._generate_text_with_streaming(prompt, settings=settings):
@@ -253,7 +280,7 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
                     id=completion_id,
                     object="chat.completion.chunk",
                     created=int(time()),
-                    model=str(self.config.model_path),
+                    model=model_path,
                     choices=[
                         ChatCompletionChunkChoice(
                             index=0,
@@ -269,7 +296,7 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
             id=completion_id,
             object="chat.completion.chunk",
             created=int(time()),
-            model=str(self.config.model_path),
+            model=model_path,
             choices=[
                 ChatCompletionChunkChoice(
                     index=0,
