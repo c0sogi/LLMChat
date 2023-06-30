@@ -9,6 +9,7 @@ from app.utils.chat.chains.translate import translate_chain
 from app.utils.chat.chains.vectorstore_query import vectorstore_query_chain
 from app.utils.chat.messages.handler import MessageHandler
 from app.utils.chat.managers.message import MessageManager
+from app.utils.chat.tokens import make_formatted_query
 
 
 async def query(
@@ -39,13 +40,18 @@ async def query(
         wait_next_query=True,
         show_result=False,
     )
+    if vectorstore_query_result:
+        query_to_send: str = make_formatted_query(
+            user_chat_context=buffer.current_user_chat_context,
+            question=user_query,
+            context=vectorstore_query_result,
+            query_template=QueryTemplates.CONTEXT_QUESTION__CONTEXT_ONLY,
+        )
+    else:
+        query_to_send: str = user_query
 
     await MessageHandler.user(
-        msg=QueryTemplates.CONTEXT_QUESTION__CONTEXT_ONLY.format(
-            context=vectorstore_query_result, question=user_query
-        )
-        if vectorstore_query_result is not None
-        else user_query,
+        msg=query_to_send,
         translate=None,
         buffer=buffer,
         use_tight_token_limit=False,

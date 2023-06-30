@@ -14,7 +14,7 @@ from app.errors.chat_exceptions import (
     ChatTooMuchTokenException,
 )
 from app.models.chat_models import ChatRoles, UserChatContext
-from app.models.llms import LlamaCppModel, LLMModel, OpenAIModel
+from app.models.llms import ExllamaModel, LlamaCppModel, LLMModel, OpenAIModel
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.managers.cache import CacheManager
 from app.utils.chat.chains.translate import translate_chain
@@ -118,41 +118,36 @@ class MessageHandler:
             )  # =
 
     @classmethod
-    async def ai(cls, translate: Optional[str], buffer: BufferedUserContext) -> None:
+    async def ai(
+        cls,
+        buffer: BufferedUserContext,
+        translate: Optional[str],
+        model: Optional[LLMModel] = None,
+    ) -> None:
         """Handle ai message, including text generation and translation"""
         backup_context: UserChatContext = deepcopy(buffer.current_user_chat_context)
-        current_model = buffer.current_user_chat_context.llm_model.value
+        if model is None:
+            model = buffer.current_llm_model.value
         stream_progress = StreamProgress(uuid=uuid4().hex)
         try:
-            if isinstance(current_model, OpenAIModel):
+            if isinstance(model, OpenAIModel):
                 stream_func = agenerate_from_openai
 
-            elif isinstance(current_model, LlamaCppModel):
-                if config.is_llama_cpp_available and config.llama_cpp_completion_url:
+            elif isinstance(model, (LlamaCppModel, ExllamaModel)):
+                if config.is_llama_available and config.llama_completion_url:
                     # Use llama_cpp API
-                    if "/v1/chat/completions" in config.llama_cpp_completion_url:
+                    if "/v1/chat/completions" in config.llama_completion_url:
                         stream_func = agenerate_from_chat_completion_api
-                    elif "/v1/completions" in config.llama_cpp_completion_url:
+                    elif "/v1/completions" in config.llama_completion_url:
                         stream_func = agenerate_from_text_completion_api
                     else:
                         raise ChatModelNotImplementedException(
-                            msg=f"Model {buffer.current_user_chat_context.llm_model.value.name} not implemented."
+                            msg=f"Model {model.name} not implemented."
                         )
                 else:
                     raise ChatModelNotImplementedException(
-                        msg=f"Model {buffer.current_user_chat_context.llm_model.value.name} not implemented."
+                        msg=f"Model {model.name} not implemented."
                     )
-                    # Use llama_cpp process pool directly
-                    # try:
-                    #     from app.utils.chat.text_generations.llama_cpp import (
-                    #         generate_from_llama_cpp,
-                    #     )
-
-                    #     stream_func = generate_from_llama_cpp
-                    # except ImportError:
-                    #     raise ChatModelNotImplementedException(
-                    #         msg=f"Model {buffer.current_user_chat_context.llm_model.value.name} not implemented."
-                    #     )
             else:
                 raise ChatModelNotImplementedException(
                     msg=f"Model {buffer.current_user_chat_context.llm_model.value.name} not implemented."
@@ -161,7 +156,7 @@ class MessageHandler:
                 buffer=buffer,
                 stream_func=stream_func,
                 stream_progress=stream_progress,
-                model_name=current_model.name,
+                model_name=model.name,
                 wait_next_query=True if translate else None,
             )
             await MessageManager.add_message_history_safely(

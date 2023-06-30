@@ -144,13 +144,13 @@ class Config(metaclass=SingletonMetaClass):
     shared_vectorestore_name: str = QDRANT_COLLECTION
     trusted_hosts: list[str] = field(default_factory=lambda: ["*"])
     allowed_sites: list[str] = field(default_factory=lambda: ["*"])
-    llama_cpp_completion_url: Optional[str] = "http://localhost:8002/v1/completions"
-    llama_cpp_embedding_url: Optional[str] = "http://localhost:8002/v1/embeddings"
-    llama_cpp_server_port: Optional[int] = 8002
+    llama_completion_url: Optional[str] = "http://localhost:8002/v1/completions"
+    llama_embedding_url: Optional[str] = "http://localhost:8002/v1/embeddings"
+    llama_server_port: Optional[int] = 8002
 
     def __post_init__(self):
-        self.is_llama_cpp_available: bool = False
-        self.is_llama_cpp_booting: bool = False
+        self.is_llama_available: bool = False
+        self.is_llama_booting: bool = False
         if not DOCKER_MODE:
             self.port = 8001
             self.mysql_host = "localhost"

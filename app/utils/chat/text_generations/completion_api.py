@@ -16,7 +16,7 @@ from app.errors.chat_exceptions import (
     ChatLengthException,
 )
 from app.models.base_models import MessageHistory
-from app.models.llms import LlamaCppModel
+from app.models.llms import ExllamaModel, LlamaCppModel
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.messages.converter import (
     chat_completion_api_parse_method,
@@ -45,8 +45,8 @@ def _get_api_key(buffer: BufferedUserContext) -> Optional[str]:
 
 def _get_model_info(buffer: BufferedUserContext) -> tuple[str, str, Pattern]:
     current_model = buffer.current_llm_model.value
-    if isinstance(current_model, LlamaCppModel):
-        api_url = config.llama_cpp_completion_url
+    if isinstance(current_model, (LlamaCppModel, ExllamaModel)):
+        api_url = config.llama_completion_url
         assert api_url is not None
         model = buffer.current_llm_model.name
         api_regex_pattern = ChatConfig.api_regex_pattern_llama_cpp

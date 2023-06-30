@@ -1,16 +1,21 @@
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractproperty
+from pathlib import Path
 from typing import TYPE_CHECKING
-
+from app.utils.chat.text_generations.path import resolve_model_path_to_posix
 
 from app.utils.logger import ApiLogger
 
 if TYPE_CHECKING:
     from tiktoken import Encoding
-
-    # from app.utils.chat.text_generations._llama_cpp import LlamaTokenizerAdapter
+    from transformers.models.llama import LlamaTokenizer as _LlamaTokenizer
+    from repositories.exllama.tokenizer import ExLlamaTokenizer
 
 
 class BaseTokenizer(ABC):
+    @abstractproperty
+    def tokenizer(self):
+        ...
+
     @abstractmethod
     def encode(self, message: str) -> list[int]:
         ...
@@ -75,8 +80,11 @@ class OpenAITokenizer(BaseTokenizer):
 
 class LlamaTokenizer(BaseTokenizer):
     def __init__(self, model_name: str):
+        from transformers.models.llama import LlamaTokenizer as _LlamaTokenizer
+
         self.model_name = model_name
-        self._tokenizer: "Encoding" | None = None
+        self._tokenizer = None
+        self._tokenizer_type = _LlamaTokenizer
 
     def encode(self, message: str, /) -> list[int]:
         return self.tokenizer.encode(message)
@@ -88,13 +96,7 @@ class LlamaTokenizer(BaseTokenizer):
         return len(self.encode(message))
 
     @property
-    def vocab_size(self) -> int:
-        return self.tokenizer.n_vocab
-
-    @property
-    def tokenizer(self) -> "Encoding":
-        from transformers.models.llama import LlamaTokenizer as _LlamaTokenizer
-
+    def tokenizer(self) -> "_LlamaTokenizer":
         if self._tokenizer is None:
             split_str = self.model_name.split("/")
 
@@ -108,7 +110,7 @@ class LlamaTokenizer(BaseTokenizer):
                 print(split_str)
                 raise ValueError("Input string is not in the correct format")
             try:
-                self._tokenizer = _LlamaTokenizer.from_pretrained(
+                self._tokenizer = self._tokenizer_type.from_pretrained(
                     root_path, subfolder=subfolder
                 )
             except Exception as e:
@@ -120,32 +122,42 @@ class LlamaTokenizer(BaseTokenizer):
         return self._tokenizer
 
 
-# class LlamaTokenizerSlow(BaseTokenizer):
-#     def __init__(self, llama_cpp_model_name: str):
-#         self.llama_cpp_model_name = llama_cpp_model_name
+class ExllamaTokenizer(BaseTokenizer):
+    def __init__(self, model_name: str):
+        from repositories.exllama.tokenizer import ExLlamaTokenizer as _ExllamaTokenizer
 
-#     def encode(self, message: str, /) -> list[int]:
-#         from app.models.llms import LLMModels
-#         from app.models.llms import LlamaCppModel
-#         from app.shared import Shared
+        self.model_name = model_name
+        self._tokenizer = None
+        self._tokenizer_type = _ExllamaTokenizer
 
-#         llama_cpp_model = LLMModels.find_model_by_name(self.llama_cpp_model_name)
-#         assert isinstance(llama_cpp_model, LlamaCppModel), type(llama_cpp_model)
-#         return (
-#             Shared()
-#             .process_pool_executor.submit(
-#                 self.tokenizer.encode,
-#                 text=message,
-#                 llama_cpp_model=llama_cpp_model,
-#             )
-#             .result()
-#         )
+    def encode(self, message: str, /) -> list[int]:
+        return self.tokenizer.encode(message).flatten().tolist()
 
-#     def tokens_of(self, message: str) -> int:
-#         return len(self.encode(message))
+    def decode(self, tokens: list[int], /) -> str:
+        from torch import IntTensor
 
-#     @property
-#     def tokenizer(self) -> Type["LlamaTokenizerAdapter"]:
-#         from app.utils.chat.text_generations._llama_cpp import LlamaTokenizerAdapter
+        return str(self.tokenizer.decode(IntTensor(tokens)))
 
-#         return LlamaTokenizerAdapter
+    def tokens_of(self, message: str) -> int:
+        return len(self.encode(message))
+
+    @property
+    def tokenizer(self) -> "ExLlamaTokenizer":
+        if self._tokenizer is None:
+            model_folder_path = Path(
+                resolve_model_path_to_posix(
+                    self.model_name,
+                    default_relative_directory="llama_models/gptq",
+                ),
+            )
+            try:
+                self._tokenizer = self._tokenizer_type(
+                    (model_folder_path / "tokenizer.model").as_posix(),
+                )
+            except Exception as e:
+                ApiLogger.cerror(
+                    f"Error loading tokenizer: {self.model_name}", exc_info=True
+                )
+                raise e
+            print("Tokenizer loaded:", self.model_name)
+        return self._tokenizer
