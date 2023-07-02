@@ -67,10 +67,29 @@ class BaseCompletionGenerator(ABC):
         """Generate a completion for a given prompt, yielding chunks of text as they are generated."""
         ...
 
+    @staticmethod
+    def get_stop_strings(*roles: str) -> list[str]:
+        """A helper method to generate stop strings for a given set of roles."""
+        prompt_stop = set()
+        for role in roles:
+            avoids = (
+                f"{role}:",
+                f"### {role}:",
+                f"###{role}:",
+            )
+            prompt_stop.update(
+                avoids,
+                map(str.capitalize, avoids),
+                map(str.upper, avoids),
+                map(str.lower, avoids),
+            )
+        return list(prompt_stop)
+
     @classmethod
     def convert_messages_into_prompt(
         cls, messages: list[APIChatMessage], settings: TextGenerationSettings
     ) -> str:
+        """A helper method to convert list of messages into one text prompt."""
         ai_input_role: str = cls.ai_fallback_input_role
         chat_history: str = ""
         for message in messages:
@@ -82,30 +101,15 @@ class BaseCompletionGenerator(ABC):
                 input_role = ai_input_role = message.role
             chat_history += f"### {input_role}:{message.content}"
 
-        prompt_stop: set[str] = set()
-        for role in (cls.user_input_role, cls.system_input_role, ai_input_role):
-            prompt_stop.update(
-                (
-                    f"{role}:",
-                    f"{role}:".lower(),
-                    f"{role}:".upper(),
-                    f"{role}:".capitalize(),
-                    f"### {role}:",
-                    f"### {role}:".lower(),
-                    f"### {role}:".upper(),
-                    f"### {role}:".capitalize(),
-                    f"###{role}:",
-                    f"###{role}:".lower(),
-                    f"###{role}:".upper(),
-                    f"###{role}:".capitalize(),
-                )
-            )
+        prompt_stop: list[str] = cls.get_stop_strings(
+            cls.user_input_role, cls.system_input_role, ai_input_role
+        )
         if isinstance(settings.stop, str):
-            settings.stop = list(prompt_stop) + [settings.stop]
+            settings.stop = prompt_stop + [settings.stop]
         elif isinstance(settings.stop, list):
-            settings.stop = list(prompt_stop) + settings.stop
+            settings.stop = prompt_stop + settings.stop
         else:
-            settings.stop = list(prompt_stop)
+            settings.stop = prompt_stop
         return chat_history + f"### {ai_input_role}:"
 
     @staticmethod

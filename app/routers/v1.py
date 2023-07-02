@@ -4,7 +4,6 @@ Use same format as OpenAI API"""
 import json
 from collections import deque
 from functools import partial
-from gc import collect
 from os import getpid, kill
 from signal import SIGINT
 from typing import TYPE_CHECKING, AsyncGenerator, Callable, Iterator, Optional, Union
@@ -104,6 +103,8 @@ class RouteErrorHandler(APIRoute):
                 return JSONResponse(
                     {"error": "Internal Server Error in V1"}, status_code=500
                 )
+            finally:
+                ...
 
         return custom_route_handler
 
@@ -147,7 +148,7 @@ def get_completion_generator(
         if completion_generators.maxlen == len(completion_generators):
             free_memory_from_deque(
                 deque_object=completion_generators,
-                min_free_memory_mb=1024,
+                min_free_memory_mb=512,
                 logger=logger,
             )
 
@@ -189,7 +190,7 @@ def get_transformer_embedding(
         if transformer_embeddings.maxlen == len(transformer_embeddings):
             free_memory_from_deque(
                 deque_object=transformer_embeddings,
-                min_free_memory_mb=1024,
+                min_free_memory_mb=512,
                 logger=logger,
             )
 

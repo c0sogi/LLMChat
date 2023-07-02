@@ -203,7 +203,7 @@ class LlamaCppCompletionGenerator(BaseCompletionGenerator):
         del self.generator
         self.client = None
         self.generator = None
-        print("🗑️ LlamaCppCompletionGenerator deleted")
+        print("🗑️ LlamaCppCompletionGenerator deleted!")
 
     @property
     def llm_model(self) -> "LlamaCppModel":
@@ -211,7 +211,9 @@ class LlamaCppCompletionGenerator(BaseCompletionGenerator):
         return self._llm_model
 
     @classmethod
-    def from_pretrained(cls, llm_model: "LlamaCppModel") -> "LlamaCppCompletionGenerator":
+    def from_pretrained(
+        cls, llm_model: "LlamaCppModel"
+    ) -> "LlamaCppCompletionGenerator":
         client = llama_cpp.Llama(
             model_path=resolve_model_path_to_posix(
                 llm_model.model_path,

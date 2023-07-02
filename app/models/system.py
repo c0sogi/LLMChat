@@ -1,5 +1,4 @@
 from gc import collect
-from time import sleep
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
@@ -50,7 +49,7 @@ def get_total_memory_usage() -> Optional[float]:
 
 def free_memory_from_deque(
     deque_object: "deque",
-    min_free_memory_mb: float = 1024,
+    min_free_memory_mb: float = 512,
     logger: Optional["Logger"] = None,
 ) -> None:
     # Before creating a new completion generator, check memory usage
@@ -62,10 +61,8 @@ def free_memory_from_deque(
 
     # Remove the first object from the deque
     # And check memory usage again to see if there is a memory leak
-    del deque_object[0]
-    sleep(5)
+    (deque_object.popleft()).__del__()
     collect()
-    sleep(5)
 
     if mem_usage_before is not None:
         mem_usage_after = get_total_memory_usage()
