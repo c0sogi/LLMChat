@@ -1,5 +1,3 @@
-from typing import Self
-
 from app.common.mixins import EnumMixin
 
 

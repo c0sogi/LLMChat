@@ -264,6 +264,10 @@ class ParserDefinitions(BaseModel):
 
 
 class TextGenerationSettings(BaseModel):
+    completion_id: str = Field(
+        default_factory=lambda: f"cmpl-{str(uuid4())}",
+        description="The unique ID of the text generation",
+    )
     max_tokens: int = Field(
         default=128, ge=1, description="The maximum number of tokens to generate."
     )

@@ -1,4 +1,4 @@
-from gc import collect
+"""Wrapper for llama_cpp to generate text completions."""
 import sys
 from pathlib import Path
 from app.models.base_models import APIChatMessage, TextGenerationSettings
@@ -8,10 +8,10 @@ from app.models.completion_models import (
     Completion,
     CompletionChunk,
 )
-from app.models.llms import LlamaCppModel
+
 
 from pathlib import Path
-from typing import Iterator, Optional, Self
+from typing import TYPE_CHECKING, Iterator, Literal, Optional
 from app.utils.chat.text_generations.path import resolve_model_path_to_posix
 
 from app.utils.logger import ApiLogger
@@ -20,8 +20,7 @@ from .. import BaseCompletionGenerator
 
 sys.path.insert(0, str(Path("repositories/llama_cpp")))
 try:
-    from repositories.llama_cpp.llama_cpp.server import app as llama_cpp_server
-    from repositories.llama_cpp.llama_cpp.server.app import llama_cpp
+    from repositories.llama_cpp import llama_cpp
 
     print("🦙 llama-cpp-python repository found!")
 except Exception as e:
@@ -33,11 +32,46 @@ except Exception as e:
         f"In {__file__} with name {__name__}\n",
         "yellow",
     )
-    from llama_cpp.server import app as llama_cpp_server
-    from llama_cpp.server.app import llama_cpp
+    import llama_cpp
 
+if TYPE_CHECKING:
+    from app.models.llms import LlamaCppModel
 
 logger = ApiLogger("||🦙 llama_cpp.generator||")
+
+
+def _make_logit_bias_processor(
+    llama: llama_cpp.Llama,
+    logit_bias: dict[str, float],
+    logit_bias_type: Optional[Literal["input_ids", "tokens"]],
+):
+    """Create a logit bias processor that can be used to bias the logit scores of the model."""
+    if logit_bias_type is None:
+        logit_bias_type = "input_ids"
+
+    to_bias: dict[int, float] = {}
+    if logit_bias_type == "input_ids":
+        for input_id, score in logit_bias.items():
+            input_id = int(input_id)
+            to_bias[input_id] = score
+
+    elif logit_bias_type == "tokens":
+        for token, score in logit_bias.items():
+            token = token.encode("utf-8")
+            for input_id in llama.tokenize(token, add_bos=False):
+                to_bias[input_id] = score
+
+    def logit_bias_processor(
+        input_ids: list[int],
+        scores: list[float],
+    ) -> list[float]:
+        new_scores: list[float] = [0.0] * len(scores)
+        for input_id, score in enumerate(scores):
+            new_scores[input_id] = score + to_bias.get(input_id, 0.0)
+
+        return new_scores
+
+    return logit_bias_processor
 
 
 def _create_completion(
@@ -51,7 +85,6 @@ def _create_completion(
         top_p=settings.top_p,
         logprobs=settings.logprobs,
         echo=settings.echo,
-        stop=settings.stop,
         frequency_penalty=settings.frequency_penalty,
         presence_penalty=settings.presence_penalty,
         repeat_penalty=settings.repeat_penalty,
@@ -60,9 +93,9 @@ def _create_completion(
         mirostat_mode=settings.mirostat_mode,
         mirostat_tau=settings.mirostat_tau,
         mirostat_eta=settings.mirostat_eta,
-        logits_processor=llama_cpp.LogitsProcessorList(
+        logits_processor=llama_cpp.LogitsProcessorList(  # type: ignore
             [
-                llama_cpp_server.make_logit_bias_processor(
+                _make_logit_bias_processor(
                     client,
                     settings.logit_bias,
                     settings.logit_bias_type,
@@ -71,6 +104,7 @@ def _create_completion(
         )
         if settings.logit_bias is not None
         else None,
+        stop=settings.stop,
     )
 
 
@@ -80,26 +114,26 @@ def _create_chat_completion(
     stream: bool,
     settings: TextGenerationSettings,
 ) -> ChatCompletion | Iterator[llama_cpp.ChatCompletionChunk]:
-    return client.create_chat_completion(
-        stream=stream,
-        messages=[
-            llama_cpp.ChatCompletionMessage(**message.dict()) for message in messages
-        ],
-        max_tokens=settings.max_tokens,
+    prompt: str = LlamaCppCompletionGenerator.convert_messages_into_prompt(
+        messages, settings=settings
+    )
+    completion_or_chunks = client(
+        prompt=prompt,
         temperature=settings.temperature,
         top_p=settings.top_p,
-        stop=settings.stop,
-        frequency_penalty=settings.frequency_penalty,
-        presence_penalty=settings.presence_penalty,
-        repeat_penalty=settings.repeat_penalty,
         top_k=settings.top_k,
+        stream=stream,
+        max_tokens=settings.max_tokens,
+        repeat_penalty=settings.repeat_penalty,
+        presence_penalty=settings.presence_penalty,
+        frequency_penalty=settings.frequency_penalty,
         tfs_z=settings.tfs_z,
         mirostat_mode=settings.mirostat_mode,
         mirostat_tau=settings.mirostat_tau,
         mirostat_eta=settings.mirostat_eta,
-        logits_processor=llama_cpp.LogitsProcessorList(
+        logits_processor=llama_cpp.LogitsProcessorList(  # type: ignore
             [
-                llama_cpp_server.make_logit_bias_processor(
+                _make_logit_bias_processor(
                     client,
                     settings.logit_bias,
                     settings.logit_bias_type,
@@ -108,29 +142,76 @@ def _create_chat_completion(
         )
         if settings.logit_bias is not None
         else None,
+        stop=settings.stop,
     )
+    if stream:
+        chunks: Iterator[CompletionChunk] = completion_or_chunks  # type: ignore
+        return client._convert_text_completion_chunks_to_chat(chunks)  # type: ignore
+    else:
+        completion: Completion = completion_or_chunks  # type: ignore
+        return client._convert_text_completion_to_chat(completion)  # type: ignore
+
+
+# def _create_chat_completion(
+#     client: llama_cpp.Llama,
+#     messages: list[APIChatMessage],
+#     stream: bool,
+#     settings: TextGenerationSettings,
+# ) -> ChatCompletion | Iterator[llama_cpp.ChatCompletionChunk]:
+#     return client.create_chat_completion(
+#         stream=stream,
+#         messages=[
+#             llama_cpp.ChatCompletionMessage(**message.dict()) for message in messages
+#         ],
+#         max_tokens=settings.max_tokens,
+#         temperature=settings.temperature,
+#         top_p=settings.top_p,
+#         stop=settings.stop,
+#         frequency_penalty=settings.frequency_penalty,
+#         presence_penalty=settings.presence_penalty,
+#         repeat_penalty=settings.repeat_penalty,
+#         top_k=settings.top_k,
+#         tfs_z=settings.tfs_z,
+#         mirostat_mode=settings.mirostat_mode,
+#         mirostat_tau=settings.mirostat_tau,
+#         mirostat_eta=settings.mirostat_eta,
+#         logits_processor=llama_cpp.LogitsProcessorList(
+#             [
+#                 llama_cpp_server.make_logit_bias_processor(
+#                     client,
+#                     settings.logit_bias,
+#                     settings.logit_bias_type,
+#                 ),
+#             ]
+#         )
+#         if settings.logit_bias is not None
+#         else None,
+#     )
 
 
 class LlamaCppCompletionGenerator(BaseCompletionGenerator):
     generator: Optional[Iterator[CompletionChunk | ChatCompletionChunk]] = None
     client: Optional[llama_cpp.Llama] = None
-    _llm_model: Optional[LlamaCppModel] = None
+    _llm_model: Optional["LlamaCppModel"] = None
 
     def __del__(self) -> None:
         if self.client is not None and self.client.ctx is not None:
             llama_cpp.llama_free(self.client.ctx)
+            self.client.ctx = None
             self.client.set_cache(None)
         del self.client
         del self.generator
-        collect()
+        self.client = None
+        self.generator = None
+        print("🗑️ LlamaCppCompletionGenerator deleted")
 
     @property
-    def llm_model(self) -> LlamaCppModel:
+    def llm_model(self) -> "LlamaCppModel":
         assert self._llm_model is not None
         return self._llm_model
 
     @classmethod
-    def from_pretrained(cls, llm_model: LlamaCppModel) -> Self:
+    def from_pretrained(cls, llm_model: "LlamaCppModel") -> "LlamaCppCompletionGenerator":
         client = llama_cpp.Llama(
             model_path=resolve_model_path_to_posix(
                 llm_model.model_path,
@@ -155,7 +236,9 @@ class LlamaCppCompletionGenerator(BaseCompletionGenerator):
             verbose=llm_model.echo,
         )
         if llm_model.cache:
-            cache_type = "ram" if llm_model.cache_type is None else "disk"
+            cache_type = llm_model.cache_type
+            if cache_type is None:
+                cache_type = "ram"
             cache_size = (
                 2 << 30 if llm_model.cache_size is None else llm_model.cache_size
             )

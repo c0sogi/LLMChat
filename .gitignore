@@ -2,6 +2,7 @@
 acme.json
 PRIVATE_*
 venv/
+.cache/
 *.pyc
 *.log
 llama_models/ggml/*

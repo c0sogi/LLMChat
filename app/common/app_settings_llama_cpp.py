@@ -80,6 +80,7 @@ def monitor_llama_cpp_server(
                 return
             except Exception:
                 ApiLogger.cexception("Unknown error: Llama CPP server is not available")
+                config.is_llama_booting = False
                 continue
         else:
             config.is_llama_booting = False

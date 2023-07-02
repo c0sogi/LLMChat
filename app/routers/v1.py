@@ -1,12 +1,19 @@
+"""V1 Endpoints for Local Llama API
+Use same format as OpenAI API"""
+
 import json
 from collections import deque
 from functools import partial
-from typing import Iterator, Union
+from gc import collect
+from os import getpid, kill
+from signal import SIGINT
+from typing import TYPE_CHECKING, AsyncGenerator, Callable, Iterator, Optional, Union
 
 import anyio
 from anyio.streams.memory import MemoryObjectSendStream
-from fastapi import APIRouter, Depends, Request
-from fastapi.exceptions import HTTPException
+from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from pydantic import create_model_from_typeddict
 from sse_starlette.sse import EventSourceResponse
 from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
@@ -25,94 +32,181 @@ from app.models.completion_models import (
     ModelList,
 )
 from app.models.llms import ExllamaModel, LlamaCppModel, LLMModel, LLMModels
-from app.utils.chat.text_generations import BaseCompletionGenerator
+from app.models.system import free_memory_from_deque
 from app.utils.logger import ApiLogger
 
 logger = ApiLogger("||v1||")
+
+# Importing llama.cpp
 try:
     from app.utils.chat.text_generations.llama_cpp.generator import (
         LlamaCppCompletionGenerator,
     )
 
-    logger.cinfo("🦙 Successfully imported llama.cpp module!")
+    logger.info("🦙 Successfully imported llama.cpp module!")
 except ImportError as e:
-    logger.cwarning(str(e))
-    LlamaCppCompletionGenerator = str(e)
+    logger.warning(str(e))
+    LlamaCppCompletionGenerator = str(e)  # Import error message
 
+# Importing exllama
 try:
     from app.utils.chat.text_generations.exllama.generator import (
         ExllamaCompletionGenerator,
     )
 
-    logger.cinfo("🦙 Successfully imported exllama module!")
+    logger.info("🦙 Successfully imported exllama module!")
 except ImportError as e:
-    logger.cwarning(str(e))
-    ExllamaCompletionGenerator = str(e)
+    logger.warning(str(e))
+    ExllamaCompletionGenerator = str(e)  # Import error message
+
+
+# Importing embeddings (Pytorch + Transformer)
 try:
-    from app.utils.chat.embeddings import get_embeddings_and_num_of_tokens
+    from app.utils.chat.embeddings import TransformerEmbedding
 
-    logger.cinfo("🦙 Successfully imported embeddings(Pytorch + Transformer) module!")
+    logger.info("🦙 Successfully imported embeddings(Pytorch + Transformer) module!")
 except ImportError as e:
-    logger.cwarning(str(e))
-    get_embeddings_and_num_of_tokens = str(e)
+    logger.warning(str(e))
+    TransformerEmbedding = str(e)  # Import error message
+
+if TYPE_CHECKING:
+    from app.utils.chat.embeddings import BaseEmbedding
+    from app.utils.chat.text_generations import BaseCompletionGenerator
+
+OPENAI_REPLACEMENT_MODELS: dict[str, str] = {
+    "gpt-3.5-turbo": "chronos_hermes_13b",
+    "gpt-3.5-turbo-16k": "longchat_7b",
+    "gpt-4": "pygmalion_13b",
+}
 
 
-router = APIRouter()
+class RouteErrorHandler(APIRoute):
+    """Custom APIRoute that handles application errors and exceptions"""
 
-embedding_models: dict = {}
-embedding_tokenizers: dict = {}
+    def get_route_handler(self) -> Callable:
+        original_route_handler = super().get_route_handler()
 
-completion_generators: deque[BaseCompletionGenerator] = deque(maxlen=1)
+        async def custom_route_handler(request: Request) -> Response:
+            try:
+                return await original_route_handler(request)
+            except (OSError, MemoryError) as e:
+                logger.exception(f"Exception in llama-cpp: {e}")
+                if isinstance(e, MemoryError):
+                    error_msg = str(e)
+                else:
+                    error_msg = "Memory corruption occurred. Terminating..."
+                kill(getpid(), SIGINT)
+                return JSONResponse({"error": error_msg}, 500)
+            except AssertionError as e:
+                return JSONResponse({"error": str(e)}, status_code=400)
+            except Exception as e:
+                logger.exception(f"Exception in llama-cpp: {e}")
+                return JSONResponse(
+                    {"error": "Internal Server Error in V1"}, status_code=500
+                )
+
+        return custom_route_handler
+
+
+router = APIRouter(route_class=RouteErrorHandler)
 semaphore = anyio.create_semaphore(1)
+completion_generators: deque["BaseCompletionGenerator"] = deque(maxlen=1)
+transformer_embeddings: deque["BaseEmbedding"] = deque(maxlen=1)
 
 
-async def get_semaphore():
+async def get_semaphore() -> AsyncGenerator[anyio.Semaphore, None]:
+    """Get a semaphore for the endpoint. This is to prevent multiple requests from
+    creating multiple completion generators at the same time."""
     async with semaphore:
         yield semaphore
-
-
-async def get_exception_handler():
-    try:
-        yield
-    except Exception as e:
-        logger.error(f"Exception in llama-cpp: {e}")
-        if isinstance(e, OSError):
-            exit(1)
-        if isinstance(e, AssertionError):
-            raise HTTPException(status_code=400, detail={"error": str(e)})
-        raise HTTPException(status_code=500, detail={"error": "Internal Server Error"})
 
 
 def get_completion_generator(
     body: CreateCompletionRequest
     | CreateChatCompletionRequest
     | CreateEmbeddingRequest,
-) -> BaseCompletionGenerator:
+) -> "BaseCompletionGenerator":
+    """Get a completion generator for the given model. If the model is not cached, create a new one.
+    If the cache is full, delete the oldest completion generator."""
     try:
+        # Check if the model is an OpenAI model
+        if body.model in OPENAI_REPLACEMENT_MODELS:
+            body.model = OPENAI_REPLACEMENT_MODELS[body.model]
+            if not isinstance(body, CreateEmbeddingRequest):
+                body.logit_bias = None
+
+        # Check if the model is defined in LLMModels enum
         llm_model: LLMModel = LLMModels.get_value(body.model)
+
+        # Check if the model is cached. If so, return the cached completion generator
         for completion_generator in completion_generators:
             if completion_generator.llm_model is llm_model:
                 return completion_generator
+
+        # Before creating a new completion generator, check memory usage
+        if completion_generators.maxlen == len(completion_generators):
+            free_memory_from_deque(
+                deque_object=completion_generators,
+                min_free_memory_mb=1024,
+                logger=logger,
+            )
+
+        # Create a new completion generator
         if isinstance(llm_model, LlamaCppModel):
-            if isinstance(LlamaCppCompletionGenerator, str):
-                raise AssertionError(LlamaCppCompletionGenerator)
-            completion_generators.append(
-                LlamaCppCompletionGenerator.from_pretrained(llm_model)
-            )
-            return completion_generators[-1]
+            assert not isinstance(
+                LlamaCppCompletionGenerator, str
+            ), LlamaCppCompletionGenerator
+            to_return = LlamaCppCompletionGenerator.from_pretrained(llm_model)
         elif isinstance(llm_model, ExllamaModel):
-            if isinstance(ExllamaCompletionGenerator, str):
-                raise AssertionError(ExllamaCompletionGenerator)
-            completion_generators.append(
-                ExllamaCompletionGenerator.from_pretrained(llm_model)
-            )
-            return completion_generators[-1]
+            assert not isinstance(
+                ExllamaCompletionGenerator, str
+            ), ExllamaCompletionGenerator
+            to_return = ExllamaCompletionGenerator.from_pretrained(llm_model)
         else:
             raise AssertionError(f"Model {body.model} not implemented")
-    except AssertionError as e:
+
+        # Add the new completion generator to the deque cache
+        completion_generators.append(to_return)
+        return to_return
+    except (AssertionError, OSError, MemoryError) as e:
         raise e
-    except Exception:
+    except Exception as e:
+        logger.exception(f"Exception in get_completion_generator: {e}")
         raise AssertionError(f"Could not find a model: {body.model}")
+
+
+def get_transformer_embedding(
+    pretrained_name: str,
+) -> "BaseEmbedding":
+    """Get an embedding for the given model. If the model is not cached, create a new one.
+    If the cache is full, delete the oldest completion generator."""
+    try:
+        for embedding in transformer_embeddings:
+            if embedding.model_name == pretrained_name:
+                return embedding
+
+        # Before creating a new completion generator, check memory usage
+        if transformer_embeddings.maxlen == len(transformer_embeddings):
+            free_memory_from_deque(
+                deque_object=transformer_embeddings,
+                min_free_memory_mb=1024,
+                logger=logger,
+            )
+
+        # Create a new transformer embedding
+        assert not isinstance(TransformerEmbedding, str), TransformerEmbedding
+        to_return = TransformerEmbedding.from_pretrained(
+            pretrained_name=pretrained_name
+        )
+
+        # Add the new completion generator to the deque cache
+        transformer_embeddings.append(to_return)
+        return to_return
+    except (AssertionError, OSError, MemoryError) as e:
+        raise e
+    except Exception as e:
+        logger.exception(f"Exception in get_transformer_embedding: {e}")
+        raise AssertionError(f"Could not find a model: {pretrained_name}")
 
 
 @router.post(
@@ -122,10 +216,11 @@ def get_completion_generator(
 async def create_chat_completion(
     request: Request,
     body: CreateChatCompletionRequest,
-    semaphore: None = Depends(get_semaphore),
-    exception_handler: None = Depends(get_exception_handler),
+    semaphore: anyio.Semaphore = Depends(get_semaphore),
 ) -> Union[ChatCompletion, EventSourceResponse]:
+    logger.info(f"🦙 Chat Completion Settings: {body}\n\n")
     completion_generator = get_completion_generator(body)
+    logger.info("\n[🦙 I'm talking now]")
     if body.stream:
         send_chan, recv_chan = anyio.create_memory_object_stream(10)
 
@@ -137,7 +232,6 @@ async def create_chat_completion(
                         messages=body.messages,
                         settings=body,
                     )
-                    logger.info("\n[🦙 I'm talking now]")
                     async for chat_chunk in iterate_in_threadpool(iterator):
                         print(
                             chat_chunk["choices"][0]["delta"].get("content", ""),
@@ -168,6 +262,8 @@ async def create_chat_completion(
             messages=body.messages,
             settings=body,
         )
+        print(chat_completion["choices"][0]["message"]["content"])
+        logger.info("\n[🦙 I'm done talking!]")
         return chat_completion
 
 
@@ -178,11 +274,11 @@ async def create_chat_completion(
 async def create_completion(
     request: Request,
     body: CreateCompletionRequest,
-    semaphore: None = Depends(get_semaphore),
-    exception_handler: None = Depends(get_exception_handler),
+    semaphore: anyio.Semaphore = Depends(get_semaphore),
 ) -> Union[Completion, EventSourceResponse]:
-    logger.info(f"🦙 {body.prompt}")
+    logger.info(f"🦙 Text Completion Settings: {body}\n\n")
     completion_generator = get_completion_generator(body)
+    logger.info("\n[🦙 I'm talking now]")
     if body.stream:
         send_chan, recv_chan = anyio.create_memory_object_stream(10)
 
@@ -194,7 +290,6 @@ async def create_completion(
                         prompt=body.prompt,
                         settings=body,
                     )
-                    logger.info("\n[🦙 I'm talking now]")
                     async for chunk in iterate_in_threadpool(iterator):
                         print(
                             chunk["choices"][0]["text"],
@@ -225,6 +320,8 @@ async def create_completion(
             prompt=body.prompt,
             settings=body,
         )
+        print(completion["choices"][0]["text"])
+        logger.info("\n[🦙 I'm done talking!]")
         return completion
 
 
@@ -234,8 +331,7 @@ async def create_completion(
 )
 async def create_embedding(
     body: CreateEmbeddingRequest,
-    semaphore: None = Depends(get_semaphore),
-    exception_handler: None = Depends(get_exception_handler),
+    semaphore: anyio.Semaphore = Depends(get_semaphore),
 ) -> Embedding:
     assert body.model is not None, "Model is required"
     if body.model in (
@@ -246,12 +342,12 @@ async def create_embedding(
         "intfloat/e5-large",
     ):
         # Embedding model from Transformer
-        assert not isinstance(
-            get_embeddings_and_num_of_tokens, str
-        ), get_embeddings_and_num_of_tokens
+        transformer_embedding = get_transformer_embedding(body.model)
 
-        embeddings, total_tokens = get_embeddings_and_num_of_tokens(
-            pretrained_name=body.model,
+        (
+            embeddings,
+            total_tokens,
+        ) = transformer_embedding.generate_embeddings_and_n_tokens(
             input_texts=body.input if isinstance(body.input, list) else [body.input],
             context_length=512,
         )
@@ -274,27 +370,17 @@ async def create_embedding(
         }
     else:
         # Embedding model from Llama.cpp
-        try:
-            from app.utils.chat.text_generations.llama_cpp.generator import (
-                LlamaCppCompletionGenerator,
-            )
-        except ImportError as e:
-            raise AssertionError(
-                f"Cannot import required libraries for embeddings: {e}"
-            )
-
-        llama_cpp_model = LLMModels.get_value(body.model)
-        assert isinstance(
-            llama_cpp_model, LlamaCppModel
-        ), "Non-llama-cpp model is not supported"
-        assert (
-            llama_cpp_model.embedding
-        ), "Model does not support embeddings. Set `embedding` to True in the LlamaCppModel"
-
+        assert not isinstance(
+            LlamaCppCompletionGenerator, str
+        ), LlamaCppCompletionGenerator
         completion_generator = get_completion_generator(body)
         assert isinstance(
             completion_generator, LlamaCppCompletionGenerator
         ), "Non-llama-cpp model is not supported"
+        assert (
+            completion_generator.llm_model.embedding
+        ), "Model does not support embeddings. Set `embedding` to True in the LlamaCppModel"
+
         assert completion_generator.client, "Model is not loaded yet"
         return await run_in_threadpool(
             completion_generator.client.create_embedding, **body.dict(exclude={"user"})
