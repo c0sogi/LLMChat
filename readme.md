@@ -39,10 +39,20 @@
     You can change your chat title by clicking the title of the chat. This will be stored until you change or delete it!
     > ![Change your chat title](app/contents/edit_title_demo.png)
 ---
-+ ### LLaMa.cpp
-    > ![llama api](app/contents/llama_api.png)
-    
-    For the llama CPP model, it is assumed to work only in the local environment and uses the `http://localhost:8002/v1/completions` endpoint.  It continuously checks the status of the llama API server by connecting to `http://localhost:8002/health` once a second to see if a 200 OK response is returned, and if not, it automatically runs the `app.start_llama_cpp_server` module as a separate process to create a the API server.
+### 🦙 Local LLMs
+
+> ![llama api](app/contents/llama_api.png)
+
+For the local Llalam LLMs, it is assumed to work only in the local environment and uses the `http://localhost:8002/v1/completions` endpoint.  It continuously checks the status of the llama API server by connecting to `http://localhost:8002/health` once a second to see if a 200 OK response is returned, and if not, it automatically runs a separate process to create a the API server.
+
+#### **Llama.cpp**
+
+The main goal of llama.cpp is to run the LLaMA model using `GGML` 4-bit quantization with plain C/C++ implementation without dependencies. You have to download GGML `bin` file from huggingface and put it in the `llama_models/ggml` folder, and define LLMModel in `app/models/llms.py`. There are few examples, so you can easily define your own model.
+Refer to the `llama.cpp` repository for more information: https://github.com/ggerganov/llama.cpp
+
+#### **Exllama**
+
+A standalone Python/C++/CUDA implementation of Llama for use with 4-bit `GPTQ` weights, designed to be fast and memory-efficient on modern GPUs. It uses `pytorch` and `sentencepiece` to run the model. It is assumed to work only in the local environment and at least one `NVIDIA CUDA GPU` is required. You have to download tokenizer, config, and GPTQ files from huggingface and put it in the `llama_models/gptq/YOUR_MODEL_FOLDER` folder, and define LLMModel in `app/models/llms.py`. There are few examples, so you can easily define your own model. Refer to the `exllama` repository for more detailed information: https://github.com/turboderp/exllama
 
 ---
 
@@ -50,7 +60,7 @@
 - **FastAPI** - High-performance `web framework` for building APIs with Python.
 - **Flutter** - `Webapp` frontend with beautiful UI and rich set of customizable widgets.
 - **ChatGPT** - Seamless integration with the `OpenAI API` for text generation and message management.
-- **LLAMA** - Suporting LocalLLM, `LlamaCpp`, with multiprocessing. 
+- **LLAMA** - Suporting LocalLLM, `LlamaCpp` and `Exllama` models.
 - **WebSocket Connection** - `Real-time`, two-way communication with the ChatGPT, and other LLM models, with Flutter frontend webapp.
 - **Vectorstore** - Using `Redis` and `Langchain`, store and retrieve vector embeddings for similarity search. It will help AI to generate more relevant responses.
 - **Auto summarization** - Using Langchain's summarize chain, summarize the conversation and store it in the database. It will help saving a lot of tokens.
@@ -68,7 +78,7 @@ To set up the on your local machine, follow these simple steps:
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/c0sogi/LLMChat.git
+git clone https://github.com/c0sogi/llmchat.git
 ```
 
 2. Change to the project directory:
@@ -77,12 +87,13 @@ git clone https://github.com/c0sogi/LLMChat.git
 cd LLMChat
 ```
 
-3. Create `.env` file and setup for fastapi server, referring to `.env-sample` file. Enter Database connection to create, OpenAI API Key, and other necessary configurations. Optionals are not required, just leave them blank.
+3. Create `.env` file and setup for fastapi server, referring to `.env-sample` file. Enter Database connection to create, OpenAI API Key, and other necessary configurations. Optionals are not required, just leave them as they are.
+
 
 4. To run the server, execute. It may take a few minutes to start the server for the first time:
 
 ```bash
-docker-compose -f docker-compose-local.yaml up -d
+docker-compose -f docker-compose-local.yaml up
 ```
 
 5. To stop the server, execute:
@@ -264,28 +275,37 @@ In the `commands.py` file, there are several important components:
 
 # 📚 LLM Models
 
-This repository contains different GPT LLM models, defined in `llms.py`. There are two main models: `LlamaCppModel` and `OpenAIModel`, inheriting from the base class `LLMModel`. Both models are designed for text generation. The `LLMModels` enum is a collection of these LLMs.
+This repository contains different LLM models, defined in `llms.py`. Each LLM Model class inherit from the base class `LLMModel`. The `LLMModels` enum is a collection of these LLMs.
 
-There also exists module `text_generation.py` that provides the functionality needed to integrate the OpenAI API with the chat. It handles the process of organizing message history, generating text from the OpenAI API, and managing the asynchronous streaming of generated text.
-
-
-All operations are handled asynchronously🚀 and can be used by multiple users at the same time. In particular, the `LlamaCppModel` allows for parallel processing using multiprocessing and queues.
+All operations are handled asynchronously without interupting the main thread. However, Local LLMs are not be able to handle multiple requests at the same time, as they are too computationally expensive. Therefore, a `Semaphore` is used to limit the number of requests to 1. 
 
 
 ## 📌 Usage
 
-The default LLM model used by the user via `UserChatContext.construct_default` is `gpt-3.5-turbo`. You can change the default for that function. To change the LLM model via command, type `/changemodel <model>` in the chat. The `<model>` defined here should correspond to the member defined in `LLMModels`.
+The default LLM model used by the user via `UserChatContext.construct_default` is `gpt-3.5-turbo`. You can change the default for that function.
 
 ## 📖 Model Descriptions
 
 ### 1️⃣ OpenAIModel
 
-`OpenAIModel` generates text asynchronously by requesting Chat completion from the OpenAI server. It requires an OpenAI API key. As it uses an asynchronous client, the main thread remains unblocked.
+`OpenAIModel` generates text asynchronously by requesting chat completion from the OpenAI server. It requires an OpenAI API key.
 
 ### 2️⃣ LlamaCppModel
 
-`LlamaCppModel` reads a locally stored LlamaCpp-compatible model and generates text in a new process. For example, it looks like `./llama_models/ggml/wizard-vicuna-13B.ggml.q5_1.bin`. You can download the required model from Huggingface. When generating text with this model, a processpool is created, and the Llama model is immediately cached in RAM. This allocation remains in memory until the processpool is forcibly terminated, such as by shutting down the server. By creating a new processpool and working in a different process, existing server processes are not blocked, and other users can generate text with the model simultaneously! More details are defined in `llama_cpp.py`.
+`LlamaCppModel` reads a locally stored GGML model. The LLama.cpp GGML model must be put in the `llama_models/ggml` folder as a `.bin` file. For example, if you downloaded a q4_0 quantized model from "https://huggingface.co/TheBloke/robin-7B-v2-GGML",
+The path of the model has to be "robin-7b.ggmlv3.q4_0.bin".
 
+### 3️⃣ ExllamaModel
+
+`ExllamaModel` read a locally stored GPTQ model. The Exllama GPTQ model must be put in the `llama_models/gptq` folder as a folder. For example, if you downloaded 3 files from "https://huggingface.co/TheBloke/orca_mini_7B-GPTQ/tree/main":
+
+- orca-mini-7b-GPTQ-4bit-128g.no-act.order.safetensors
+- tokenizer.model
+- config.json
+
+Then you need to put them in a folder.
+The path of the model has to be the folder name. Let's say, "orca_mini_7b", which contains the 3 files.
+ 
 ## 📝 Handling Exceptions
 Handle exceptions that may occur during text generation. If a `ChatLengthException` is thrown, it automatically performs a routine to re-limit the message to within the number of tokens limited by the `cutoff_message_histories` function, and resend it. This ensures that the user has a smooth chat experience regardless of the token limit.
 
