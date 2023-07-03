@@ -125,6 +125,7 @@ class MessageHandler:
         model: Optional[LLMModel] = None,
     ) -> None:
         """Handle ai message, including text generation and translation"""
+        chat_text_generator_error: Optional[ChatTextGenerationException] = None
         backup_context: UserChatContext = deepcopy(buffer.current_user_chat_context)
         if model is None:
             model = buffer.current_llm_model.value
@@ -184,21 +185,22 @@ class MessageHandler:
                             ].uuid,
                         )
                     )
-                )  # =
-
-        except ChatException as chat_exception:
-            buffer.current_user_chat_context.copy_from(backup_context)
-            raise ChatTextGenerationException(msg=chat_exception.msg)
+                )
 
         except InterruptedError as interrupted_error:
             buffer.current_user_chat_context.copy_from(backup_context)
             buffer.done.clear()
             raise ChatStreamingInterruptedException(msg=str(interrupted_error))
 
+        except ChatException as chat_exception:
+            buffer.current_user_chat_context.copy_from(backup_context)
+            chat_text_generator_error = ChatTextGenerationException(
+                msg=chat_exception.msg
+            )
         except Exception as exception:
             ApiLogger.cerror(f"unexpected chat exception: {exception}", exc_info=True)
             buffer.current_user_chat_context.copy_from(backup_context)
-            raise ChatTextGenerationException()
+            chat_text_generator_error = ChatTextGenerationException(msg="Unknown error")
 
         else:
             if translate:
@@ -210,4 +212,21 @@ class MessageHandler:
                     show_result=True,
                     src_lang="en",
                     trg_lang=translate,
+                )
+
+        finally:
+            if chat_text_generator_error is not None:
+                print(chat_text_generator_error)
+                await asyncio.gather(
+                    SendToWebsocket.message(
+                        websocket=buffer.websocket,
+                        msg=f"\n\nAn error occurred while generating text: **{chat_text_generator_error.msg}**",
+                        chat_room_id=buffer.current_chat_room_id,
+                        finish=True,
+                        model_name=buffer.current_user_chat_context.llm_model.value.name,
+                    ),
+                    MessageManager.pop_message_history_safely(
+                        user_chat_context=buffer.current_user_chat_context,
+                        role=ChatRoles.USER,
+                    ),
                 )

@@ -25,12 +25,9 @@ try:
     print("🦙 llama-cpp-python repository found!")
 except Exception as e:
     ApiLogger.cwarning(
-        "🦙 Could not import llama-cpp-python repository. "
-        "Please pull the repository with: "
-        "git submodule update --recursive\n"
-        f"[[[ Received error: {e} ]]]\n"
-        f"In {__file__} with name {__name__}\n",
-        "yellow",
+        "🦙 Could not import llama-cpp-python repository: "
+        f"{e}\n"
+        f"...trying to import installed llama-cpp package..."
     )
     import llama_cpp
 

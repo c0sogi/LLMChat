@@ -38,7 +38,7 @@ def _get_stop_strings(*roles: str, chat_turn_prompt: PromptTemplate) -> list[str
     eos: Optional[str] = identify_end_of_string(
         "role", "content", chat_turn_prompt=chat_turn_prompt
     )
-    if eos is not None:
+    if eos:
         prompt_stop.add(eos)
     for role in roles:
         avoids = (

@@ -43,8 +43,8 @@ try:
     )
 
     logger.info("🦙 Successfully imported llama.cpp module!")
-except ImportError as e:
-    logger.warning(str(e))
+except Exception as e:
+    logger.warning("Llama.cpp import error: " + str(e))
     LlamaCppCompletionGenerator = str(e)  # Import error message
 
 # Importing exllama
@@ -54,18 +54,17 @@ try:
     )
 
     logger.info("🦙 Successfully imported exllama module!")
-except ImportError as e:
-    logger.warning(str(e))
+except Exception as e:
+    logger.warning("Exllama package import error: " + str(e))
     ExllamaCompletionGenerator = str(e)  # Import error message
-
 
 # Importing embeddings (Pytorch + Transformer)
 try:
     from app.utils.chat.embeddings import TransformerEmbedding
 
     logger.info("🦙 Successfully imported embeddings(Pytorch + Transformer) module!")
-except ImportError as e:
-    logger.warning(str(e))
+except Exception as e:
+    logger.warning("Transformer embedding import error: " + str(e))
     TransformerEmbedding = str(e)  # Import error message
 
 if TYPE_CHECKING:
