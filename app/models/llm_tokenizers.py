@@ -81,8 +81,8 @@ class LlamaTokenizer(BaseTokenizer):
             from transformers.models.llama import LlamaTokenizer as _LlamaTokenizer
 
             self._tokenizer_type = _LlamaTokenizer
-            ApiLogger.cinfo("Tokenizer loaded: ", self.model_name)
-        except Exception:
+        except Exception as e:
+            ApiLogger.cwarning(str(e))
             self._tokenizer_type = None
         self.model_name = model_name
         self._tokenizer = None
@@ -129,7 +129,6 @@ class ExllamaTokenizer(BaseTokenizer):
             )
 
             self._tokenizer_type = _ExllamaTokenizer
-            ApiLogger.cinfo("Tokenizer loaded: ", self.model_name)
         except Exception:
             self._tokenizer_type = None
         self.model_name = model_name

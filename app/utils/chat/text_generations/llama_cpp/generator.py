@@ -18,8 +18,31 @@ from app.utils.logger import ApiLogger
 
 from .. import BaseCompletionGenerator
 
+
+logger = ApiLogger("||🦙 llama_cpp.generator||")
+
+
+def ensure_dll_exists() -> None:
+    import os
+    import subprocess
+
+    dll_path = "./repositories/llama_cpp/llama_cpp/llama.dll"
+
+    if not os.path.exists("./repositories"):
+        raise FileNotFoundError(
+            "🦙 Could not find llama-cpp-python repositories folder!"
+        )
+
+    if not os.path.exists(dll_path):
+        logger.critical("🦙 llama.cpp DLL not found, building it...")
+        build_script_path = "build-llama-cpp.bat"
+        subprocess.run([build_script_path])
+        logger.critical("🦙 llama.cpp DLL built!")
+
+
 sys.path.insert(0, str(Path("repositories/llama_cpp")))
 try:
+    ensure_dll_exists()
     from repositories.llama_cpp import llama_cpp
 
     print("🦙 llama-cpp-python repository found!")
@@ -33,8 +56,6 @@ except Exception as e:
 
 if TYPE_CHECKING:
     from app.models.llms import LlamaCppModel
-
-logger = ApiLogger("||🦙 llama_cpp.generator||")
 
 
 def _make_logit_bias_processor(
