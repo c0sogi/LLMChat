@@ -396,22 +396,20 @@ class LLMModels(EnumMixin):
             system="SYSTEM",
         ),
     )
-    # camel_13b = LlamaCppModel(
-    #     name="TheBloke/CAMEL-13B-Role-Playing-Data-GGML",
-    #     max_total_tokens=5120,  # context tokens (n_ctx)
-    #     max_tokens_per_request=5120,  # The maximum number of tokens to generate.
-    #     token_margin=8,
-    #     tokenizer=LlamaTokenizer("camel-ai/CAMEL-13B-Role-Playing-Data"),
-    #     model_path="camel-13b-roleplay.ggmlv3.q5_K_M.bin",  # The filename of model. Must end with .bin.
-    #     chat_turn_prompt=ChatTurnTemplates.ROLE_CONTENT_1,
-    #     prefix_template=DescriptionTemplates.USER_AI__ROLEPLAY_PREFIX,
-    #     suffix_template=DescriptionTemplates.USER_AI__ROLEPLAY_SUFFIX,
-    #     user_chat_roles=UserChatRoles(
-    #         user="USER",
-    #         ai="ASSISTANT",
-    #         system="SYSTEM",
-    #     ),
-    # )
+    chronos_hermes_13b = LlamaCppModel(
+        name="TheBloke/chronos-hermes-13B-GGML",
+        max_total_tokens=4096,  # context tokens (n_ctx)
+        max_tokens_per_request=2048,  # The maximum number of tokens to generate.
+        token_margin=8,
+        tokenizer=LlamaTokenizer("Austism/chronos-hermes-13b"),
+        model_path="chronos-hermes-13b.ggmlv3.q4_K_M.bin",  # The filename of model. Must end with .bin.
+        chat_turn_prompt=ChatTurnTemplates.ROLE_CONTENT_6,
+        user_chat_roles=UserChatRoles(
+            user="User",
+            ai="Assistant",
+            system="System",
+        ),
+    )
     orca_mini_7b = ExllamaModel(
         model_path="orca_mini_7b",
         name="orca_mini_7b",
@@ -420,6 +418,21 @@ class LLMModels(EnumMixin):
         token_margin=8,
         tokenizer=ExllamaTokenizer("orca_mini_7b"),
         compress_pos_emb=2.0,
+        prefix_template=DescriptionTemplates.USER_AI__GAME,
+        user_chat_roles=UserChatRoles(
+            user="Player",
+            ai="Narrator",
+            system="System",
+        ),
+    )
+    longchat_7b = ExllamaModel(
+        model_path="longchat_7b",
+        name="longchat_7b",
+        max_total_tokens=16384,
+        max_tokens_per_request=8192,
+        token_margin=8,
+        tokenizer=ExllamaTokenizer("longchat_7b"),
+        compress_pos_emb=8.0,
         prefix_template=DescriptionTemplates.USER_AI__GAME,
         user_chat_roles=UserChatRoles(
             user="Player",

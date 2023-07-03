@@ -162,6 +162,8 @@ class Shared(metaclass=SingletonMetaClass):
 
     @property
     def embeddings(self) -> Embeddings:
-        if self.local_embeddings and config.is_llama_available:
+        if self.local_embeddings:
+            print("Using local embeddings")
             return self.local_embeddings
+        print("Using openai embeddings")
         return self.openai_embeddings

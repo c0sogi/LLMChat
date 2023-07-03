@@ -105,7 +105,11 @@ class ChatTurnTemplates:
         input_variables=["role", "content"],
         template_format="f-string",
     )
-
+    ROLE_CONTENT_6: PromptTemplate = PromptTemplate(
+        template="{role}: {content}</s>",
+        input_variables=["role", "content"],
+        template_format="f-string",
+    )
 
 class SummarizationTemplates:
     TEXT__MARKUP: PromptTemplate = PromptTemplate(

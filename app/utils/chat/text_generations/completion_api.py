@@ -23,11 +23,23 @@ from app.utils.chat.messages.converter import (
     message_histories_to_list,
     message_histories_to_str,
 )
+from app.utils.chat.messages.turn_templates import identify_end_of_string
 from app.utils.logger import ApiLogger
 
 
 def _get_stop_strings(*roles: str, chat_turn_prompt: PromptTemplate) -> list[str]:
+    """Get stop strings for text completion API.
+    Stop strings are required to stop text completion API from generating
+    text that does not belong to the current chat turn.
+    e.g. The common stop string is "### USER:", which can prevent ai from generating
+    user's message itself."""
+
     prompt_stop = set()
+    eos: Optional[str] = identify_end_of_string(
+        "role", "content", chat_turn_prompt=chat_turn_prompt
+    )
+    if eos is not None:
+        prompt_stop.add(eos)
     for role in roles:
         avoids = (
             chat_turn_prompt.format(role=role, content="").strip(),

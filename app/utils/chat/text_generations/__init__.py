@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 
 
 class BaseCompletionGenerator(ABC):
+    """Base class for all completion generators."""
+
     user_role: str = "user"
     system_role: str = "system"
 
@@ -69,7 +71,12 @@ class BaseCompletionGenerator(ABC):
 
     @staticmethod
     def get_stop_strings(*roles: str) -> list[str]:
-        """A helper method to generate stop strings for a given set of roles."""
+        """A helper method to generate stop strings for a given set of roles.
+        Stop strings are required to stop text completion API from generating
+        text that does not belong to the current chat turn.
+        e.g. The common stop string is "### USER:", which can prevent ai from generating
+        user's message itself."""
+
         prompt_stop = set()
         for role in roles:
             avoids = (
