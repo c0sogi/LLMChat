@@ -1,4 +1,5 @@
 """Wrapper for exllama to generate text completions."""
+from contextlib import contextmanager
 import sys
 from pathlib import Path
 
@@ -7,13 +8,13 @@ from torch import cuda
 from app.models.llm_tokenizers import ExllamaTokenizer
 from app.utils.chat.text_generations.path import resolve_model_path_to_posix
 
-assert cuda.is_available()
+assert cuda.is_available(), "CUDA must be available to use ExLlama."
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator, Optional
 
 from app.utils.logger import ApiLogger
 
-from .. import BaseCompletionGenerator
+from . import BaseCompletionGenerator
 
 sys.path.insert(0, str(Path("repositories/exllama")))
 from repositories.exllama.generator import ExLlamaGenerator
@@ -83,24 +84,6 @@ def _make_config(llm_model: "ExllamaModel") -> ExLlamaConfig:
     return config
 
 
-def _make_generator(
-    model: ExLlama,
-    tokenizer: ExLlamaTokenizer,
-    cache: ExLlamaCache,
-    settings: "TextGenerationSettings",
-) -> ExLlamaGenerator:
-    """Make a generator object for the ExLlama model."""
-    generator = ExLlamaGenerator(model=model, tokenizer=tokenizer, cache=cache)
-    generator.settings.temperature = settings.temperature
-    generator.settings.top_p = settings.top_p
-    generator.settings.top_k = settings.top_k
-    generator.settings.typical = settings.typical_p
-    generator.settings.token_repetition_penalty_max = settings.repeat_penalty
-    if settings.ban_eos_token and tokenizer.eos_token_id is not None:
-        generator.disallow_tokens([tokenizer.eos_token_id])
-    return generator
-
-
 class ExllamaCompletionGenerator(BaseCompletionGenerator):
     config: Optional[ExLlamaConfig] = None
     model: Optional[ExLlama] = None
@@ -123,7 +106,6 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
         self.cache = None
         self.tokenizer = None
         self.generator = None
-        cuda.empty_cache()
         print("🗑️ ExllamaCompletionGenerator deleted")
 
     @property
@@ -133,13 +115,45 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
 
     @classmethod
     def from_pretrained(cls, llm_model: "ExllamaModel") -> "ExllamaCompletionGenerator":
+        if not isinstance(llm_model.tokenizer.tokenizer, ExLlamaTokenizer):
+            raise ValueError(
+                f"ExllamaCompletionGenerator requires an ExLlamaTokenizer, not {type(llm_model.tokenizer.tokenizer)}."
+            )
         result = cls()
         result.config = _make_config(llm_model)
         result.tokenizer = llm_model.tokenizer.tokenizer
         result.model = ExLlama(result.config)
         result.cache = ExLlamaCache(result.model)
+        result.generator = None
         result._llm_model = llm_model
         return result
+
+    @contextmanager
+    def _generator_context_manager(
+        self, prompt: str, settings: "TextGenerationSettings"
+    ) -> Iterator[ExLlamaGenerator]:
+        """Make a generator object for the ExLlama model."""
+        assert self.model is not None, "Model is not initialized."
+        assert self.tokenizer is not None, "Tokenizer is not initialized."
+        assert self.cache is not None, "Cache is not initialized."
+
+        generator = ExLlamaGenerator(
+            model=self.model,
+            tokenizer=self.tokenizer,
+            cache=self.cache,
+        )
+        generator.settings.temperature = settings.temperature
+        generator.settings.top_p = settings.top_p
+        generator.settings.top_k = settings.top_k
+        generator.settings.typical = settings.typical_p
+        generator.settings.token_repetition_penalty_max = settings.repeat_penalty
+        if settings.ban_eos_token and generator.tokenizer.eos_token_id is not None:
+            generator.disallow_tokens([generator.tokenizer.eos_token_id])
+
+        generator.end_beam_search()
+        generator.gen_begin_reuse(generator.tokenizer.encode(prompt))
+        yield generator
+        del generator
 
     def _generate_text(self, prompt: str, settings: "TextGenerationSettings") -> str:
         return "".join(self._generate_text_with_streaming(prompt, settings=settings))
@@ -161,51 +175,38 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
         else:
             stops = []
 
-        self.generator = _make_generator(
-            model=self.model,
-            tokenizer=self.tokenizer,
-            cache=self.cache,
-            settings=settings,
-        )
+        with self._generator_context_manager(prompt, settings=settings) as generator:
+            # Start generation
+            initial_len = generator.sequence[0].shape[0]
+            has_leading_space: bool = False
+            text_cursor: int = 0
+            n_completion_tokens: int = 0
 
-        # Start generation
-        self.generator.end_beam_search()
-        ids = self.generator.tokenizer.encode(prompt)
-        self.generator.gen_begin_reuse(ids)
-        initial_len = self.generator.sequence[0].shape[0]
-        has_leading_space: bool = False
-        text_cursor: int = 0
-        n_completion_tokens: int = 0
-        for n_completion_tokens in range(1, settings.max_tokens + 1):
-            token = self.generator.gen_single_token()
-            if token.item() == self.generator.tokenizer.eos_token_id:
-                return
-            if (
-                n_completion_tokens == 0
-                and self.generator.tokenizer.tokenizer.IdToPiece(int(token)).startswith(
-                    "▁"
-                )
-            ):
-                has_leading_space = True
+            for n_completion_tokens in range(1, settings.max_tokens + 1):
+                token = generator.gen_single_token()
+                if token.item() == generator.tokenizer.eos_token_id:
+                    return
+                if n_completion_tokens == 0 and generator.tokenizer.tokenizer.IdToPiece(
+                    int(token)
+                ).startswith("▁"):
+                    has_leading_space = True
 
-            decoded_text = str(
-                self.generator.tokenizer.decode(
-                    self.generator.sequence[0][initial_len:]
+                decoded_text = str(
+                    generator.tokenizer.decode(generator.sequence[0][initial_len:])
                 )
-            )
-            if has_leading_space:
-                decoded_text = " " + decoded_text
-            if self.is_possible_to_generate_stops(decoded_text, stops=stops):
-                for stop in stops:
-                    if stop in decoded_text:
-                        return
-                continue
-            text_piece = decoded_text[text_cursor:]
-            if "�" in text_piece:
-                continue
-            yield text_piece
-            text_cursor += len(text_piece)
-        self._completion_status[settings.completion_id] = n_completion_tokens
+                if has_leading_space:
+                    decoded_text = " " + decoded_text
+                if self.is_possible_to_generate_stops(decoded_text, stops=stops):
+                    for stop in stops:
+                        if stop in decoded_text:
+                            return
+                    continue
+                text_piece = decoded_text[text_cursor:]
+                if "�" in text_piece:
+                    continue
+                yield text_piece
+                text_cursor += len(text_piece)
+            self._completion_status[settings.completion_id] = n_completion_tokens
 
     def generate_completion_with_streaming(
         self, prompt: str, settings: "TextGenerationSettings"

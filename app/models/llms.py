@@ -403,7 +403,7 @@ class LLMModels(EnumMixin):
         token_margin=8,
         tokenizer=LlamaTokenizer("Austism/chronos-hermes-13b"),
         model_path="chronos-hermes-13b.ggmlv3.q4_K_M.bin",  # The filename of model. Must end with .bin.
-        chat_turn_prompt=ChatTurnTemplates.ROLE_CONTENT_6,
+        chat_turn_prompt=ChatTurnTemplates.ROLE_CONTENT_1,
         user_chat_roles=UserChatRoles(
             user="User",
             ai="Assistant",
@@ -413,7 +413,7 @@ class LLMModels(EnumMixin):
     orca_mini_7b = ExllamaModel(
         model_path="orca_mini_7b",
         name="orca_mini_7b",
-        max_total_tokens=4096,
+        max_total_tokens=2048,
         max_tokens_per_request=2048,
         token_margin=8,
         tokenizer=ExllamaTokenizer("orca_mini_7b"),

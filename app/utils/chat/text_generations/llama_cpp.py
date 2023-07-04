@@ -1,4 +1,6 @@
 """Wrapper for llama_cpp to generate text completions."""
+from ctypes import c_void_p
+from subprocess import CalledProcessError
 import sys
 from pathlib import Path
 from app.models.base_models import APIChatMessage, TextGenerationSettings
@@ -12,37 +14,20 @@ from app.models.completion_models import (
 
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator, Literal, Optional
+from app.utils.chat.build_llama_shared_lib import build_shared_lib
 from app.utils.chat.text_generations.path import resolve_model_path_to_posix
 
 from app.utils.logger import ApiLogger
 
-from .. import BaseCompletionGenerator
+from . import BaseCompletionGenerator
 
 
 logger = ApiLogger("||🦙 llama_cpp.generator||")
 
 
-def ensure_dll_exists() -> None:
-    import os
-    import subprocess
-
-    dll_path = "./repositories/llama_cpp/llama_cpp/llama.dll"
-
-    if not os.path.exists("./repositories"):
-        raise FileNotFoundError(
-            "🦙 Could not find llama-cpp-python repositories folder!"
-        )
-
-    if not os.path.exists(dll_path):
-        logger.critical("🦙 llama.cpp DLL not found, building it...")
-        build_script_path = "build-llama-cpp.bat"
-        subprocess.run([build_script_path])
-        logger.critical("🦙 llama.cpp DLL built!")
-
-
 sys.path.insert(0, str(Path("repositories/llama_cpp")))
 try:
-    ensure_dll_exists()
+    build_shared_lib()
     from repositories.llama_cpp import llama_cpp
 
     print("🦙 llama-cpp-python repository found!")
@@ -53,6 +38,7 @@ except Exception as e:
         f"...trying to import installed llama-cpp package..."
     )
     import llama_cpp
+
 
 if TYPE_CHECKING:
     from app.models.llms import LlamaCppModel
@@ -69,14 +55,12 @@ def _make_logit_bias_processor(
 
     to_bias: dict[int, float] = {}
     if logit_bias_type == "input_ids":
-        for input_id, score in logit_bias.items():
-            input_id = int(input_id)
-            to_bias[input_id] = score
+        for input_id_string, score in logit_bias.items():
+            to_bias[int(input_id_string)] = score
 
     elif logit_bias_type == "tokens":
         for token, score in logit_bias.items():
-            token = token.encode("utf-8")
-            for input_id in llama.tokenize(token, add_bos=False):
+            for input_id in llama.tokenize(token.encode("utf-8"), add_bos=False):
                 to_bias[input_id] = score
 
     def logit_bias_processor(
@@ -215,7 +199,7 @@ class LlamaCppCompletionGenerator(BaseCompletionGenerator):
     def __del__(self) -> None:
         if self.client is not None and self.client.ctx is not None:
             llama_cpp.llama_free(self.client.ctx)
-            self.client.ctx = None
+            self.client.ctx = c_void_p()
             self.client.set_cache(None)
         del self.client
         del self.generator

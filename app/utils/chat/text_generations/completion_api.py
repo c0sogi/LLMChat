@@ -190,6 +190,7 @@ async def agenerate_from_chat_completion_api(
     system_message_histories: list[MessageHistory],
     max_tokens: int,
 ) -> AsyncGenerator[str, None]:
+    """Generate a chat response from the chat completion API."""
     api_url, _, api_regex_pattern = _get_model_info(buffer=buffer)
 
     async with aiohttp.ClientSession(
@@ -232,6 +233,7 @@ async def agenerate_from_text_completion_api(
     system_message_histories: list[MessageHistory],
     max_tokens: int,
 ) -> AsyncGenerator[str, None]:
+    """Generate a chat response from the text completion API."""
     api_url, _, api_regex_pattern = _get_model_info(buffer=buffer)
     chat_turn_prompt: PromptTemplate = (
         buffer.current_llm_model.value.chat_turn_prompt

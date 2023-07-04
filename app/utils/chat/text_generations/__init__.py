@@ -1,4 +1,4 @@
-from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
+from abc import ABC, abstractmethod
 from time import time
 from typing import TYPE_CHECKING, Iterator
 
@@ -36,7 +36,8 @@ class BaseCompletionGenerator(ABC):
         """Clean up resources."""
         ...
 
-    @abstractclassmethod
+    @classmethod
+    @abstractmethod
     def from_pretrained(cls, llm_model: "LLMModel") -> "BaseCompletionGenerator":
         """Load a pretrained model into RAM."""
         ...
@@ -238,7 +239,8 @@ class BaseCompletionGenerator(ABC):
             ),
         )
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def llm_model(self) -> "LLMModel":
         """The LLM model used by this generator."""
         ...

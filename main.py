@@ -14,7 +14,6 @@ if modules.get("pytest") is not None:
     print("- Running in pytest mode.")
     environ["API_ENV"] = "test"
 
-
 if __name__ == "__mp_main__":
     """Option 1: Skip section for multiprocess spawning
     This section will be skipped when running in multiprocessing mode"""

@@ -52,6 +52,11 @@ def free_memory_from_deque(
     min_free_memory_mb: float = 512,
     logger: Optional["Logger"] = None,
 ) -> None:
+    try:
+        from torch.cuda import empty_cache
+    except Exception:
+        empty_cache = None
+
     # Before creating a new completion generator, check memory usage
     mem_usage_before: Optional[float] = get_total_memory_usage()  # In MB
     if logger is not None and mem_usage_before is not None:
@@ -63,6 +68,8 @@ def free_memory_from_deque(
     # And check memory usage again to see if there is a memory leak
     (deque_object.popleft()).__del__()
     collect()
+    if empty_cache is not None:
+        empty_cache()
 
     if mem_usage_before is not None:
         mem_usage_after = get_total_memory_usage()

@@ -18,7 +18,7 @@
     
     Watch the demo video for full-browsing: https://www.youtube.com/watch?v=mj_CVrWrS08
         
-> ![Browse Web](app/contents/browsing_demo.gif)
+> ![Browse Web](app/contents/browsing_demo.png)
 
 ---
 ### Vector Embedding

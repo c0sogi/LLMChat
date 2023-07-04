@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union
 from app.utils.chat.text_generations.path import resolve_model_path_to_posix
@@ -15,12 +15,19 @@ class BaseTokenizer(ABC):
 
     @property
     def fallback_tokenizer(self) -> Encoding:
+        ApiLogger.cwarning("Using fallback tokenizer!!!")
         if self._fallback_tokenizer is None:
             self._fallback_tokenizer = get_encoding("cl100k_base")
         return self._fallback_tokenizer
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def tokenizer(self) -> Any:
+        ...
+
+    @property
+    @abstractmethod
+    def model_name(self) -> str:
         ...
 
     @abstractmethod
@@ -58,7 +65,7 @@ class BaseTokenizer(ABC):
 
 class OpenAITokenizer(BaseTokenizer):
     def __init__(self, model_name: str):
-        self.model_name = model_name
+        self._model_name = model_name
         self._tokenizer: Encoding | None = None
 
     def encode(self, message: str, /) -> list[int]:
@@ -70,9 +77,13 @@ class OpenAITokenizer(BaseTokenizer):
     @property
     def tokenizer(self) -> Encoding:
         if self._tokenizer is None:
-            print("Loading tokenizer: ", self.model_name)
-            self._tokenizer = encoding_for_model(self.model_name)
+            print("Loading tokenizer: ", self._model_name)
+            self._tokenizer = encoding_for_model(self._model_name)
         return self._tokenizer
+
+    @property
+    def model_name(self) -> str:
+        return self._model_name
 
 
 class LlamaTokenizer(BaseTokenizer):
@@ -84,7 +95,7 @@ class LlamaTokenizer(BaseTokenizer):
         except Exception as e:
             ApiLogger.cwarning(str(e))
             self._tokenizer_type = None
-        self.model_name = model_name
+        self._model_name = model_name
         self._tokenizer = None
 
     def encode(self, message: str, /) -> list[int]:
@@ -99,10 +110,10 @@ class LlamaTokenizer(BaseTokenizer):
             try:
                 if self._tokenizer_type is None:
                     raise Exception("LlamaTokenizer could not be imported")
-                split_str = self.model_name.split("/")
+                split_str = self._model_name.split("/")
 
                 if len(split_str) == 2:
-                    root_path = self.model_name
+                    root_path = self._model_name
                     subfolder = None
                 elif len(split_str) > 2:
                     root_path = "/".join(split_str[:2])
@@ -114,11 +125,15 @@ class LlamaTokenizer(BaseTokenizer):
                 self._tokenizer = self._tokenizer_type.from_pretrained(
                     root_path, subfolder=subfolder
                 )
-                print("Tokenizer loaded:", self.model_name)
+                print("Tokenizer loaded:", self._model_name)
             except Exception as e:
                 ApiLogger.cwarning(str(e))
                 self._tokenizer = self.fallback_tokenizer
         return self._tokenizer
+
+    @property
+    def model_name(self) -> str:
+        return self._model_name
 
 
 class ExllamaTokenizer(BaseTokenizer):
@@ -131,7 +146,7 @@ class ExllamaTokenizer(BaseTokenizer):
             self._tokenizer_type = _ExllamaTokenizer
         except Exception:
             self._tokenizer_type = None
-        self.model_name = model_name
+        self._model_name = model_name
         self._tokenizer = None
 
     def encode(self, message: str, /) -> list[int]:
@@ -154,15 +169,19 @@ class ExllamaTokenizer(BaseTokenizer):
                     raise Exception("ExllamaTokenizer could not be imported")
                 model_folder_path = Path(
                     resolve_model_path_to_posix(
-                        self.model_name,
+                        self._model_name,
                         default_relative_directory="llama_models/gptq",
                     ),
                 )
                 self._tokenizer = self._tokenizer_type(
                     (model_folder_path / "tokenizer.model").as_posix(),
                 )
-                print("Tokenizer loaded:", self.model_name)
+                print("Tokenizer loaded:", self._model_name)
             except Exception as e:
                 ApiLogger.cwarning(str(e))
                 self._tokenizer = self.fallback_tokenizer
         return self._tokenizer
+
+    @property
+    def model_name(self) -> str:
+        return self._model_name

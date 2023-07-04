@@ -6,7 +6,7 @@ from collections import deque
 from functools import partial
 from os import getpid, kill
 from signal import SIGINT
-from typing import TYPE_CHECKING, AsyncGenerator, Callable, Iterator, Optional, Union
+from typing import TYPE_CHECKING, AsyncGenerator, Callable, Iterator, Union
 
 import anyio
 from anyio.streams.memory import MemoryObjectSendStream
@@ -39,7 +39,7 @@ logger = ApiLogger("||v1||")
 
 # Importing llama.cpp
 try:
-    from app.utils.chat.text_generations.llama_cpp.generator import (
+    from app.utils.chat.text_generations.llama_cpp import (
         LlamaCppCompletionGenerator,
     )
 
@@ -48,28 +48,45 @@ except Exception as e:
     logger.warning("Llama.cpp import error: " + str(e))
     LlamaCppCompletionGenerator = str(e)  # Import error message
 
+
 # Importing exllama
 try:
-    from app.utils.chat.text_generations.exllama.generator import (
+    from app.utils.chat.text_generations.exllama import (
         ExllamaCompletionGenerator,
     )
 
     logger.info("🦙 Successfully imported exllama module!")
 except Exception as e:
-    logger.warning("Exllama package import error: " + str(e))
+    logger.exception("Exllama package import error: " + str(e))
     ExllamaCompletionGenerator = str(e)  # Import error message
+
 
 # Importing embeddings (Pytorch + Transformer)
 try:
-    from app.utils.chat.embeddings import TransformerEmbedding
+    from app.utils.chat.embeddings.transformer import TransformerEmbeddingGenerator
 
     logger.info("🦙 Successfully imported embeddings(Pytorch + Transformer) module!")
 except Exception as e:
     logger.warning("Transformer embedding import error: " + str(e))
-    TransformerEmbedding = str(e)  # Import error message
+    TransformerEmbeddingGenerator = str(e)  # Import error message
+
+
+# Importing embeddings (Tensorflow + Sentence Encoder)
+try:
+    from app.utils.chat.embeddings.sentence_encoder import (
+        SentenceEncoderEmbeddingGenerator,
+    )
+
+    logger.info(
+        "🦙 Successfully imported embeddings(Tensorflow + Sentence Encoder) module!"
+    )
+except Exception as e:
+    logger.warning("Sentence Encoder embedding import error: " + str(e))
+    SentenceEncoderEmbeddingGenerator = str(e)  # Import error message
+
 
 if TYPE_CHECKING:
-    from app.utils.chat.embeddings import BaseEmbedding
+    from app.utils.chat.embeddings import BaseEmbeddingGenerator
     from app.utils.chat.text_generations import BaseCompletionGenerator
 
 OPENAI_REPLACEMENT_MODELS: dict[str, str] = {
@@ -112,7 +129,7 @@ class RouteErrorHandler(APIRoute):
 router = APIRouter(route_class=RouteErrorHandler)
 semaphore = anyio.create_semaphore(1)
 completion_generators: deque["BaseCompletionGenerator"] = deque(maxlen=1)
-transformer_embeddings: deque["BaseEmbedding"] = deque(maxlen=1)
+embedding_generators: deque["BaseEmbeddingGenerator"] = deque(maxlen=1)
 
 
 async def get_semaphore() -> AsyncGenerator[anyio.Semaphore, None]:
@@ -144,11 +161,19 @@ def get_completion_generator(
             if completion_generator.llm_model is llm_model:
                 return completion_generator
 
+        # Before creating a new completion generator, deallocate embeddings to free up memory
+        if embedding_generators:
+            free_memory_from_deque(
+                deque_object=embedding_generators,
+                min_free_memory_mb=512,
+                logger=logger,
+            )
+
         # Before creating a new completion generator, check memory usage
         if completion_generators.maxlen == len(completion_generators):
             free_memory_from_deque(
                 deque_object=completion_generators,
-                min_free_memory_mb=512,
+                min_free_memory_mb=256,
                 logger=logger,
             )
 
@@ -176,38 +201,53 @@ def get_completion_generator(
         raise AssertionError(f"Could not find a model: {body.model}")
 
 
-def get_transformer_embedding(
-    pretrained_name: str,
-) -> "BaseEmbedding":
-    """Get an embedding for the given model. If the model is not cached, create a new one.
+def get_embedding_generator(
+    body: CreateEmbeddingRequest,
+) -> "BaseEmbeddingGenerator":
+    """Get an embedding generator for the given model. If the model is not cached, create a new one.
     If the cache is full, delete the oldest completion generator."""
     try:
-        for embedding in transformer_embeddings:
-            if embedding.model_name == pretrained_name:
-                return embedding
+        body.model = body.model.lower()
+        for embedding_generator in embedding_generators:
+            if embedding_generator.model_name == body.model:
+                return embedding_generator
 
         # Before creating a new completion generator, check memory usage
-        if transformer_embeddings.maxlen == len(transformer_embeddings):
+        if embedding_generators.maxlen == len(embedding_generators):
             free_memory_from_deque(
-                deque_object=transformer_embeddings,
+                deque_object=embedding_generators,
+                min_free_memory_mb=256,
+                logger=logger,
+            )
+        # Before creating a new completion generator, deallocate embeddings to free up memory
+        if completion_generators:
+            free_memory_from_deque(
+                deque_object=completion_generators,
                 min_free_memory_mb=512,
                 logger=logger,
             )
 
-        # Create a new transformer embedding
-        assert not isinstance(TransformerEmbedding, str), TransformerEmbedding
-        to_return = TransformerEmbedding.from_pretrained(
-            pretrained_name=pretrained_name
-        )
+        if "sentence" in body.model and "encoder" in body.model:
+            # Create a new sentence encoder embedding
+            assert not isinstance(
+                SentenceEncoderEmbeddingGenerator, str
+            ), SentenceEncoderEmbeddingGenerator
+            to_return = SentenceEncoderEmbeddingGenerator.from_pretrained(body.model)
+        else:
+            # Create a new transformer embedding
+            assert not isinstance(
+                TransformerEmbeddingGenerator, str
+            ), LlamaCppCompletionGenerator
+            to_return = TransformerEmbeddingGenerator.from_pretrained(body.model)
 
         # Add the new completion generator to the deque cache
-        transformer_embeddings.append(to_return)
+        embedding_generators.append(to_return)
         return to_return
     except (AssertionError, OSError, MemoryError) as e:
         raise e
     except Exception as e:
-        logger.exception(f"Exception in get_transformer_embedding: {e}")
-        raise AssertionError(f"Could not find a model: {pretrained_name}")
+        logger.exception(f"Exception in get_embedding_generator: {e}")
+        raise AssertionError(f"Could not find a model: {body.model}")
 
 
 @router.post(
@@ -335,52 +375,55 @@ async def create_embedding(
     semaphore: anyio.Semaphore = Depends(get_semaphore),
 ) -> Embedding:
     assert body.model is not None, "Model is required"
-    if body.model in (
-        "intfloat/e5-large-v2",
-        "hkunlp/instructor-xl",
-        "hkunlp/instructor-large",
-        "intfloat/e5-base-v2",
-        "intfloat/e5-large",
-    ):
-        # Embedding model from Transformer
-        transformer_embedding = get_transformer_embedding(body.model)
+    try:
+        llm_model = LLMModels.get_value(body.model)
+        if not isinstance(llm_model, LlamaCppModel):
+            raise NotImplementedError("Using non-llama-cpp model")
 
-        (
-            embeddings,
-            total_tokens,
-        ) = transformer_embedding.generate_embeddings_and_n_tokens(
-            input_texts=body.input if isinstance(body.input, list) else [body.input],
+    except Exception:
+        # Embedding model from local
+        #     "intfloat/e5-large-v2",
+        #     "hkunlp/instructor-xl",
+        #     "hkunlp/instructor-large",
+        #     "intfloat/e5-base-v2",
+        #     "intfloat/e5-large",
+        embedding_generator: "BaseEmbeddingGenerator" = get_embedding_generator(body)
+        embeddings: list[list[float]] = await run_in_threadpool(
+            embedding_generator.generate_embeddings,
+            texts=body.input if isinstance(body.input, list) else [body.input],
             context_length=512,
+            batch=1000,
         )
 
         return {
             "object": "list",
             "data": [
                 {
-                    "index": idx,
+                    "index": embedding_idx,
                     "object": "embedding",
                     "embedding": embedding,
                 }
-                for idx, embedding in enumerate(embeddings)
+                for embedding_idx, embedding in enumerate(embeddings)
             ],
             "model": body.model,
             "usage": {
-                "prompt_tokens": total_tokens,
-                "total_tokens": total_tokens,
+                "prompt_tokens": -1,
+                "total_tokens": -1,
             },
         }
+
     else:
-        # Embedding model from Llama.cpp
+        # Trying to get embedding model from Llama.cpp
+        assert (
+            llm_model.embedding
+        ), "Model does not support embeddings. Set `embedding` to True in the LlamaCppModel"
         assert not isinstance(
             LlamaCppCompletionGenerator, str
         ), LlamaCppCompletionGenerator
         completion_generator = get_completion_generator(body)
         assert isinstance(
             completion_generator, LlamaCppCompletionGenerator
-        ), "Non-llama-cpp model is not supported"
-        assert (
-            completion_generator.llm_model.embedding
-        ), "Model does not support embeddings. Set `embedding` to True in the LlamaCppModel"
+        ), f"Model {body.model} is not supported for llama.cpp embeddings."
 
         assert completion_generator.client, "Model is not loaded yet"
         return await run_in_threadpool(
@@ -388,7 +431,7 @@ async def create_embedding(
         )
 
 
-@router.get("/v1/models", response_model=create_model_from_typeddict(Embedding))  # type: ignore
+@router.get("/v1/models", response_model=create_model_from_typeddict(ModelList))  # type: ignore
 async def get_models() -> ModelList:
     llama_cpp_models: list[LlamaCppModel] = [
         enum.value

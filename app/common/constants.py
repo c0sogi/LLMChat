@@ -473,7 +473,7 @@ if __name__ == "__main__":
 
         # Join the lines with newline characters
         long_text = "\n".join(lines)
-        result = split_long_text(long_text, 80)
+        result = split_long_text(long_text, 66)
         print(f"\n\n{ANSI_COLORS['green']}{result}{ANSI_COLORS['end']}\n\n")
         if pyperclip:
             pyperclip.copy(result)
