@@ -3,7 +3,7 @@ from contextlib import contextmanager
 import sys
 from pathlib import Path
 
-from torch import cuda
+from torch import cuda, IntTensor
 
 from app.models.llm_tokenizers import ExllamaTokenizer
 from app.utils.chat.text_generations.path import resolve_model_path_to_posix
@@ -56,7 +56,9 @@ def _make_config(llm_model: "ExllamaModel") -> ExLlamaConfig:
 
             break
     if not model_file_found:
-        raise FileNotFoundError(f"No model has been found in {model_folder_path}.")
+        raise FileNotFoundError(
+            f"No model has been found in {model_folder_path}."
+        )
     config.model_path = model_file_found[-1].as_posix()  # type: ignore
     config.max_seq_len = (
         llm_model.max_total_tokens
@@ -98,15 +100,19 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
     def __del__(self) -> None:
         if self.model is not None:
             self.model.free_unmanaged()
-        del self.model
-        del self.cache
-        del self.tokenizer
-        del self.generator
-        self.model = None
-        self.cache = None
-        self.tokenizer = None
-        self.generator = None
-        print("🗑️ ExllamaCompletionGenerator deleted")
+            del self.model
+            self.model = None
+            print("🗑️ ExllamaCompletionGenerator model deleted")
+        if self.tokenizer is not None:
+            getattr(self.tokenizer, "__del__", lambda: None)()
+            del self.tokenizer
+            self.tokenizer = None
+            print("🗑️ ExllamaCompletionGenerator tokenizer deleted")
+        if self.cache is not None:
+            getattr(self.cache, "__del__", lambda: None)()
+            del self.cache
+            self.cache = None
+            print("🗑️ ExllamaCompletionGenerator cache deleted")
 
     @property
     def llm_model(self) -> "ExllamaModel":
@@ -114,7 +120,9 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
         return self._llm_model
 
     @classmethod
-    def from_pretrained(cls, llm_model: "ExllamaModel") -> "ExllamaCompletionGenerator":
+    def from_pretrained(
+        cls, llm_model: "ExllamaModel"
+    ) -> "ExllamaCompletionGenerator":
         if not isinstance(llm_model.tokenizer.tokenizer, ExLlamaTokenizer):
             raise ValueError(
                 f"ExllamaCompletionGenerator requires an ExLlamaTokenizer, not {type(llm_model.tokenizer.tokenizer)}."
@@ -146,8 +154,13 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
         generator.settings.top_p = settings.top_p
         generator.settings.top_k = settings.top_k
         generator.settings.typical = settings.typical_p
-        generator.settings.token_repetition_penalty_max = settings.repeat_penalty
-        if settings.ban_eos_token and generator.tokenizer.eos_token_id is not None:
+        generator.settings.token_repetition_penalty_max = (
+            settings.repeat_penalty
+        )
+        if (
+            settings.ban_eos_token
+            and generator.tokenizer.eos_token_id is not None
+        ):
             generator.disallow_tokens([generator.tokenizer.eos_token_id])
 
         generator.end_beam_search()
@@ -155,8 +168,12 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
         yield generator
         del generator
 
-    def _generate_text(self, prompt: str, settings: "TextGenerationSettings") -> str:
-        return "".join(self._generate_text_with_streaming(prompt, settings=settings))
+    def _generate_text(
+        self, prompt: str, settings: "TextGenerationSettings"
+    ) -> str:
+        return "".join(
+            self._generate_text_with_streaming(prompt, settings=settings)
+        )
 
     def _generate_text_with_streaming(
         self, prompt: str, settings: "TextGenerationSettings"
@@ -175,7 +192,9 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
         else:
             stops = []
 
-        with self._generator_context_manager(prompt, settings=settings) as generator:
+        with self._generator_context_manager(
+            prompt, settings=settings
+        ) as generator:
             # Start generation
             initial_len = generator.sequence[0].shape[0]
             has_leading_space: bool = False
@@ -186,17 +205,24 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
                 token = generator.gen_single_token()
                 if token.item() == generator.tokenizer.eos_token_id:
                     return
-                if n_completion_tokens == 0 and generator.tokenizer.tokenizer.IdToPiece(
-                    int(token)
-                ).startswith("▁"):
+                if (
+                    n_completion_tokens == 0
+                    and generator.tokenizer.tokenizer.IdToPiece(
+                        int(token)
+                    ).startswith("▁")
+                ):
                     has_leading_space = True
 
                 decoded_text = str(
-                    generator.tokenizer.decode(generator.sequence[0][initial_len:])
+                    generator.tokenizer.decode(
+                        generator.sequence[0][initial_len:]
+                    )
                 )
                 if has_leading_space:
                     decoded_text = " " + decoded_text
-                if self.is_possible_to_generate_stops(decoded_text, stops=stops):
+                if self.is_possible_to_generate_stops(
+                    decoded_text, stops=stops
+                ):
                     for stop in stops:
                         if stop in decoded_text:
                             return
@@ -206,7 +232,9 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
                     continue
                 yield text_piece
                 text_cursor += len(text_piece)
-            self._completion_status[settings.completion_id] = n_completion_tokens
+            self._completion_status[
+                settings.completion_id
+            ] = n_completion_tokens
 
     def generate_completion_with_streaming(
         self, prompt: str, settings: "TextGenerationSettings"
@@ -216,7 +244,9 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
         model_path: str = str(self.config.model_path)
         last_token: Optional[str] = None
         generated_text: str = ""
-        for token in self._generate_text_with_streaming(prompt, settings=settings):
+        for token in self._generate_text_with_streaming(
+            prompt, settings=settings
+        ):
             generated_text += token
             if last_token is not None:
                 yield self.make_completion_chunk(
@@ -260,7 +290,9 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
         )
 
     def generate_chat_completion_with_streaming(
-        self, messages: list["APIChatMessage"], settings: "TextGenerationSettings"
+        self,
+        messages: list["APIChatMessage"],
+        settings: "TextGenerationSettings",
     ) -> Iterator["ChatCompletionChunk"]:
         assert self.config is not None and self.tokenizer is not None
         completion_id: str = settings.completion_id
@@ -268,7 +300,9 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
         model_path: str = str(self.config.model_path)
         last_token: Optional[str] = None
         generated_text: str = ""
-        for token in self._generate_text_with_streaming(prompt, settings=settings):
+        for token in self._generate_text_with_streaming(
+            prompt, settings=settings
+        ):
             generated_text += token
             if last_token is not None:
                 yield self.make_chat_completion_chunk(
@@ -290,7 +324,9 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
         )
 
     def generate_chat_completion(
-        self, messages: list["APIChatMessage"], settings: "TextGenerationSettings"
+        self,
+        messages: list["APIChatMessage"],
+        settings: "TextGenerationSettings",
     ) -> "ChatCompletion":
         assert self.tokenizer is not None and self.config is not None
         completion_id: str = settings.completion_id
@@ -311,6 +347,14 @@ class ExllamaCompletionGenerator(BaseCompletionGenerator):
             else "stop",
         )
 
+    def encode(self, message: str, /) -> list[int]:
+        assert self.tokenizer is not None, "Tokenizer is not initialized"
+        return self.tokenizer.encode(message).flatten().tolist()
+
+    def decode(self, tokens: list[int], /) -> str:
+        assert self.tokenizer is not None, "Tokenizer is not initialized"
+        return str(self.tokenizer.decode(IntTensor(tokens)))
+
 
 if __name__ == "__main__":
     from app.models.base_models import TextGenerationSettings
@@ -324,8 +368,8 @@ if __name__ == "__main__":
         token_margin=8,
         tokenizer=ExllamaTokenizer("orca_mini_7b"),
     )
-    generator: ExllamaCompletionGenerator = ExllamaCompletionGenerator.from_pretrained(
-        exllama_model
+    generator: ExllamaCompletionGenerator = (
+        ExllamaCompletionGenerator.from_pretrained(exllama_model)
     )
     print("\n\n")
     for token in generator.generate_completion_with_streaming(

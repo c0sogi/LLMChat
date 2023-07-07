@@ -41,7 +41,9 @@ class UserChatContext:
     llm_model: LLMModels
     user_message_histories: list[MessageHistory] = field(default_factory=list)
     ai_message_histories: list[MessageHistory] = field(default_factory=list)
-    system_message_histories: list[MessageHistory] = field(default_factory=list)
+    system_message_histories: list[MessageHistory] = field(
+        default_factory=list
+    )
 
     optional_info: dict = field(default_factory=dict)
 
@@ -80,8 +82,12 @@ class UserChatContext:
         return {
             "user_chat_profile": asdict(self.user_chat_profile),
             "llm_model": self.llm_model.name,
-            "user_message_histories": [m.__dict__ for m in self.user_message_histories],
-            "ai_message_histories": [m.__dict__ for m in self.ai_message_histories],
+            "user_message_histories": [
+                m.__dict__ for m in self.user_message_histories
+            ],
+            "ai_message_histories": [
+                m.__dict__ for m in self.ai_message_histories
+            ],
             "system_message_histories": [
                 m.__dict__ for m in self.system_message_histories
             ],
@@ -203,31 +209,6 @@ class UserChatContext:
         for k, v in user_chat_context.__dict__.items():
             setattr(self, k, v)
 
-    # def ensure_token_not_exceed(self, extra_token_margin: int = 0) -> int:
-    #     deleted_histories: int = 0
-    #     while (
-    #         len(self.user_message_histories) > 0
-    #         and len(self.ai_message_histories) > 0
-    #         and self.left_tokens < extra_token_margin
-    #     ):
-    #         deleted_histories += 1
-    #         self.user_message_histories.pop(0)
-    #         self.ai_message_histories.pop(0)
-    #     return deleted_histories
-
-    # def clear_tokens(self, tokens_to_remove: int) -> int:
-    #     deleted_histories: int = 0
-    #     removed_tokens: int = 0
-    #     while (
-    #         len(self.user_message_histories) > 0
-    #         and len(self.ai_message_histories) > 0
-    #         and removed_tokens < tokens_to_remove
-    #     ):
-    #         deleted_histories += 1
-    #         self.user_message_histories.pop(0)
-    #         self.ai_message_histories.pop(0)
-    #     return deleted_histories
-
 
 class ResponseType(str, Enum):
     SEND_MESSAGE_AND_STOP = "send_message_and_stop"
@@ -244,7 +225,9 @@ class command_response:
     def _wrapper(enum_type: ResponseType) -> Callable:
         def decorator(func: Callable) -> Callable:
             @wraps(func)
-            def sync_wrapper(*args: Any, **kwargs: Any) -> Tuple[Any, ResponseType]:
+            def sync_wrapper(
+                *args: Any, **kwargs: Any
+            ) -> Tuple[Any, ResponseType]:
                 result = func(*args, **kwargs)
                 return (result, enum_type)
 
@@ -260,7 +243,9 @@ class command_response:
         return decorator
 
     send_message_and_stop = _wrapper(ResponseType.SEND_MESSAGE_AND_STOP)
-    send_message_and_keep_going = _wrapper(ResponseType.SEND_MESSAGE_AND_KEEP_GOING)
+    send_message_and_keep_going = _wrapper(
+        ResponseType.SEND_MESSAGE_AND_KEEP_GOING
+    )
     handle_user = _wrapper(ResponseType.HANDLE_USER)
     handle_ai = _wrapper(ResponseType.HANDLE_AI)
     handle_both = _wrapper(ResponseType.HANDLE_BOTH)

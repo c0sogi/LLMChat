@@ -33,4 +33,7 @@
     "python.linting.flake8Enabled": false,
     "python.linting.mypyEnabled": false,
     "python.linting.enabled": true,
+    "files.associations": {
+        "*.inc": "cpp"
+    },
 }

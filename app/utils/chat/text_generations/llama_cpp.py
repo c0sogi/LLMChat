@@ -1,5 +1,7 @@
 """Wrapper for llama_cpp to generate text completions."""
 from ctypes import c_void_p
+from os import getpid, kill
+from signal import SIGINT
 from subprocess import CalledProcessError
 import sys
 from pathlib import Path
@@ -29,6 +31,7 @@ sys.path.insert(0, str(Path("repositories/llama_cpp")))
 try:
     build_shared_lib()
     from repositories.llama_cpp import llama_cpp
+    from repositories.llama_cpp.llama_cpp.llama_cpp import GGML_USE_CUBLAS
 
     print("🦙 llama-cpp-python repository found!")
 except Exception as e:
@@ -38,6 +41,7 @@ except Exception as e:
         f"...trying to import installed llama-cpp package..."
     )
     import llama_cpp
+    from llama_cpp.llama_cpp import GGML_USE_CUBLAS
 
 
 if TYPE_CHECKING:
@@ -60,7 +64,9 @@ def _make_logit_bias_processor(
 
     elif logit_bias_type == "tokens":
         for token, score in logit_bias.items():
-            for input_id in llama.tokenize(token.encode("utf-8"), add_bos=False):
+            for input_id in llama.tokenize(
+                token.encode("utf-8"), add_bos=False
+            ):
                 to_bias[input_id] = score
 
     def logit_bias_processor(
@@ -77,7 +83,10 @@ def _make_logit_bias_processor(
 
 
 def _create_completion(
-    client: llama_cpp.Llama, prompt: str, stream: bool, settings: TextGenerationSettings
+    client: llama_cpp.Llama,
+    prompt: str,
+    stream: bool,
+    settings: TextGenerationSettings,
 ) -> Completion | Iterator[CompletionChunk]:
     return client.create_completion(  # type: ignore
         stream=stream,
@@ -197,15 +206,20 @@ class LlamaCppCompletionGenerator(BaseCompletionGenerator):
     _llm_model: Optional["LlamaCppModel"] = None
 
     def __del__(self) -> None:
-        if self.client is not None and self.client.ctx is not None:
-            llama_cpp.llama_free(self.client.ctx)
-            self.client.ctx = c_void_p()
-            self.client.set_cache(None)
-        del self.client
-        del self.generator
-        self.client = None
-        self.generator = None
-        print("🗑️ LlamaCppCompletionGenerator deleted!")
+        """Currnetly, VRAM is not freed when using cuBLAS.
+        There is no cuda-related API in shared library(llama).
+        Let's wait until llama.cpp fixes it.
+        """
+        if self.client is not None:
+            getattr(self.client, "__del__", lambda: None)()
+            del self.client
+            self.client = None
+            print("🗑️ LlamaCppCompletionGenerator deleted!")
+        if GGML_USE_CUBLAS:
+            print(
+                "🗑️ Process will be killed since you are using cuBLAS, which can potentially cause VRAM leak."
+            )
+            kill(getpid(), SIGINT)
 
     @property
     def llm_model(self) -> "LlamaCppModel":
@@ -244,7 +258,9 @@ class LlamaCppCompletionGenerator(BaseCompletionGenerator):
             if cache_type is None:
                 cache_type = "ram"
             cache_size = (
-                2 << 30 if llm_model.cache_size is None else llm_model.cache_size
+                2 << 30
+                if llm_model.cache_size is None
+                else llm_model.cache_size
             )
             if cache_type == "disk":
                 if llm_model.echo:
@@ -294,7 +310,10 @@ class LlamaCppCompletionGenerator(BaseCompletionGenerator):
     ) -> ChatCompletion:
         assert self.client is not None
         chat_completion = _create_chat_completion(
-            client=self.client, messages=messages, stream=False, settings=settings
+            client=self.client,
+            messages=messages,
+            stream=False,
+            settings=settings,
         )
         assert not isinstance(chat_completion, Iterator)
         return chat_completion
@@ -304,11 +323,24 @@ class LlamaCppCompletionGenerator(BaseCompletionGenerator):
     ) -> Iterator[ChatCompletionChunk]:
         assert self.client is not None
         chat_completion_chunk_generator = _create_chat_completion(
-            client=self.client, messages=messages, stream=True, settings=settings
+            client=self.client,
+            messages=messages,
+            stream=True,
+            settings=settings,
         )
         assert isinstance(chat_completion_chunk_generator, Iterator)
         self.generator = chat_completion_chunk_generator
         yield from chat_completion_chunk_generator
+
+    def encode(self, text: str, add_bos: bool = True) -> list[int]:
+        assert self.client is not None, "Client is not initialized"
+        return self.client.tokenize(
+            text.encode("utf-8", errors="ignore"), add_bos=add_bos
+        )
+
+    def decode(self, tokens: list[int]) -> str:
+        assert self.client is not None, "Client is not initialized"
+        return self.client.detokenize(tokens).decode("utf-8", errors="ignore")
 
 
 if __name__ == "__main__":

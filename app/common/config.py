@@ -3,7 +3,6 @@ from dataclasses import dataclass, field
 from os import environ
 from pathlib import Path
 from re import Pattern, compile
-from sys import modules
 from typing import Optional, Union
 from urllib import parse
 

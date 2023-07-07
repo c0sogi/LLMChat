@@ -30,16 +30,23 @@ class TransformerEmbeddingGenerator(BaseEmbeddingGenerator):
     _model_name: Optional[str] = None
 
     def __del__(self) -> None:
-        del self.model
-        del self.tokenizer
-        del self.encoder
-        self.model = None
-        self.tokenizer = None
-        self.encoder = None
-        print("🗑️ TransformerEmbedding deleted!")
+        if self.model is not None:
+            getattr(self.model, "__del__", lambda: None)()
+            self.model = None
+            print("🗑️ TransformerEmbedding model deleted!")
+        if self.tokenizer is not None:
+            getattr(self.tokenizer, "__del__", lambda: None)()
+            self.tokenizer = None
+            print("🗑️ TransformerEmbedding tokenizer deleted!")
+        if self.encoder is not None:
+            getattr(self.encoder, "__del__", lambda: None)()
+            self.encoder = None
+            print("🗑️ TransformerEmbedding encoder deleted!")
 
     @classmethod
-    def from_pretrained(cls, model_name: str) -> "TransformerEmbeddingGenerator":
+    def from_pretrained(
+        cls, model_name: str
+    ) -> "TransformerEmbeddingGenerator":
         self = cls()
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self._model_name = model_name
@@ -76,11 +83,15 @@ class TransformerEmbeddingGenerator(BaseEmbeddingGenerator):
     ) -> tuple[list[list[float]], int]:
         assert self.model is not None and self.tokenizer is not None
 
-        def average_pool(last_hidden_states: Tensor, attention_mask: Tensor) -> Tensor:
+        def average_pool(
+            last_hidden_states: Tensor, attention_mask: Tensor
+        ) -> Tensor:
             last_hidden = last_hidden_states.masked_fill(
                 ~attention_mask[..., None].bool(), 0.0
             )
-            return last_hidden.sum(dim=1) / attention_mask.sum(dim=1)[..., None]
+            return (
+                last_hidden.sum(dim=1) / attention_mask.sum(dim=1)[..., None]
+            )
 
         # Tokenize the input texts
         batch_dict: BatchEncoding = self.tokenizer(

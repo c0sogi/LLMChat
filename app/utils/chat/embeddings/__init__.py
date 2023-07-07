@@ -4,7 +4,7 @@ from typing import Any
 
 class BaseEmbeddingGenerator(ABC):
     @abstractmethod
-    def __del__(self) -> None:
+    def __del__(self):
         """Clean up resources."""
         ...
 

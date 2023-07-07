@@ -31,7 +31,7 @@ from app.models.completion_models import (
     ModelList,
 )
 from app.models.llms import ExllamaModel, LlamaCppModel, LLMModel, LLMModels
-from app.models.system import free_memory_from_deque
+from app.models.system import free_memory_of_first_item_from_container
 from app.utils.logger import ApiLogger
 
 logger = ApiLogger("||v1||")
@@ -63,9 +63,13 @@ except Exception as e:
 
 # Importing embeddings (Pytorch + Transformer)
 try:
-    from app.utils.chat.embeddings.transformer import TransformerEmbeddingGenerator
+    from app.utils.chat.embeddings.transformer import (
+        TransformerEmbeddingGenerator,
+    )
 
-    logger.info("🦙 Successfully imported embeddings(Pytorch + Transformer) module!")
+    logger.info(
+        "🦙 Successfully imported embeddings(Pytorch + Transformer) module!"
+    )
 except Exception as e:
     logger.warning("Transformer embedding import error: " + str(e))
     TransformerEmbeddingGenerator = str(e)  # Import error message
@@ -163,16 +167,16 @@ def get_completion_generator(
 
         # Before creating a new completion generator, deallocate embeddings to free up memory
         if embedding_generators:
-            free_memory_from_deque(
-                deque_object=embedding_generators,
+            free_memory_of_first_item_from_container(
+                embedding_generators,
                 min_free_memory_mb=512,
                 logger=logger,
             )
 
         # Before creating a new completion generator, check memory usage
         if completion_generators.maxlen == len(completion_generators):
-            free_memory_from_deque(
-                deque_object=completion_generators,
+            free_memory_of_first_item_from_container(
+                completion_generators,
                 min_free_memory_mb=256,
                 logger=logger,
             )
@@ -214,15 +218,15 @@ def get_embedding_generator(
 
         # Before creating a new completion generator, check memory usage
         if embedding_generators.maxlen == len(embedding_generators):
-            free_memory_from_deque(
-                deque_object=embedding_generators,
+            free_memory_of_first_item_from_container(
+                embedding_generators,
                 min_free_memory_mb=256,
                 logger=logger,
             )
         # Before creating a new completion generator, deallocate embeddings to free up memory
         if completion_generators:
-            free_memory_from_deque(
-                deque_object=completion_generators,
+            free_memory_of_first_item_from_container(
+                completion_generators,
                 min_free_memory_mb=512,
                 logger=logger,
             )
@@ -232,13 +236,17 @@ def get_embedding_generator(
             assert not isinstance(
                 SentenceEncoderEmbeddingGenerator, str
             ), SentenceEncoderEmbeddingGenerator
-            to_return = SentenceEncoderEmbeddingGenerator.from_pretrained(body.model)
+            to_return = SentenceEncoderEmbeddingGenerator.from_pretrained(
+                body.model
+            )
         else:
             # Create a new transformer embedding
             assert not isinstance(
                 TransformerEmbeddingGenerator, str
             ), LlamaCppCompletionGenerator
-            to_return = TransformerEmbeddingGenerator.from_pretrained(body.model)
+            to_return = TransformerEmbeddingGenerator.from_pretrained(
+                body.model
+            )
 
         # Add the new completion generator to the deque cache
         embedding_generators.append(to_return)
@@ -268,18 +276,24 @@ async def create_chat_completion(
         async def event_publisher(inner_send_chan: MemoryObjectSendStream):
             async with inner_send_chan:
                 try:
-                    iterator: Iterator[ChatCompletionChunk] = await run_in_threadpool(
+                    iterator: Iterator[
+                        ChatCompletionChunk
+                    ] = await run_in_threadpool(
                         completion_generator.generate_chat_completion_with_streaming,
                         messages=body.messages,
                         settings=body,
                     )
                     async for chat_chunk in iterate_in_threadpool(iterator):
                         print(
-                            chat_chunk["choices"][0]["delta"].get("content", ""),
+                            chat_chunk["choices"][0]["delta"].get(
+                                "content", ""
+                            ),
                             end="",
                             flush=True,
                         )
-                        await inner_send_chan.send(dict(data=json.dumps(chat_chunk)))
+                        await inner_send_chan.send(
+                            dict(data=json.dumps(chat_chunk))
+                        )
                         if await request.is_disconnected():
                             raise anyio.get_cancelled_exc_class()()
                     await inner_send_chan.send(dict(data="[DONE]"))
@@ -326,7 +340,9 @@ async def create_completion(
         async def event_publisher(inner_send_chan: MemoryObjectSendStream):
             async with inner_send_chan:
                 try:
-                    iterator: Iterator[CompletionChunk] = await run_in_threadpool(
+                    iterator: Iterator[
+                        CompletionChunk
+                    ] = await run_in_threadpool(
                         completion_generator.generate_completion_with_streaming,
                         prompt=body.prompt,
                         settings=body,
@@ -337,7 +353,9 @@ async def create_completion(
                             end="",
                             flush=True,
                         )
-                        await inner_send_chan.send(dict(data=json.dumps(chunk)))
+                        await inner_send_chan.send(
+                            dict(data=json.dumps(chunk))
+                        )
                         if await request.is_disconnected():
                             raise anyio.get_cancelled_exc_class()()
                     await inner_send_chan.send(dict(data="[DONE]"))
@@ -387,7 +405,9 @@ async def create_embedding(
         #     "hkunlp/instructor-large",
         #     "intfloat/e5-base-v2",
         #     "intfloat/e5-large",
-        embedding_generator: "BaseEmbeddingGenerator" = get_embedding_generator(body)
+        embedding_generator: "BaseEmbeddingGenerator" = (
+            get_embedding_generator(body)
+        )
         embeddings: list[list[float]] = await run_in_threadpool(
             embedding_generator.generate_embeddings,
             texts=body.input if isinstance(body.input, list) else [body.input],
@@ -427,7 +447,8 @@ async def create_embedding(
 
         assert completion_generator.client, "Model is not loaded yet"
         return await run_in_threadpool(
-            completion_generator.client.create_embedding, **body.dict(exclude={"user"})
+            completion_generator.client.create_embedding,
+            **body.dict(exclude={"user"}),
         )
 
 

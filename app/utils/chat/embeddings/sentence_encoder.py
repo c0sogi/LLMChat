@@ -22,12 +22,16 @@ class SentenceEncoderEmbeddingGenerator(BaseEmbeddingGenerator):
     _model_name: Optional[str] = None
 
     def __del__(self) -> None:
-        del self.model
-        self.model = None
-        print("🗑️ SentenceEncoderEmbedding deleted!")
+        if self.model is not None:
+            getattr(self.model, "__del__", lambda: None)()
+            del self.model
+            self.model = None
+            print("🗑️ SentenceEncoderEmbedding deleted!")
 
     @classmethod
-    def from_pretrained(cls, model_name: str) -> "SentenceEncoderEmbeddingGenerator":
+    def from_pretrained(
+        cls, model_name: str
+    ) -> "SentenceEncoderEmbeddingGenerator":
         self = cls()
         self._model_name = model_name
         self.model = hub.load(urljoin(self.base_url, model_name))  # type: ignore

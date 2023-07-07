@@ -32,7 +32,7 @@ class BaseCompletionGenerator(ABC):
     ai_fallback_input_role: str = "Assistant"
 
     @abstractmethod
-    def __del__(self) -> None:
+    def __del__(self):
         """Clean up resources."""
         ...
 

@@ -1,32 +1,31 @@
 from logging import Logger, getLogger
-import os
 from pathlib import Path
 import subprocess
 import sys
 from typing import Optional
 
-
 LIB_BASE_NAME: str = "llama"
-REPOSITORY_LOCATION: str = "./repositories/llama_cpp"
-
-BASE_PATH: Path = Path(f"{REPOSITORY_LOCATION}/llama_cpp/").resolve()
-VENDOR_PATH: Path = Path(f"{REPOSITORY_LOCATION}/vendor/llama.cpp").resolve()
-BUILD_PATH: Path = Path(
-    f"{REPOSITORY_LOCATION}/vendor/llama.cpp/build/bin/release"
-).resolve()
-
+REPOSITORY_FOLDER: str = "repositories"
+PROJECT_GIT_URL: str = "https://github.com/abetlen/llama-cpp-python.git"
+PROJECT_NAME: str = "llama_cpp"
+MODULE_NAME: str = "llama_cpp"
+VENDOR_GIT_URL: str = "https://github.com/ggerganov/llama.cpp.git"
+VENDOR_NAME: str = "llama.cpp"
+CMAKE_CONFIG: str = "Release"
+SCRIPT_FILE_NAME: str = "build-llama-cpp"
 CMAKE_OPTIONS: dict[str, str] = {
-    "cublas": "-DBUILD_SHARED_LIBS=ON -DLLAMA_CUBLAS=ON",  # First build cublas, then build the rest
+    "cublas": "-DBUILD_SHARED_LIBS=ON -DLLAMA_CUBLAS=ON",
     "default": "-DBUILD_SHARED_LIBS=ON",
 }
-SCRIPT_FILE_NAME: str = "build-llama-cpp"
+
+
 WINDOWS_BUILD_SCRIPT = r"""
 cd {vendor_path}
 rmdir /s /q build
 mkdir build
 cd build
 cmake .. {cmake_args}
-cmake --build . --config Release
+cmake --build . --config {cmake_config}
 cd ../../../../..
 """
 
@@ -36,51 +35,76 @@ rm -rf build
 mkdir build
 cd build
 cmake .. {cmake_args}
-cmake --build . --config Release
+cmake --build . --config {cmake_config}
 cd ../../../../..
 """
+REPOSITORY_PATH: Path = Path(REPOSITORY_FOLDER).resolve()
+PROJECT_PATH: Path = REPOSITORY_PATH / Path(PROJECT_NAME)
+MODULE_PATH: Path = PROJECT_PATH / Path(MODULE_NAME)
+VENDOR_PATH: Path = PROJECT_PATH / Path("vendor") / Path(VENDOR_NAME)
+BUILD_OUTPUT_PATH: Path = (
+    VENDOR_PATH / Path("build") / Path("bin") / Path(CMAKE_CONFIG)
+)
+
+
+def _clone_repositories() -> None:
+    if not PROJECT_PATH.exists():
+        REPOSITORY_PATH.mkdir(exist_ok=True)
+        subprocess.run(
+            [
+                "git",
+                "clone",
+                "--recurse-submodules",
+                PROJECT_GIT_URL,
+                PROJECT_NAME,
+            ],
+            cwd=REPOSITORY_PATH,
+        )
+
+    if not VENDOR_PATH.exists():
+        PROJECT_PATH.mkdir(exist_ok=True)
+        subprocess.run(
+            ["git", "clone", VENDOR_GIT_URL],
+            cwd=Path(PROJECT_PATH),
+        )
 
 
 def _get_lib_paths() -> list[Path]:
-    _lib_paths: list[Path] = []
     # Determine the file extension based on the platform
     if sys.platform.startswith("linux"):
-        _lib_paths += [
-            BASE_PATH / f"lib{LIB_BASE_NAME}.so",
+        return [
+            MODULE_PATH / f"lib{LIB_BASE_NAME}.so",
         ]
     elif sys.platform == "darwin":
-        _lib_paths += [
-            BASE_PATH / f"lib{LIB_BASE_NAME}.so",
-            BASE_PATH / f"lib{LIB_BASE_NAME}.dylib",
+        return [
+            MODULE_PATH / f"lib{LIB_BASE_NAME}.so",
+            MODULE_PATH / f"lib{LIB_BASE_NAME}.dylib",
         ]
     elif sys.platform == "win32":
-        _lib_paths += [
-            BASE_PATH / f"{LIB_BASE_NAME}.dll",
+        return [
+            MODULE_PATH / f"{LIB_BASE_NAME}.dll",
         ]
     else:
         raise RuntimeError("Unsupported platform")
-    return _lib_paths
 
 
 def _get_build_lib_paths() -> list[Path]:
-    _build_lib_paths: list[Path] = []
     # Determine the file extension based on the platform
     if sys.platform.startswith("linux"):
-        _build_lib_paths += [
-            BUILD_PATH / f"lib{LIB_BASE_NAME}.so",
+        return [
+            BUILD_OUTPUT_PATH / f"lib{LIB_BASE_NAME}.so",
         ]
     elif sys.platform == "darwin":
-        _build_lib_paths += [
-            BUILD_PATH / f"lib{LIB_BASE_NAME}.so",
-            BUILD_PATH / f"lib{LIB_BASE_NAME}.dylib",
+        return [
+            BUILD_OUTPUT_PATH / f"lib{LIB_BASE_NAME}.so",
+            BUILD_OUTPUT_PATH / f"lib{LIB_BASE_NAME}.dylib",
         ]
     elif sys.platform == "win32":
-        _build_lib_paths += [
-            BUILD_PATH / f"{LIB_BASE_NAME}.dll",
+        return [
+            BUILD_OUTPUT_PATH / f"{LIB_BASE_NAME}.dll",
         ]
     else:
         raise RuntimeError("Unsupported platform")
-    return _build_lib_paths
 
 
 def _get_script_extension() -> str:
@@ -96,32 +120,36 @@ def _get_script_extension() -> str:
 
 def _get_copy_command() -> str:
     if sys.platform.startswith("linux"):
-        copy_command = "cp"
+        return "cp"
     elif sys.platform == "darwin":
-        copy_command = "cp"
+        return "cp"
     elif sys.platform == "win32":
-        copy_command = "copy"
+        return "copy"
     else:
         raise RuntimeError("Unsupported platform")
-    return copy_command
 
 
 def _get_script_content(cmake_args: str) -> str:
     if sys.platform.startswith("linux"):
-        script_content = UNIX_BUILD_SCRIPT.format(
-            vendor_path=VENDOR_PATH, cmake_args=cmake_args
+        return UNIX_BUILD_SCRIPT.format(
+            vendor_path=VENDOR_PATH,
+            cmake_args=cmake_args,
+            cmake_config=CMAKE_CONFIG,
         )
     elif sys.platform == "darwin":
-        script_content = UNIX_BUILD_SCRIPT.format(
-            vendor_path=VENDOR_PATH, cmake_args=cmake_args
+        return UNIX_BUILD_SCRIPT.format(
+            vendor_path=VENDOR_PATH,
+            cmake_args=cmake_args,
+            cmake_config=CMAKE_CONFIG,
         )
     elif sys.platform == "win32":
-        script_content = WINDOWS_BUILD_SCRIPT.format(
-            vendor_path=VENDOR_PATH, cmake_args=cmake_args
+        return WINDOWS_BUILD_SCRIPT.format(
+            vendor_path=VENDOR_PATH,
+            cmake_args=cmake_args,
+            cmake_config=CMAKE_CONFIG,
         )
     else:
         raise RuntimeError("Unsupported platform")
-    return script_content
 
 
 def build_shared_lib(logger: Optional[Logger] = None) -> None:
@@ -135,10 +163,8 @@ def build_shared_lib(logger: Optional[Logger] = None) -> None:
         logger = getLogger(__name__)
         logger.setLevel("INFO")
 
-    if not os.path.exists(BASE_PATH):
-        raise FileNotFoundError(
-            "🦙 Could not find llama-cpp-python repositories folder!"
-        )
+    if not PROJECT_PATH.exists():
+        _clone_repositories()
 
     if not any(lib_path.exists() for lib_path in _get_lib_paths()):
         logger.critical("🦙 llama.cpp DLL not found, building it...")
@@ -150,16 +176,19 @@ def build_shared_lib(logger: Optional[Logger] = None) -> None:
         for script_name, cmake_args in CMAKE_OPTIONS.items():
             if sys.platform == "darwin" and "cublas" in cmake_args.lower():
                 logger.warning(
-                    "🦙 cuBLAS is not supported on macOS, skipping this build option..."
+                    "🦙 cuBLAS is not supported on macOS, skipping this..."
                 )
                 continue
-            script_path = BASE_PATH / Path(
+            MODULE_PATH.mkdir(exist_ok=True)
+            script_path = MODULE_PATH / Path(
                 f"build-llama-cpp-{script_name}.{script_extension}"
             )
             script_paths.append(script_path)
             script_content = _get_script_content(cmake_args)
             for build_lib_path in build_lib_paths:
-                script_content += f"\n{copy_command} {build_lib_path} {BASE_PATH}"
+                script_content += (
+                    f"\n{copy_command} {build_lib_path} {MODULE_PATH}"
+                )
 
             with open(script_path, "w") as f:
                 f.write(script_content)
@@ -167,9 +196,11 @@ def build_shared_lib(logger: Optional[Logger] = None) -> None:
         is_built: bool = False
         for script_path in script_paths:
             try:
-                # Try to build with cublas. cuBLAS is a CUDA library that speeds up matrix multiplication.
-                logger.critical(f"🦙 Trying to build llama.cpp DLL: {script_path}")
-                subprocess.run([script_path]).check_returncode()
+                # Try to build with cublas.
+                logger.critical(
+                    f"🦙 Trying to build llama.cpp DLL: {script_path}"
+                )
+                subprocess.run([script_path], check=True)
                 logger.critical("🦙 llama.cpp DLL successfully built!")
                 is_built = True
                 break
@@ -177,3 +208,7 @@ def build_shared_lib(logger: Optional[Logger] = None) -> None:
                 logger.critical("🦙 Could not build llama.cpp DLL!")
         if not is_built:
             raise RuntimeError("🦙 Could not build llama.cpp DLL!")
+
+
+if __name__ == "__main__":
+    build_shared_lib()
