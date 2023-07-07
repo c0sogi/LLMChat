@@ -456,7 +456,7 @@ async def create_embedding(
 async def get_models() -> ModelList:
     llama_cpp_models: list[LlamaCppModel] = [
         enum.value
-        for enum in LLMModels._member_map_.values()
+        for enum in LLMModels.member_map.values()
         if isinstance(enum.value, LlamaCppModel)
     ]
     return {

@@ -5,7 +5,7 @@ from langchain import PromptTemplate
 
 from app.common.config import OPENAI_API_KEY, ChatConfig
 from app.common.constants import ChatTurnTemplates, DescriptionTemplates
-from app.common.mixins import EnumMixin
+from app.mixins.enum import EnumMixin
 from app.models.base_models import UserChatRoles
 from app.models.llm_tokenizers import (
     BaseTokenizer,

@@ -1,46 +1,51 @@
 import asyncio
 from typing import Optional
 
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
 from orjson import JSONDecodeError
 from orjson import loads as orjson_loads
 from pydantic import ValidationError
-from app.database.schemas.auth import Users
 
+from app.database.schemas.auth import Users
 from app.errors.chat_exceptions import (
     ChatException,
     ChatGeneralInterruptedException,
-    ChatStreamingInterruptedException,
     ChatOtherException,
+    ChatStreamingInterruptedException,
     ChatTextGenerationException,
     ChatTooMuchTokenException,
 )
+from app.models.base_models import MessageFromWebsocket, SummarizedResult
 from app.models.chat_models import ChatRoles, UserChatContext, UserChatProfile
-from app.models.llms import LLMModels
+from app.models.llms import LLMModel, LLMModels
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.managers.cache import CacheManager
-from app.utils.chat.commands import (
+from app.utils.chat.commands import ChatCommands
+from app.utils.chat.commands.helper_functions import (
     command_handler,
     create_new_chat_room,
 )
-from app.utils.chat.messages.handler import MessageHandler
+from app.utils.chat.managers.cache import CacheManager
 from app.utils.chat.managers.message import MessageManager
 from app.utils.chat.managers.vectorstore import VectorStoreManager
 from app.utils.chat.managers.websocket import SendToWebsocket
+from app.utils.chat.messages.handler import MessageHandler
 from app.utils.logger import ApiLogger
-from app.models.base_models import MessageFromWebsocket, SummarizedResult
 
 
 async def _initialize_callback(user_id: str) -> list[UserChatProfile]:
-    user_chat_profiles: list[UserChatProfile] = await CacheManager.fetch_chat_profiles(
-        user_id=user_id
-    )
+    user_chat_profiles: list[
+        UserChatProfile
+    ] = await CacheManager.fetch_chat_profiles(user_id=user_id)
     if not user_chat_profiles:
         # create new chatroom
-        return [(await create_new_chat_room(user_id=user_id)).user_chat_profile]
+        return [
+            (await create_new_chat_room(user_id=user_id)).user_chat_profile
+        ]
     else:
         # get latest chatroom
-        user_chat_profiles.sort(key=lambda profile: profile.created_at, reverse=True)
+        user_chat_profiles.sort(
+            key=lambda profile: profile.created_at, reverse=True
+        )
         return user_chat_profiles
 
 
@@ -51,7 +56,9 @@ async def _harvest_done_tasks(buffer: BufferedUserContext) -> None:
     :return: None
     """
     harvested_tasks = set(
-        task for task in buffer.task_list if task.done() and not task.cancelled()
+        task
+        for task in buffer.task_list
+        if task.done() and not task.cancelled()
     )
     update_tasks = []
 
@@ -59,15 +66,19 @@ async def _harvest_done_tasks(buffer: BufferedUserContext) -> None:
         try:
             task_result = task.result()
             if isinstance(task_result, SummarizedResult):
-                context_index = buffer.find_index_of_chatroom(task_result.chat_room_id)
+                context_index = buffer.find_index_of_chatroom(
+                    task_result.chat_room_id
+                )
                 if context_index is None:
                     continue
-                role = ChatRoles.get_member(task_result.role)
+                role = ChatRoles.get_static_member(task_result.role)
                 context = await buffer._sorted_ctxts.at(context_index)
-                message_history_index = await buffer.find_index_of_message_history(
-                    user_chat_context=context,
-                    role=role,
-                    message_history_uuid=task_result.uuid,
+                message_history_index = (
+                    await buffer.find_index_of_message_history(
+                        user_chat_context=context,
+                        role=role,
+                        message_history_uuid=task_result.uuid,
+                    )
                 )
                 if message_history_index is None:
                     continue
@@ -202,7 +213,9 @@ async def _change_context(
         )
 
 
-async def _handle_json_reception(dict_json: dict, buffer: BufferedUserContext) -> None:
+async def _handle_json_reception(
+    dict_json: dict, buffer: BufferedUserContext
+) -> None:
     if "filename" in dict_json:
         # if received json has filename, it is a file
         buffer.optional_info["filename"] = dict_json["filename"]
@@ -213,14 +226,21 @@ async def _handle_json_reception(dict_json: dict, buffer: BufferedUserContext) -
         if chat_room_idx is not None:
             user_chat_context_or_profile = buffer[chat_room_idx]
             if isinstance(user_chat_context_or_profile, UserChatContext):
-                user_chat_profile = user_chat_context_or_profile.user_chat_profile
+                user_chat_profile = (
+                    user_chat_context_or_profile.user_chat_profile
+                )
             else:
                 user_chat_profile = user_chat_context_or_profile
             user_chat_profile.chat_room_name = dict_json["chat_room_name"][:20]
-            await CacheManager.update_profile(user_chat_profile=user_chat_profile)
+            await CacheManager.update_profile(
+                user_chat_profile=user_chat_profile
+            )
             await SendToWebsocket.init(buffer=buffer, send_chat_rooms=True)
     elif "model" in dict_json:
-        found_model = LLMModels.get_member(dict_json["model"])
+        found_model = LLMModels.get_member_with_type_of_value(
+            dict_json["model"],
+            value_type=LLMModel,
+        )
         buffer.current_user_chat_context.llm_model = found_model
         await SendToWebsocket.init(buffer=buffer, send_selected_model=True)
         await CacheManager.update_model(
@@ -228,7 +248,9 @@ async def _handle_json_reception(dict_json: dict, buffer: BufferedUserContext) -
         )
 
 
-async def _handle_text_reception(text: str, buffer: BufferedUserContext) -> None:
+async def _handle_text_reception(
+    text: str, buffer: BufferedUserContext
+) -> None:
     if text == "stop":
         buffer.done.set()
 
@@ -246,6 +268,7 @@ async def _handle_command(
                 callback_args=splitted[1:],
                 translate=message_from_websocket.translate,
                 buffer=buffer,
+                callback_finder=ChatCommands._find_callback_with_command,
             )
         ),
         event=buffer.done,
@@ -269,7 +292,9 @@ async def _websocket_receiver(buffer: BufferedUserContext) -> None:
             try:
                 await buffer.queue.put(MessageFromWebsocket(**received_json))
             except ValidationError:
-                await _handle_json_reception(dict_json=received_json, buffer=buffer)
+                await _handle_json_reception(
+                    dict_json=received_json, buffer=buffer
+                )
 
         if received_bytes is not None:
             await buffer.queue.put(
@@ -304,7 +329,9 @@ async def _websocket_sender(buffer: BufferedUserContext) -> None:
                     )
                 elif item.msg.startswith("/"):
                     # if user message is command, handle command
-                    await _handle_command(message_from_websocket=item, buffer=buffer)
+                    await _handle_command(
+                        message_from_websocket=item, buffer=buffer
+                    )
                 else:
                     buffer.last_user_message = item.msg
                     await MessageHandler.user(
@@ -317,7 +344,9 @@ async def _websocket_sender(buffer: BufferedUserContext) -> None:
                         buffer=buffer,
                     )
         except ChatException as chat_exception:
-            await _chat_exception_handler(buffer=buffer, chat_exception=chat_exception)
+            await _chat_exception_handler(
+                buffer=buffer, chat_exception=chat_exception
+            )
 
 
 class ChatStreamManager:

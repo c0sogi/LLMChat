@@ -18,7 +18,9 @@ async def ws_chat(websocket: WebSocket, api_key: str):
         raise Responses_400.not_supported_feature
     await websocket.accept()  # accept websocket
     if api_key != OPENAI_API_KEY and not API_ENV == "test":
-        api_key, user = await api_keys.get_api_key_and_owner(access_key=api_key)
+        api_key, user = await api_keys.get_api_key_and_owner(
+            access_key=api_key
+        )
         if user.status not in (UserStatus.active, UserStatus.admin):
             await SendToWebsocket.message(
                 websocket=websocket,

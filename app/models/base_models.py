@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any, Literal, Optional, Union, Type
 from uuid import uuid4
 
-from pydantic import Field, create_model_from_typeddict
+from pydantic import Field
 from pydantic.main import BaseModel
 
 from app.utils.date_utils import UTC

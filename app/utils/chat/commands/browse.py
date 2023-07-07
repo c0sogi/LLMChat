@@ -1,7 +1,5 @@
 from typing import Optional, Tuple
 
-from fastapi.concurrency import run_in_threadpool
-
 from app.common.constants import (
     QueryTemplates,
 )
@@ -12,7 +10,6 @@ from app.utils.chat.chains.full_browsing import full_web_browsing_chain
 from app.utils.chat.chains.translate import translate_chain
 from app.utils.chat.managers.message import MessageManager
 from app.utils.chat.messages.handler import MessageHandler
-from app.utils.chat.text_generations.summarization import get_summarization
 from app.utils.chat.tokens import make_formatted_query
 
 

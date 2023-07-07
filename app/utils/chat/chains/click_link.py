@@ -2,7 +2,6 @@ import asyncio
 from typing import Optional
 from urllib.parse import urlparse
 
-from fastapi.concurrency import run_in_threadpool
 from langchain.schema import HumanMessage, SystemMessage
 from requests_html import HTML, AsyncHTMLSession
 from app.common.lotties import Lotties

@@ -12,8 +12,8 @@ from orjson import loads as orjson_loads
 from app.common.config import DEFAULT_LLM_MODEL
 from app.models.base_models import MessageHistory
 from app.models.base_models import UserChatRoles
-from app.models.llms import LLMModels
-from app.common.mixins import EnumMixin
+from app.models.llms import LLMModel, LLMModels
+from app.mixins.enum import EnumMixin
 from app.utils.date_utils import UTC
 
 
@@ -38,7 +38,7 @@ class UserChatProfile:
 @dataclass
 class UserChatContext:
     user_chat_profile: UserChatProfile
-    llm_model: LLMModels
+    llm_model: Enum
     user_message_histories: list[MessageHistory] = field(default_factory=list)
     ai_message_histories: list[MessageHistory] = field(default_factory=list)
     system_message_histories: list[MessageHistory] = field(
@@ -64,8 +64,9 @@ class UserChatContext:
         stored: dict = orjson_loads(stred_json)
         return cls(
             user_chat_profile=UserChatProfile(**stored["user_chat_profile"]),
-            llm_model=LLMModels.get_member(
-                stored["llm_model"].replace(".", "_").replace("-", "_")
+            llm_model=LLMModels.get_member_with_type_of_value(
+                stored["llm_model"].replace(".", "_").replace("-", "_"),
+                value_type=LLMModel,
             ),
             user_message_histories=[
                 MessageHistory(**m) for m in stored["user_message_histories"]
@@ -141,7 +142,7 @@ class UserChatContext:
         return self.user_chat_profile.chat_room_name
 
     def __repr__(self) -> str:
-        llm_model: LLMModels = self.llm_model
+        llm_model: Enum = self.llm_model
         time_string: str = datetime.strptime(
             str(self.user_chat_profile.created_at),
             "%Y%m%d%H%M%S",
@@ -183,7 +184,7 @@ class UserChatContext:
         cls,
         user_id: str,
         chat_room_id: str,
-        llm_model: LLMModels = getattr(
+        llm_model: Enum = getattr(
             LLMModels,
             DEFAULT_LLM_MODEL,
             LLMModels.gpt_3_5_turbo,

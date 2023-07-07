@@ -1,18 +1,6 @@
 from os import environ
-from sys import modules
-
-from dotenv import load_dotenv
 
 from maintools import initialize_before_launch
-
-if load_dotenv():
-    print("- Loaded .env file successfully.")
-else:
-    print("- Failed to load .env file.")
-
-if modules.get("pytest") is not None:
-    print("- Running in pytest mode.")
-    environ["API_ENV"] = "test"
 
 if __name__ == "__mp_main__":
     """Option 1: Skip section for multiprocess spawning

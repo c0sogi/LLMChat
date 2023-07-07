@@ -10,7 +10,6 @@ from random import choice
 from time import sleep
 from typing import Deque, Dict, Iterator, Optional, Set, Tuple
 from urllib.parse import unquote
-import warnings
 
 import httpx
 from lxml import html

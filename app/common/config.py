@@ -3,11 +3,22 @@ from dataclasses import dataclass, field
 from os import environ
 from pathlib import Path
 from re import Pattern, compile
+from sys import modules
 from typing import Optional, Union
 from urllib import parse
 
 from aiohttp import ClientTimeout
+from dotenv import load_dotenv
 
+if modules.get("pytest") is not None:
+    print("- Running in pytest mode.")
+    environ["API_ENV"] = "test"
+
+
+if load_dotenv():
+    print("- Loaded .env file successfully.")
+else:
+    print("- Failed to load .env file.")
 
 # API Server Variables
 API_ENV: str = environ.get("API_ENV", "local")
@@ -71,19 +82,27 @@ if GLOBAL_PREFIX in ("", "None"):
 if GLOBAL_SUFFIX in ("", "None"):
     GLOBAL_SUFFIX = None
 
-LOCAL_EMBEDDING_MODEL: Optional[str] = environ.get("LOCAL_EMBEDDING_MODEL", None)
+LOCAL_EMBEDDING_MODEL: Optional[str] = environ.get(
+    "LOCAL_EMBEDDING_MODEL", None
+)
 if str(LOCAL_EMBEDDING_MODEL).lower() in ("", "none"):
     LOCAL_EMBEDDING_MODEL = None
-EMBEDDING_TOKEN_CHUNK_SIZE: int = int(environ.get("EMBEDDING_TOKEN_CHUNK_SIZE", 512))
+EMBEDDING_TOKEN_CHUNK_SIZE: int = int(
+    environ.get("EMBEDDING_TOKEN_CHUNK_SIZE", 512)
+)
 EMBEDDING_TOKEN_CHUNK_OVERLAP: int = int(
     environ.get("EMBEDDING_TOKEN_CHUNK_OVERLAP", 128)
 )
-SUMMARIZE_FOR_CHAT: bool = environ.get("SUMMARIZE_FOR_CHAT", "True").lower() == "true"
+SUMMARIZE_FOR_CHAT: bool = (
+    environ.get("SUMMARIZE_FOR_CHAT", "True").lower() == "true"
+)
 SUMMARIZATION_THRESHOLD: int = int(environ.get("SUMMARIZATION_THRESHOLD", 512))
 DEFAULT_LLM_MODEL: str = environ.get("DEFAULT_LLM_MODEL", "gpt_3_5_turbo")
 OPENAI_API_KEY: Optional[str] = environ.get("OPENAI_API_KEY")
 RAPID_API_KEY: Optional[str] = environ.get("RAPID_API_KEY")
-GOOGLE_TRANSLATE_API_KEY: Optional[str] = environ.get("GOOGLE_TRANSLATE_API_KEY")
+GOOGLE_TRANSLATE_API_KEY: Optional[str] = environ.get(
+    "GOOGLE_TRANSLATE_API_KEY"
+)
 PAPAGO_CLIENT_ID: Optional[str] = environ.get("PAPAGO_CLIENT_ID")
 PAPAGO_CLIENT_SECRET: Optional[str] = environ.get("PAPAGO_CLIENT_SECRET")
 CUSTOM_TRANSLATE_URL: Optional[str] = environ.get("CUSTOM_TRANSLATE_URL")
@@ -142,7 +161,9 @@ class Config(metaclass=SingletonMetaClass):
     shared_vectorestore_name: str = QDRANT_COLLECTION
     trusted_hosts: list[str] = field(default_factory=lambda: ["*"])
     allowed_sites: list[str] = field(default_factory=lambda: ["*"])
-    llama_completion_url: Optional[str] = "http://localhost:8002/v1/completions"
+    llama_completion_url: Optional[
+        str
+    ] = "http://localhost:8002/v1/completions"
     llama_embedding_url: Optional[str] = "http://localhost:8002/v1/embeddings"
     llama_server_port: Optional[int] = 8002
 
@@ -247,7 +268,9 @@ class LoggingConfig:
 
 @dataclass
 class ChatConfig:
-    api_url: str = "https://api.openai.com/v1/chat/completions"  # api url for openai
+    api_url: str = (
+        "https://api.openai.com/v1/chat/completions"  # api url for openai
+    )
     timeout: ClientTimeout = ClientTimeout(sock_connect=30.0, sock_read=20.0)
     read_timeout: float = 30.0  # wait for this time before timeout
     wait_for_reconnect: float = 3.0  # wait for this time before reconnecting
@@ -263,7 +286,9 @@ class ChatConfig:
     continue_message: str = (
         "...[CONTINUED]"  # message to append when tokens exceed token limit
     )
-    summarize_for_chat: bool = SUMMARIZE_FOR_CHAT  # whether to summarize chat messages
+    summarize_for_chat: bool = (
+        SUMMARIZE_FOR_CHAT  # whether to summarize chat messages
+    )
     summarization_threshold: int = (
         SUMMARIZATION_THRESHOLD  # if message tokens exceed this, summarize
     )
@@ -271,9 +296,7 @@ class ChatConfig:
     summarization_token_limit: int = (
         EMBEDDING_TOKEN_CHUNK_SIZE  # token limit for summarization
     )
-    summarization_token_overlap: int = (
-        EMBEDDING_TOKEN_CHUNK_OVERLAP  # number of tokens to overlap between chunks
-    )
+    summarization_token_overlap: int = EMBEDDING_TOKEN_CHUNK_OVERLAP  # number of tokens to overlap between chunks
     summarization_chunk_size: int = 2048
     query_context_token_limit: int = 2048
     scrolling_chunk_size_when_browsing: int = 1024

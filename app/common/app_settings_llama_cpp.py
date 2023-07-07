@@ -8,20 +8,20 @@ from urllib import parse
 import requests
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
-
 from app.common.config import Config
 from app.shared import Shared
 from app.utils.logger import ApiLogger
 
 
-def check_health(url: str) -> bool:
+def check_health(url: str, retry_count: int = 3) -> bool:
     """Check if the given url is available or not"""
     try:
         schema = parse.urlparse(url).scheme
         netloc = parse.urlparse(url).netloc
-        if requests.get(f"{schema}://{netloc}/health").status_code != 200:
-            return False
-        return True
+        for _ in range(retry_count):
+            if requests.get(f"{schema}://{netloc}/health").status_code == 200:
+                return True
+        return False
     except Exception:
         return False
 
@@ -76,10 +76,14 @@ def monitor_llama_cpp_server(
             try:
                 start_llama_cpp_server(config=config, shared=shared)
             except (ImportError, NotImplementedError):
-                ApiLogger.cerror("ImportError: Llama CPP server is not available")
+                ApiLogger.cerror(
+                    "ImportError: Llama CPP server is not available"
+                )
                 return
             except Exception:
-                ApiLogger.cexception("Unknown error: Llama CPP server is not available")
+                ApiLogger.cexception(
+                    "Unknown error: Llama CPP server is not available"
+                )
                 config.is_llama_booting = False
                 continue
         else:
@@ -134,3 +138,7 @@ def run_llama_cpp(port: int) -> None:
             log_level="warning",
         )
     ).run()
+
+
+if __name__ == "__main__":
+    run_llama_cpp(port=8002)

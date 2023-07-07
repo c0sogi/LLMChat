@@ -4,7 +4,7 @@ from orjson import dumps as orjson_dumps
 from orjson import loads as orjson_loads
 from app.common.config import DEFAULT_LLM_MODEL
 from app.database.connection import cache
-from app.models.llms import LLMModels
+from app.models.llms import LLMModel, LLMModels
 from app.models.chat_models import (
     ChatRoles,
     MessageHistory,
@@ -29,14 +29,18 @@ class CacheManager:
         return f"chat:{user_id}:{chat_room_id}:{field}"
 
     @classmethod
-    def _get_string_fields(cls, user_id: str, chat_room_id: str) -> dict[str, str]:
+    def _get_string_fields(
+        cls, user_id: str, chat_room_id: str
+    ) -> dict[str, str]:
         return {
             field: cls._generate_key(user_id, chat_room_id, field)
             for field in cls._string_fields
         }
 
     @classmethod
-    def _get_list_fields(cls, user_id: str, chat_room_id: str) -> dict[str, str]:
+    def _get_list_fields(
+        cls, user_id: str, chat_room_id: str
+    ) -> dict[str, str]:
         return {
             field: cls._generate_key(user_id, chat_room_id, field)
             for field in cls._list_fields
@@ -73,7 +77,9 @@ class CacheManager:
                 break
         return [
             profile
-            for profile in await gather(*(cls._load_chat_profile(key) for key in keys))
+            for profile in await gather(
+                *(cls._load_chat_profile(key) for key in keys)
+            )
             if profile is not None
         ]
 
@@ -86,12 +92,16 @@ class CacheManager:
 
         stored_string: dict[str, str | None] = {
             field: await cache.redis.get(key)
-            for field, key in cls._get_string_fields(user_id, chat_room_id).items()
+            for field, key in cls._get_string_fields(
+                user_id, chat_room_id
+            ).items()
             if field != "user_chat_profile"
         }
         stored_list: dict[str, list | None] = {
             field: await cache.redis.lrange(key, 0, -1)
-            for field, key in cls._get_list_fields(user_id, chat_room_id).items()
+            for field, key in cls._get_list_fields(
+                user_id, chat_room_id
+            ).items()
         }
 
         # if any of stored strings are None, create new context
@@ -109,23 +119,29 @@ class CacheManager:
             for field, value in stored_list.items():
                 if value is not None:
                     stored_list[field] = [orjson_loads(v) for v in value]
-            if stored_string["llm_model"] not in LLMModels._member_names_:
+            if stored_string["llm_model"] not in LLMModels.member_names:
                 stored_string["llm_model"] = DEFAULT_LLM_MODEL
             return UserChatContext(
                 user_chat_profile=user_chat_profile,
-                llm_model=LLMModels.get_member(stored_string["llm_model"]),
+                llm_model=LLMModels.get_member_with_type_of_value(
+                    stored_string["llm_model"],
+                    value_type=LLMModel,
+                ),
                 user_message_histories=[
-                    MessageHistory(**m) for m in stored_list["user_message_histories"]
+                    MessageHistory(**m)
+                    for m in stored_list["user_message_histories"]
                 ]
                 if stored_list["user_message_histories"] is not None
                 else [],
                 ai_message_histories=[
-                    MessageHistory(**m) for m in stored_list["ai_message_histories"]
+                    MessageHistory(**m)
+                    for m in stored_list["ai_message_histories"]
                 ]
                 if stored_list["ai_message_histories"] is not None
                 else [],
                 system_message_histories=[
-                    MessageHistory(**m) for m in stored_list["system_message_histories"]
+                    MessageHistory(**m)
+                    for m in stored_list["system_message_histories"]
                 ]
                 if stored_list["system_message_histories"] is not None
                 else [],
@@ -219,7 +235,9 @@ class CacheManager:
         # delete all keys starting with "chat:{user_id}:{chat_room_id}:"
         keys = [
             key
-            async for key in cache.redis.scan_iter(f"chat:{user_id}:{chat_room_id}:*")
+            async for key in cache.redis.scan_iter(
+                f"chat:{user_id}:{chat_room_id}:*"
+            )
         ]
         if not keys:
             return 0
@@ -329,7 +347,9 @@ class CacheManager:
             return None
         # if message_history_json is instance of list, then it is a list of message histories
         if isinstance(message_history_json, list):
-            return [MessageHistory(**orjson_loads(m)) for m in message_history_json]
+            return [
+                MessageHistory(**orjson_loads(m)) for m in message_history_json
+            ]
         # otherwise, it is a single message history
         return MessageHistory(**orjson_loads(message_history_json))
 
@@ -350,7 +370,9 @@ class CacheManager:
             return None
         # if message_history_json is instance of list, then it is a list of message histories
         if isinstance(message_history_json, list):
-            return [MessageHistory(**orjson_loads(m)) for m in message_history_json]
+            return [
+                MessageHistory(**orjson_loads(m)) for m in message_history_json
+            ]
         # otherwise, it is a single message history
         return MessageHistory(**orjson_loads(message_history_json))
 
@@ -369,7 +391,9 @@ class CacheManager:
         result = (
             await cache.redis.rpush(message_history_key, message_history_json)
             if not if_exists
-            else await cache.redis.rpushx(message_history_key, message_history_json)
+            else await cache.redis.rpushx(
+                message_history_key, message_history_json
+            )
         )
         return bool(result)
 

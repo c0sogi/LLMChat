@@ -1,4 +1,4 @@
-from app.common.mixins import EnumMixin
+from app.mixins.enum import EnumMixin
 
 
 class Lotties(EnumMixin):
@@ -13,7 +13,9 @@ class Lotties(EnumMixin):
     TRANSLATE = "lottie-translate"
 
     def format(self, contents: str, end: bool = True) -> str:
-        return f"\n```{self.get_value(self)}\n{contents}" + ("\n```\n" if end else "")
+        return f"\n```{self.get_value(self)}\n{contents}" + (
+            "\n```\n" if end else ""
+        )
 
 
 if __name__ == "__main__":

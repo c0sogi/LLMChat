@@ -1,8 +1,6 @@
-from typing import Callable, Optional
+from typing import Callable
 import httpx
 import orjson
-from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.managers.websocket import SendToWebsocket
 from app.utils.logger import ApiLogger
 from app.common.config import (
     GOOGLE_TRANSLATE_API_KEY,
@@ -18,8 +16,14 @@ class Translator:
     cached_args: dict = {}
 
     TRANSLATION_CONFIGS = [
-        {"function": "custom_translate_api", "args": {"api_url": CUSTOM_TRANSLATE_URL}},
-        {"function": "deepl_via_rapid_api", "args": {"api_key": RAPID_API_KEY}},
+        {
+            "function": "custom_translate_api",
+            "args": {"api_url": CUSTOM_TRANSLATE_URL},
+        },
+        {
+            "function": "deepl_via_rapid_api",
+            "args": {"api_key": RAPID_API_KEY},
+        },
         {"function": "google", "args": {"api_key": GOOGLE_TRANSLATE_API_KEY}},
         {
             "function": "papago",
@@ -31,7 +35,9 @@ class Translator:
     ]
 
     @classmethod
-    async def translate(cls, text: str, src_lang: str, trg_lang: str = "en") -> str:
+    async def translate(
+        cls, text: str, src_lang: str, trg_lang: str = "en"
+    ) -> str:
         if cls.cached_function is not None:
             try:
                 ApiLogger.cinfo(
@@ -58,13 +64,16 @@ class Translator:
                         trg_lang=trg_lang,
                         **args,
                     )
-                    ApiLogger.cinfo(f"Succeeded to translate using {cfg['function']}")
+                    ApiLogger.cinfo(
+                        f"Succeeded to translate using {cfg['function']}"
+                    )
                     cls.cached_function = function
                     cls.cached_args = args
                     return result
                 except Exception:
                     ApiLogger.cerror(
-                        f"Failed to translate using {cfg['function']}", exc_info=True
+                        f"Failed to translate using {cfg['function']}",
+                        exc_info=True,
                     )
                     pass
         raise RuntimeError("Failed to translate")
@@ -97,13 +106,18 @@ class Translator:
         api_key: str,
         timeout: int = 10,
     ) -> str:
-        api_url = (
-            f"https://translation.googleapis.com/language/translate/v2?key={api_key}"
-        )
-        data = {"q": text, "source": src_lang, "target": trg_lang, "format": "text"}
+        api_url = f"https://translation.googleapis.com/language/translate/v2?key={api_key}"
+        data = {
+            "q": text,
+            "source": src_lang,
+            "target": trg_lang,
+            "format": "text",
+        }
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(api_url, data=data)
-        return orjson.loads(response.text)["data"]["translations"][0]["translatedText"]
+        return orjson.loads(response.text)["data"]["translations"][0][
+            "translatedText"
+        ]
 
     @staticmethod
     async def deepl_via_rapid_api(
@@ -121,10 +135,16 @@ class Translator:
             "X-RapidAPI-Host": api_host,
         }
         content = orjson.dumps(
-            {"text": text, "source": src_lang.upper(), "target": trg_lang.upper()}
+            {
+                "text": text,
+                "source": src_lang.upper(),
+                "target": trg_lang.upper(),
+            }
         )
         async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(api_url, headers=headers, content=content)
+            response = await client.post(
+                api_url, headers=headers, content=content
+            )
         return orjson.loads(response.text)["text"]
 
     @staticmethod
@@ -142,5 +162,7 @@ class Translator:
             {"text": text, "target_lang": trg_lang}
         )  # source_lang is excluded because we'll use auto-detection
         async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(api_url, headers=headers, content=content)
+            response = await client.post(
+                api_url, headers=headers, content=content
+            )
         return orjson.loads(response.text)["data"]

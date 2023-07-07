@@ -97,7 +97,7 @@ class SendToWebsocket:
                 )
                 if send_previous_chats
                 else None,
-                models=LLMModels._member_names_ if send_models else None,
+                models=LLMModels.member_names if send_models else None,
                 selected_model=buffer.current_user_chat_context.llm_model.name
                 if send_selected_model or send_previous_chats or send_models
                 else None,
