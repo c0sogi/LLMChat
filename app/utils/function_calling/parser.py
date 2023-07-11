@@ -1,7 +1,7 @@
 import json
 from inspect import signature
 from re import compile
-from types import UnionType
+from types import NoneType, UnionType
 from typing import (
     Annotated,
     Any,
@@ -28,11 +28,11 @@ def _get_type_and_optional(t) -> tuple[Type, bool]:
     """Returns the type and whether it's an Optional type."""
     # Optional[str] is equivalent to Union[str, None], so check if it's a Union type.
     if get_origin(t) in (UnionType, Union):
-        args = get_args(t)
+        args: tuple[Type, ...] = get_args(t)
         # If there's a None type in the Union, it's an Optional type.
         optional = type(None) in args
         # Return the first argument that isn't None.
-        first_arg = next(arg for arg in args if arg is not type(None))
+        first_arg = next(arg for arg in args if arg is not NoneType)
         return first_arg, optional
     else:
         # If it's not a Union type, it's not an Optional type.
@@ -107,9 +107,7 @@ def parse_function_call_from_function(func: Callable) -> FunctionCall:
     line_break_pattern = compile(r"\n\s*")
     return FunctionCall(
         name=func.__name__,
-        description=line_break_pattern.sub(" ", func.__doc__)
-        if func.__doc__
-        else None,
+        description=line_break_pattern.sub(" ", func.__doc__) if func.__doc__ else None,
         parameters=function_call_params,
         required=required or None,
     )

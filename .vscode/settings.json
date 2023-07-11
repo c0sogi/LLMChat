@@ -18,22 +18,11 @@
         "**/.pytest_cache": true,
     },
     "python.analysis.typeCheckingMode": "basic",
-    "redisXplorer.config": {
-        "profiles": [
-            {
-                "name": "remote",
-                "host": "walabi.store",
-                "accessKey": "faf5209e77b3472f816df1ca025c3e16",
-                "filter": "*",
-                "port": "6379"
-            }
-        ],
-        "scanLimit": 200
-    },
-    "python.linting.flake8Enabled": false,
+    "python.linting.flake8Enabled": true,
     "python.linting.mypyEnabled": false,
     "python.linting.enabled": true,
     "files.associations": {
         "*.inc": "cpp"
     },
+    "python.linting.pylintEnabled": false,
 }

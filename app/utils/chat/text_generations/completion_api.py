@@ -33,9 +33,7 @@ from app.utils.function_calling.token_count import (
 )
 
 
-def _get_stop_strings(
-    *roles: str, chat_turn_prompt: PromptTemplate
-) -> list[str]:
+def _get_stop_strings(*roles: str, chat_turn_prompt: PromptTemplate) -> list[str]:
     """Get stop strings for text completion API.
     Stop strings are required to stop text completion API from generating
     text that does not belong to the current chat turn.
@@ -117,9 +115,7 @@ def _make_chat_completion_kwargs(
     max_tokens: int,
 ) -> dict:
     """Make kwargs to use for chat completion API"""
-    functions: Optional[list[FunctionCall]] = buffer.optional_info.get(
-        "functions"
-    )
+    functions: Optional[list[FunctionCall]] = buffer.optional_info.get("functions")
     function_call: Optional[FunctionCall | str] = buffer.optional_info.get(
         "function_call"
     )
@@ -195,8 +191,8 @@ async def agenerate_from_chat_completion_api(
             content += _content
             yield _content
         if _function_call is not None:
-            function_call_name += _function_call.get("name", "")
-            function_call_arguments += _function_call.get("arguments", "")
+            function_call_name += str(_function_call.get("name", ""))
+            function_call_arguments += str(_function_call.get("arguments", ""))
         if _finish_reason not in ("null", None):
             if _finish_reason == "length":
                 raise ChatLengthException(
@@ -211,9 +207,7 @@ async def agenerate_from_chat_completion_api(
                     name=function_call_name
                 )
                 if function_call_arguments:
-                    function_call_unparsed[
-                        "arguments"
-                    ] = function_call_arguments
+                    function_call_unparsed["arguments"] = function_call_arguments
                 function_call_parsed = parse_function_call_name_and_arguments(
                     function_call_unparsed
                 )
@@ -249,9 +243,7 @@ async def agenerate_from_text_completion_api(
 
         if _finish_reason not in ("null", None):
             if _finish_reason == "length":
-                raise ChatLengthException(
-                    msg=text
-                )  # raise exception for token limit
+                raise ChatLengthException(msg=text)  # raise exception for token limit
             elif _finish_reason == "content_filter":
                 raise ChatContentFilterException(
                     msg="Omitted content due to a flag from our content filters"

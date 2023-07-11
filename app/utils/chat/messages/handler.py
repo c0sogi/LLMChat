@@ -3,7 +3,6 @@
 import asyncio
 from contextlib import asynccontextmanager
 from copy import deepcopy
-from functools import partial
 from inspect import Parameter, iscoroutinefunction, signature
 from types import NoneType
 from typing import (
@@ -57,9 +56,7 @@ async def _ai_context_manager(
     buffer: BufferedUserContext,
     stream_progress: StreamProgress,
 ):
-    backup_context: UserChatContext = deepcopy(
-        buffer.current_user_chat_context
-    )
+    backup_context: UserChatContext = deepcopy(buffer.current_user_chat_context)
     chat_text_generator_error: Optional[ChatTextGenerationException] = None
     try:
         yield
@@ -76,9 +73,7 @@ async def _ai_context_manager(
             buffer=buffer,
         )
     except ChatException as chat_exception:
-        chat_text_generator_error = ChatTextGenerationException(
-            msg=chat_exception.msg
-        )
+        chat_text_generator_error = ChatTextGenerationException(msg=chat_exception.msg)
     except OpenAIError as e:
         raise ChatTextGenerationException(msg=str(e))
     except (
@@ -88,27 +83,20 @@ async def _ai_context_manager(
     ):
         pass
     except Exception as exception:
-        ApiLogger.cerror(
-            f"unexpected chat exception: {exception}", exc_info=True
-        )
-        chat_text_generator_error = ChatTextGenerationException(
-            msg="Unknown error"
-        )
+        ApiLogger.cerror(f"unexpected chat exception: {exception}", exc_info=True)
+        chat_text_generator_error = ChatTextGenerationException(msg="Unknown error")
     finally:
         if chat_text_generator_error is not None:
             buffer.current_user_chat_context.copy_from(backup_context)
-            await asyncio.gather(
-                SendToWebsocket.message(
-                    websocket=buffer.websocket,
-                    msg=f"\n\nAn error occurred while generating text: **{chat_text_generator_error.msg}**",
-                    chat_room_id=buffer.current_chat_room_id,
-                    finish=True,
-                    model_name=buffer.current_user_chat_context.llm_model.value.name,
+            await SendToWebsocket.message(
+                websocket=buffer.websocket,
+                msg=(
+                    "\n\nAn error occurred while generating text: "
+                    f"**{chat_text_generator_error.msg}**"
                 ),
-                MessageManager.pop_message_history_safely(
-                    user_chat_context=buffer.current_user_chat_context,
-                    role=ChatRoles.USER,
-                ),
+                chat_room_id=buffer.current_chat_room_id,
+                finish=True,
+                model_name=buffer.current_user_chat_context.llm_model.value.name,
             )
 
 
@@ -148,9 +136,7 @@ async def _ai_stream(
         stream_func=stream_func,
         stream_progress=stream_progress,
         model_name=model.name,
-        wait_next_query=True
-        if buffer.optional_info.get("translate")
-        else None,
+        wait_next_query=True if buffer.optional_info.get("translate") else None,
     )
 
 
@@ -166,12 +152,8 @@ async def _ai_summarization(buffer: BufferedUserContext) -> None:
                     user_id=buffer.user_id,
                     chat_room_id=buffer.current_chat_room_id,
                     role="ai",
-                    to_summarize=buffer.current_ai_message_histories[
-                        -1
-                    ].content,
-                    message_history_uuid=buffer.current_ai_message_histories[
-                        -1
-                    ].uuid,
+                    to_summarize=buffer.current_ai_message_histories[-1].content,
+                    message_history_uuid=buffer.current_ai_message_histories[-1].uuid,
                 )
             )
         )
@@ -193,16 +175,12 @@ def _arguments_provider(
             kwargs_to_pass.update(available_kwargs)
         elif param.kind == Parameter.KEYWORD_ONLY:
             if param.annotation in available_annotated:
-                kwargs_to_pass[param.name] = available_annotated[
-                    param.annotation
-                ]
+                kwargs_to_pass[param.name] = available_annotated[param.annotation]
             else:
                 raise InternalServerError()
         elif param.kind == Parameter.POSITIONAL_OR_KEYWORD:
             if param.annotation in available_annotated:
-                kwargs_to_pass[param.name] = available_annotated[
-                    param.annotation
-                ]
+                kwargs_to_pass[param.name] = available_annotated[param.annotation]
             elif param.name in available_kwargs:
                 kwargs_to_pass[param.name] = available_kwargs[param.name]
             elif param.default is not Parameter.empty:
@@ -248,9 +226,7 @@ def _arguments_provider(
                                 )
                 else:
                     try:
-                        args_to_pass.append(
-                            param.annotation(available_args.pop(0))
-                        )
+                        args_to_pass.append(param.annotation(available_args.pop(0)))
                     except Exception:
                         raise TypeError(
                             f"Required argument {param.name} is missing in available_annotated"
@@ -279,7 +255,6 @@ async def _command_interpreter(
     callback_finder: Callable[[str], Callable],
     buffer: BufferedUserContext,
 ) -> Optional[Any]:
-    translate = callback_kwargs.get("translate")
     if callback_name.startswith("_"):
         await SendToWebsocket.message(
             websocket=buffer.websocket,
@@ -328,6 +303,7 @@ async def _command_interpreter(
             callback_finder=callback_finder,
             buffer=buffer,
         )
+    return None
 
 
 async def _get_command_response(
@@ -381,8 +357,7 @@ async def _get_command_response(
                 )
                 return callback_response, (
                     ResponseType.HANDLE_BOTH
-                    if response_type
-                    == ResponseType.SEND_MESSAGE_AND_KEEP_GOING
+                    if response_type == ResponseType.SEND_MESSAGE_AND_KEEP_GOING
                     else ResponseType.DO_NOTHING
                 )
             return callback_response, response_type
@@ -399,10 +374,7 @@ async def _interruption_event_watcher(
         while True:
             await event.wait()
 
-            if (
-                hold_interruption_event is None
-                or not hold_interruption_event.is_set()
-            ):
+            if hold_interruption_event is None or not hold_interruption_event.is_set():
                 return
             await asyncio.sleep(0.1)
 
@@ -433,12 +405,8 @@ async def _user_summarization(buffer: BufferedUserContext) -> None:
                     user_id=buffer.user_id,
                     chat_room_id=buffer.current_chat_room_id,
                     role="user",
-                    to_summarize=buffer.current_user_message_histories[
-                        -1
-                    ].content,
-                    message_history_uuid=buffer.current_user_message_histories[
-                        -1
-                    ].uuid,
+                    to_summarize=buffer.current_user_message_histories[-1].content,
+                    message_history_uuid=buffer.current_user_message_histories[-1].uuid,
                 )
             )
         )
@@ -455,9 +423,7 @@ async def summarization_task(
         user_id=user_id,
         chat_room_id=chat_room_id,
         role=role,
-        content=await run_in_threadpool(
-            get_summarization, to_summarize=to_summarize
-        ),
+        content=await run_in_threadpool(get_summarization, to_summarize=to_summarize),
         uuid=message_history_uuid,
     )
 
@@ -470,9 +436,8 @@ class MessageHandler:
         use_tight_token_limit: bool = True,
     ) -> None:
         """Handle user message, including translation"""
-        if (
-            not buffer.current_user_message_histories
-            and UTC.check_string_valid(buffer.current_chat_room_name)
+        if not buffer.current_user_message_histories and UTC.check_string_valid(
+            buffer.current_chat_room_name
         ):
             buffer.current_chat_room_name = msg[:20]
             await CacheManager.update_profile(
@@ -500,8 +465,7 @@ class MessageHandler:
         token_limit: int = (
             current_llm_model.max_tokens_per_request
             if use_tight_token_limit
-            else current_llm_model.max_total_tokens
-            - ChatConfig.extra_token_margin
+            else current_llm_model.max_total_tokens - ChatConfig.extra_token_margin
         )
         if user_token > token_limit:  # if user message is too long
             raise ChatTooMuchTokenException(
@@ -512,8 +476,7 @@ class MessageHandler:
             user_chat_context=buffer.current_user_chat_context,
             content=msg,
             role=ChatRoles.USER,
-            calculated_tokens_to_use=user_token
-            + current_llm_model.token_margin,
+            calculated_tokens_to_use=user_token + current_llm_model.token_margin,
         )
         await _user_summarization(buffer=buffer)
 
@@ -527,9 +490,7 @@ class MessageHandler:
         stream_progress = StreamProgress(uuid=uuid4().hex)
         if model is None:
             model = buffer.current_llm_model.value
-        async with _ai_context_manager(
-            buffer=buffer, stream_progress=stream_progress
-        ):
+        async with _ai_context_manager(buffer=buffer, stream_progress=stream_progress):
             await _interruption_event_watcher(
                 future=asyncio.ensure_future(
                     _ai_stream(
