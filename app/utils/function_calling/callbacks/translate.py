@@ -1,11 +1,12 @@
 from typing import Optional
+
 from app.common.lotties import Lotties
 from app.utils.api.translate import Translator
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.managers.websocket import SendToWebsocket
 
 
-async def translate_chain(
+async def translate_callback(
     buffer: BufferedUserContext,
     query: str,
     finish: bool,
@@ -22,8 +23,12 @@ async def translate_chain(
         finish=False,
     )
     try:
-        r = await Translator.translate(text=query, src_lang=src_lang, trg_lang=trg_lang)
-        r_show = show_result_prefix + r if show_result_prefix is not None else r
+        r = await Translator.translate(
+            text=query, src_lang=src_lang, trg_lang=trg_lang
+        )
+        r_show = (
+            show_result_prefix + r if show_result_prefix is not None else r
+        )
         await SendToWebsocket.message(
             msg=Lotties.OK.format("### Finished translation")
             + (r_show if show_result else ""),

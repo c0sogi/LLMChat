@@ -2,14 +2,14 @@ from app.models.chat_models import UserChatContext, command_response
 from app.utils.chat.managers.cache import CacheManager
 
 
-class LLMParameterCommandsMixin:
+class LLMParameterCommands:
     @staticmethod
     @command_response.send_message_and_stop
-    async def settemperature(
+    async def temp(
         temp_to_change: float, user_chat_context: UserChatContext
     ) -> str:  # set temperature of ai
         """Set temperature of ai\n
-        /settemperature <temp_to_change>"""
+        /temp <temp_to_change>"""
         try:
             assert (
                 0 <= temp_to_change <= 1
@@ -26,21 +26,13 @@ class LLMParameterCommandsMixin:
             )  # update user_chat_context
             return f"I've changed temperature from {previous_temperature} to {temp_to_change}."  # return success msg
 
-    @classmethod
-    async def temp(
-        cls, temp_to_change: float, user_chat_context: UserChatContext
-    ) -> str:  # alias for settemperature
-        """Alias for settemperature\n
-        /temp <temp_to_change>"""
-        return await cls.settemperature(temp_to_change, user_chat_context)
-
     @staticmethod
     @command_response.send_message_and_stop
-    async def settopp(
+    async def topp(
         top_p_to_change: float, user_chat_context: UserChatContext
     ) -> str:  # set top_p of ai
         """Set top_p of ai\n
-        /settopp <top_p_to_change>"""
+        /topp <top_p_to_change>"""
         try:
             assert 0 <= top_p_to_change <= 1  # assert top_p is between 0 and 1
         except AssertionError:  # if top_p is not between 0 and 1
@@ -56,11 +48,3 @@ class LLMParameterCommandsMixin:
                 user_chat_context
             )  # update user_chat_context
             return f"I've changed top_p from {previous_top_p} to {top_p_to_change}."  # return success message
-
-    @classmethod
-    async def topp(
-        cls, top_p_to_change: float, user_chat_context: UserChatContext
-    ) -> str:  # alias for settopp
-        """Alias for settopp\n
-        /topp <top_p_to_change>"""
-        return await cls.settopp(top_p_to_change, user_chat_context)

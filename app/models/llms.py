@@ -6,8 +6,9 @@ from langchain import PromptTemplate
 from app.common.config import OPENAI_API_KEY, ChatConfig
 from app.common.constants import ChatTurnTemplates, DescriptionTemplates
 from app.mixins.enum import EnumMixin
-from app.models.base_models import UserChatRoles
-from app.models.llm_tokenizers import (
+
+from .base_models import UserChatRoles
+from .llm_tokenizers import (
     BaseTokenizer,
     ExllamaTokenizer,
     LlamaTokenizer,
@@ -17,18 +18,32 @@ from app.models.llm_tokenizers import (
 
 @dataclass
 class LLMModel:
-    name: str  # model name
-    max_total_tokens: int
-    max_tokens_per_request: int
-    token_margin: int
-    tokenizer: BaseTokenizer
-    user_chat_roles: UserChatRoles
+    name: str = "llm_model"  # model name
+    max_total_tokens: int = 2048
+    max_tokens_per_request: int = 1024
+    tokenizer: BaseTokenizer = field(
+        default_factory=lambda: OpenAITokenizer(model_name="gpt-3.5-turbo")
+    )
+    user_chat_roles: UserChatRoles = field(
+        default_factory=lambda: UserChatRoles(
+            ai="assistant",
+            system="system",
+            user="user",
+        ),
+    )
     prefix_template: Optional[
         Union[PromptTemplate, str]
     ] = None  # A prefix to prepend to the generated text. If None, no prefix is prepended.
     suffix_template: Optional[
         Union[PromptTemplate, str]
     ] = None  # A suffix to prepend to the generated text. If None, no suffix is prepended.
+    token_margin: int = field(
+        default=8,
+        metadata={
+            "description": " The marginal number of tokens when counting the number of tokens in context."
+            "The more token_margin, the more conservative the model will be when counting context tokens."
+        },
+    )
     prefix: Optional[str] = field(init=False, repr=False, default=None)
     suffix: Optional[str] = field(init=False, repr=False, default=None)
 
@@ -117,10 +132,16 @@ class LLMModel:
 
 @dataclass
 class LlamaCppModel(LLMModel):
+    """Llama.cpp model that can be loaded from local path."""
+
+    tokenizer: LlamaTokenizer = field(
+        default_factory=lambda: LlamaTokenizer(model_name=""),
+        metadata={"description": "The tokenizer to use for this model."},
+    )
+    name: str = field(default="Llama C++")
     model_path: str = field(
         default="YOUR_GGML.bin"
     )  # The path to the model. Must end with .bin. You must put .bin file into "llama_models/ggml"
-    tokenizer: LlamaTokenizer
     user_chat_roles: UserChatRoles = field(
         default_factory=lambda: UserChatRoles(
             ai="ASSISTANT",
@@ -137,21 +158,21 @@ class LlamaCppModel(LLMModel):
     n_parts: int = (
         -1
     )  # Number of parts to split the model into. If -1, the number of parts is automatically determined.
-    n_gpu_layers: int = (
-        30  # Number of layers to keep on the GPU. If 0, all layers are kept on the GPU.
-    )
+    n_gpu_layers: int = 30  # Number of layers to keep on the GPU. If 0, all layers are kept on the GPU.
     seed: int = -1  # Seed. If -1, a random seed is used.
     f16_kv: bool = True  # Use half-precision for key/value cache.
-    logits_all: bool = False  # Return logits for all tokens, not just the last token.
+    logits_all: bool = (
+        False  # Return logits for all tokens, not just the last token.
+    )
     vocab_only: bool = False  # Only load the vocabulary, no weights.
     use_mlock: bool = True  # Force system to keep model in RAM.
     n_batch: int = 512  # Number of tokens to process in parallel. Should be a number between 1 and n_ctx.
-    last_n_tokens_size: int = (
-        64  # The number of tokens to look back when applying the repeat_penalty.
-    )
+    last_n_tokens_size: int = 64  # The number of tokens to look back when applying the repeat_penalty.
     use_mmap: bool = True  # Whether to use memory mapping for the model.
     streaming: bool = True  # Whether to stream the results, token by token.
-    cache: bool = False  # The size of the cache in bytes. Only used if cache is True.
+    cache: bool = (
+        False  # The size of the cache in bytes. Only used if cache is True.
+    )
     echo: bool = True  # Whether to echo the prompt.
     lora_base: Optional[str] = None  # The path to the Llama LoRA base model.
     lora_path: Optional[
@@ -170,10 +191,21 @@ class LlamaCppModel(LLMModel):
 
 @dataclass
 class ExllamaModel(LLMModel):
+    """Exllama model that can be loaded from local path."""
+
     model_path: str = field(
-        default="YOUR_GGML.bin"
-    )  # The path to the model. Must end with .bin. You must put .bin file into "llama_models/ggml"
-    tokenizer: ExllamaTokenizer
+        default="YOUR_GPTQ_FOLDER_NAME",
+        metadata={
+            "description": "The GPTQ model path to the model."
+            "e.g. If you have a model folder in 'llama_models/gptq/your_model',"
+            "then you should set this to 'your_model'."
+        },
+    )
+    tokenizer: ExllamaTokenizer = field(
+        default_factory=lambda: ExllamaTokenizer(model_name=""),
+        metadata={"description": "The tokenizer to use for this model."},
+    )
+
     user_chat_roles: UserChatRoles = field(
         default_factory=lambda: UserChatRoles(
             ai="ASSISTANT",
@@ -185,16 +217,31 @@ class ExllamaModel(LLMModel):
         default_factory=lambda: DescriptionTemplates.USER_AI__DEFAULT,
     )
     chat_turn_prompt: PromptTemplate = field(
-        default_factory=lambda: ChatTurnTemplates.ROLE_CONTENT_1
-    )  # The prompt to use for chat turns.
-    compress_pos_emb: float = (
-        1.0  # Increase to compress positional embeddings applied to sequence
+        default_factory=lambda: ChatTurnTemplates.ROLE_CONTENT_1,
+        metadata={"description": "The prompt to use for each chat turn."},
     )
-    gpu_peer_fix: bool = False  # Apparently Torch can have problems transferring tensors directly 1 GPU to another.
-    # Enable this to expliticly move tensors via system RAM instead, where needed
-    auto_map: Optional[
-        list[float]
-    ] = None  # List of floats with memory allocation in GB, per CUDA device, overrides device_map
+    compress_pos_emb: float = field(
+        default=1.0,
+        metadata={
+            "description": "Increase to compress positional embeddings applied to sequence."
+            "This is useful when you want to extend context window size."
+            "e.g. If you want to extend context window size from 2048 to 4096, set this to 2.0."
+        },
+    )
+    gpu_peer_fix: bool = field(
+        default=False,
+        metadata={
+            "description": "Apparently Torch can have problems transferring tensors directly 1 GPU to another."
+            "Enable this to use system RAM as a buffer for GPU to GPU transfers."
+        },
+    )
+    auto_map: Optional[list[float]] = field(
+        default=None,
+        metadata={
+            "description": "List of floats with memory allocation in GB, per CUDA device, overrides device_map"
+        },
+    )
+    # Optional parameters
     matmul_recons_thd: int = 8
     fused_mlp_thd: int = 2
     sdp_thd: int = 8

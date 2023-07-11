@@ -10,14 +10,20 @@ from typing import (
     Optional,
     Union,
 )
-from fastapi import WebSocket
-from app.common.config import ChatConfig
 
+from fastapi import WebSocket
+
+from app.common.config import ChatConfig
 from app.errors.chat_exceptions import (
     ChatLengthException,
     ChatModelNotImplementedException,
     ChatTextGenerationException,
     ChatTooMuchTokenException,
+)
+from app.models.base_models import (
+    InitMessage,
+    MessageToWebsocket,
+    StreamProgress,
 )
 from app.models.chat_models import ChatRoles, MessageHistory
 from app.models.llms import LLMModel, LLMModels
@@ -28,11 +34,6 @@ from app.utils.chat.messages.converter import (
 )
 from app.utils.chat.tokens import cutoff_message_histories
 from app.utils.logger import ApiLogger
-from app.models.base_models import (
-    InitMessage,
-    MessageToWebsocket,
-    StreamProgress,
-)
 
 
 class SyncToAsyncGenerator:
@@ -88,9 +89,10 @@ class SendToWebsocket:
         await SendToWebsocket.message(
             websocket=buffer.websocket,
             msg=InitMessage(
-                chat_rooms=buffer.sorted_chat_rooms if send_chat_rooms else None,
+                chat_rooms=buffer.sorted_chat_rooms
+                if send_chat_rooms
+                else None,
                 previous_chats=message_histories_to_list(
-                    user_chat_roles=buffer.current_user_chat_roles,
                     parse_method=init_parse_method,
                     user_message_histories=buffer.current_user_message_histories,
                     ai_message_histories=buffer.current_ai_message_histories,
@@ -149,7 +151,7 @@ class SendToWebsocket:
                 list[MessageHistory],
                 int,
             ],
-            Union[AsyncGenerator, Generator],
+            Union[AsyncIterator, Iterator],
         ],
         stream_progress: StreamProgress,
         finish: bool = True,
@@ -176,27 +178,23 @@ class SendToWebsocket:
         async def consumer(async_stream: AsyncIterator) -> None:
             """Helper function to send chunks of data"""
             iteration: int = 0
-            try:
-                buffer.is_stream_in_progress.set()
-                async for delta in async_stream:  # stream from api
-                    if isinstance(delta, str):
-                        stream_progress.buffer += delta
-                        iteration += 1
-                        if iteration % chunk_size == 0:
-                            stream_progress.response += stream_progress.buffer
-                            await cls.message(
-                                websocket=buffer.websocket,
-                                msg=stream_progress.buffer,
-                                chat_room_id=None,
-                                finish=False,
-                                actual_role=actual_role,
-                                model_name=None,
-                            )
-                            stream_progress.buffer = ""
-                    else:
-                        pass
-            finally:
-                buffer.is_stream_in_progress.clear()
+            async for delta in async_stream:  # stream from api
+                if isinstance(delta, str):
+                    stream_progress.buffer += delta
+                    iteration += 1
+                    if iteration % chunk_size == 0:
+                        stream_progress.response += stream_progress.buffer
+                        await cls.message(
+                            websocket=buffer.websocket,
+                            msg=stream_progress.buffer,
+                            chat_room_id=None,
+                            finish=False,
+                            actual_role=actual_role,
+                            model_name=None,
+                        )
+                        stream_progress.buffer = ""
+                else:
+                    pass
 
         async def transmission(
             user_message_histories: list[MessageHistory],
@@ -211,7 +209,12 @@ class SendToWebsocket:
                 )
             if response_in_progress is not None:
                 ai_message_histories.append(response_in_progress)
-            user_message_histories, ai_message_histories = cutoff_message_histories(
+            (
+                user_message_histories,
+                ai_message_histories,
+                system_message_histories,
+            ) = cutoff_message_histories(
+                user_chat_context=buffer.current_user_chat_context,
                 ai_message_histories=ai_message_histories,
                 user_message_histories=user_message_histories,
                 system_message_histories=system_message_histories,
@@ -246,10 +249,6 @@ class SendToWebsocket:
                         raise ChatModelNotImplementedException(
                             msg=f"Stream type {type(_stream)} is not AsyncGenerator or Generator."
                         )
-            except InterruptedError:
-                raise InterruptedError(
-                    stream_progress.response + stream_progress.buffer
-                )
             except (ChatLengthException, ChatTooMuchTokenException) as e:
                 if e.msg is None:
                     return

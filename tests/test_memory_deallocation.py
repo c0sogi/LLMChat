@@ -2,7 +2,7 @@ import asyncio
 import queue
 from collections import deque
 
-from app.models.system import free_memory_of_first_item_from_container
+from app.utils.system import free_memory_of_first_item_from_container
 
 DEL_COUNT: int = 0
 
@@ -62,4 +62,4 @@ def test_dereference():
     delete_obj(obj)
     assert obj is not None  # Check if obj is still in memory
     delete_foo(obj)
-    assert obj.foo is None  # Check if obj.foo is deleted
+    assert not hasattr(obj, "foo")  # Check if obj.foo is deleted

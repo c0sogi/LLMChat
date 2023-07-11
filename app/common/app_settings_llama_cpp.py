@@ -8,20 +8,21 @@ from urllib import parse
 import requests
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
-from app.common.config import Config
+
 from app.shared import Shared
 from app.utils.logger import ApiLogger
 
+from .config import Config
 
-def check_health(url: str, retry_count: int = 3) -> bool:
+
+def check_health(url: str) -> bool:
     """Check if the given url is available or not"""
     try:
         schema = parse.urlparse(url).scheme
         netloc = parse.urlparse(url).netloc
-        for _ in range(retry_count):
-            if requests.get(f"{schema}://{netloc}/health").status_code == 200:
-                return True
-        return False
+        if requests.get(f"{schema}://{netloc}/health").status_code != 200:
+            return False
+        return True
     except Exception:
         return False
 

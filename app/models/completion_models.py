@@ -1,5 +1,17 @@
 from typing import Dict, List, Optional, Literal, NotRequired, TypedDict
 
+from .function_calling.base import JsonTypes
+
+
+class FunctionCallParsed(TypedDict):
+    name: str
+    arguments: NotRequired[Dict[str, JsonTypes]]
+
+
+class FunctionCallUnparsed(TypedDict):
+    name: NotRequired[str]
+    arguments: NotRequired[str]
+
 
 class EmbeddingUsage(TypedDict):
     prompt_tokens: int
@@ -60,6 +72,7 @@ class ChatCompletionMessage(TypedDict):
     role: Literal["assistant", "user", "system"]
     content: str
     user: NotRequired[str]
+    function_call: NotRequired[FunctionCallUnparsed]
 
 
 class ChatCompletionChoice(TypedDict):
@@ -80,6 +93,7 @@ class ChatCompletion(TypedDict):
 class ChatCompletionChunkDelta(TypedDict):
     role: NotRequired[Literal["assistant"]]
     content: NotRequired[str]
+    function_call: NotRequired[FunctionCallUnparsed]
 
 
 class ChatCompletionChunkChoice(TypedDict):
@@ -94,6 +108,7 @@ class ChatCompletionChunk(TypedDict):
     object: Literal["chat.completion.chunk"]
     created: int
     choices: List[ChatCompletionChunkChoice]
+
 
 class ModelData(TypedDict):
     id: str

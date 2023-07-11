@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 from typing import Optional
+
 from fastapi.exceptions import HTTPException
 from sqlalchemy.exc import OperationalError
+
 from app.common.config import MAX_API_KEY, MAX_API_WHITELIST
 
 
@@ -26,7 +28,9 @@ class APIException(Exception):
         ex: Optional[Exception] = None,
     ):
         self.status_code = status_code
-        self.code = error_codes(status_code=status_code, internal_code=internal_code)
+        self.code = error_codes(
+            status_code=status_code, internal_code=internal_code
+        )
         self.msg = msg
         self.detail = detail
         self.ex = ex
@@ -38,7 +42,9 @@ class APIException(Exception):
         ex: Optional[Exception] = None,
     ) -> "APIException":
         if (
-            self.msg is not None and self.detail is not None and lazy_format is not None
+            self.msg is not None
+            and self.detail is not None
+            and lazy_format is not None
         ):  # lazy format for msg and detail
             self.msg = self.msg.format(**lazy_format)
             self.detail = self.detail.format(**lazy_format)

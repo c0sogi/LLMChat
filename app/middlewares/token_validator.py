@@ -1,19 +1,18 @@
 from time import time
+
 from fastapi import HTTPException
-from starlette.datastructures import QueryParams, Headers
+from starlette.datastructures import Headers, QueryParams
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
-from app.common.config import (
-    EXCEPT_PATH_LIST,
-    EXCEPT_PATH_REGEX,
-)
+
+from app.common.config import EXCEPT_PATH_LIST, EXCEPT_PATH_REGEX
 from app.database.crud.api_keys import get_api_key_and_owner
 from app.errors.api_exceptions import (
     APIException,
+    InternalServerError,
     Responses_400,
     Responses_401,
-    InternalServerError,
     exception_handler,
 )
 from app.models.base_models import UserToken
@@ -121,21 +120,27 @@ async def access_control(request: Request, call_next: RequestResponseEndpoint):
                 headers=request.headers,
                 cookies=request.cookies,
             )
-        response: Response = await call_next(request)  # actual endpoint response
+        response: Response = await call_next(
+            request
+        )  # actual endpoint response
 
     except Exception as exception:  # If any error occurs...
-        error: HTTPException | InternalServerError | APIException = exception_handler(
-            error=exception
+        error: HTTPException | InternalServerError | APIException = (
+            exception_handler(error=exception)
         )
         response: Response = JSONResponse(
             status_code=error.status_code,
             content={
                 "status": error.status_code,
-                "msg": error.msg if not isinstance(error, HTTPException) else None,
+                "msg": error.msg
+                if not isinstance(error, HTTPException)
+                else None,
                 "detail": error.detail
                 if not isinstance(error, HTTPException)
                 else error.detail,
-                "code": error.code if not isinstance(error, HTTPException) else None,
+                "code": error.code
+                if not isinstance(error, HTTPException)
+                else None,
             },
         )
         ApiLogger.clog(

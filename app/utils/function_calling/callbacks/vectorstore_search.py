@@ -2,15 +2,16 @@ from typing import Optional, Tuple
 
 from app.common.config import ChatConfig, config
 from app.common.lotties import Lotties
-from app.shared import Shared
+from app.models.function_calling.functions import FunctionCalls
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.managers.vectorstore import Document, VectorStoreManager
 from app.utils.chat.managers.websocket import SendToWebsocket
 from app.utils.logger import ApiLogger
-from . import aget_query_to_search
+
+from ..query import aget_query_to_search
 
 
-async def vectorstore_query_chain(
+async def vectorstore_search_callback(
     buffer: BufferedUserContext,
     query: str,
     finish: bool,
@@ -28,7 +29,9 @@ async def vectorstore_query_chain(
         query_to_search: str = await aget_query_to_search(
             buffer=buffer,
             query=query,
-            search_llm=Shared().vectorstore_search_llm,
+            function=FunctionCalls.get_function_call(
+                FunctionCalls.vectorstore_search
+            ),
         )
         found_text_and_score: list[
             Tuple[Document, float]
@@ -44,7 +47,9 @@ async def vectorstore_query_chain(
             raise Exception("No result found")
 
         found_text: Optional[str] = (
-            "\n\n".join([document.page_content for document, _ in found_text_and_score])
+            "\n\n".join(
+                [document.page_content for document, _ in found_text_and_score]
+            )
             if found_text_and_score
             else None
         )

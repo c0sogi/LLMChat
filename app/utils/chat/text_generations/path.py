@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Optional
+
 from app.common.config import BASE_DIR
 
 

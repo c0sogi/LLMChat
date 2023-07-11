@@ -1,16 +1,19 @@
+import ipaddress
+
 from fastapi import APIRouter
 from starlette.requests import Request
+
 from app.database.crud import api_keys, api_whitelists, users
 from app.errors.api_exceptions import Responses_400
 from app.models.base_models import (
+    AddApiKey,
+    CreateApiWhiteList,
     GetApiKey,
     GetApiKeyFirstTime,
     GetApiWhiteList,
-    AddApiKey,
-    CreateApiWhiteList,
+    MessageOk,
+    UserMe,
 )
-import ipaddress
-from app.models.base_models import MessageOk, UserMe
 
 router = APIRouter(prefix="/user")
 
@@ -65,12 +68,16 @@ async def delete_api_key(
     access_key: str,
 ):
     await api_keys.delete_api_key(
-        access_key_id=key_id, access_key=access_key, user_id=request.state.user.id
+        access_key_id=key_id,
+        access_key=access_key,
+        user_id=request.state.user.id,
     )
     return MessageOk()
 
 
-@router.get("/apikeys/{key_id}/whitelists", response_model=list[GetApiWhiteList])
+@router.get(
+    "/apikeys/{key_id}/whitelists", response_model=list[GetApiWhiteList]
+)
 async def get_api_keys_whitelist(api_key_id: int):
     return await api_whitelists.get_api_key_whitelist(api_key_id=api_key_id)
 
@@ -84,7 +91,9 @@ async def create_api_keys_whitelist(
     try:
         ipaddress.ip_address(ip_address)
     except Exception as exception:
-        raise Responses_400.invalid_ip(lazy_format={"ip": ip_address}, ex=exception)
+        raise Responses_400.invalid_ip(
+            lazy_format={"ip": ip_address}, ex=exception
+        )
     return await api_whitelists.create_api_key_whitelist(
         ip_address=ip_address, api_key_id=api_key_id
     )
@@ -97,6 +106,8 @@ async def delete_api_keys_whitelist(
     whitelist_id: int,
 ):
     await api_whitelists.delete_api_key_whitelist(
-        user_id=request.state.user.id, api_key_id=api_key_id, whitelist_id=whitelist_id
+        user_id=request.state.user.id,
+        api_key_id=api_key_id,
+        whitelist_id=whitelist_id,
     )
     return MessageOk()

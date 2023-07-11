@@ -1,8 +1,8 @@
 from typing import Optional
-from fastapi import APIRouter
-from langchain.utilities import DuckDuckGoSearchAPIWrapper
-from app.models.base_models import MessageOk
 
+from fastapi import APIRouter
+
+from app.models.base_models import MessageOk
 
 router = APIRouter(prefix="/user-services")
 

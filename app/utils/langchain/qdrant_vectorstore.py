@@ -1,7 +1,7 @@
 """Wrapper around the Milvus vector database."""
 
-from asyncio import gather
 import warnings
+from asyncio import gather
 from hashlib import md5
 from operator import itemgetter
 from typing import (
@@ -98,9 +98,13 @@ class Qdrant(_Qdrant):
         metadatas_iterator = iter(metadatas or [])
         while batch_texts := list(islice(texts_iterator, batch_size)):
             # Take the corresponding metadata for each text in a batch
-            batch_metadatas = list(islice(metadatas_iterator, batch_size)) or None
+            batch_metadatas = (
+                list(islice(metadatas_iterator, batch_size)) or None
+            )
 
-            batch_ids = [md5(text.encode("utf-8")).hexdigest() for text in batch_texts]
+            batch_ids = [
+                md5(text.encode("utf-8")).hexdigest() for text in batch_texts
+            ]
             points = [
                 grpc.PointStruct(  # type: ignore
                     id=grpc.PointId(uuid=id),  # type: ignore
@@ -269,7 +273,8 @@ class Qdrant(_Qdrant):
             )
         )
         embeddings: list[rest.VectorStruct] = [
-            GrpcToRest.convert_vectors(result.vectors) for result in response.result
+            GrpcToRest.convert_vectors(result.vectors)
+            for result in response.result
         ]
         mmr_selected: list[int] = maximal_marginal_relevance(
             np.array(embedding), embeddings, k=k, lambda_mult=lambda_mult
@@ -286,7 +291,9 @@ class Qdrant(_Qdrant):
             for i in mmr_selected
         ]
 
-    def _build_condition_grpc(self, key: str, value: Any) -> List["grpc.Condition"]:
+    def _build_condition_grpc(
+        self, key: str, value: Any
+    ) -> List["grpc.Condition"]:
         from qdrant_client import grpc
 
         out: List[grpc.Condition] = []
@@ -349,12 +356,18 @@ class Qdrant(_Qdrant):
             List of floats representing the query embedding.
         """
         if self.embeddings is not None:
-            embedding = await run_in_threadpool(self.embeddings.embed_query, query)
+            embedding = await run_in_threadpool(
+                self.embeddings.embed_query, query
+            )
         else:
             if self._embeddings_function is not None:
-                embedding = await run_in_threadpool(self._embeddings_function, query)
+                embedding = await run_in_threadpool(
+                    self._embeddings_function, query
+                )
             else:
-                raise ValueError("Neither of embeddings or embedding_function is set")
+                raise ValueError(
+                    "Neither of embeddings or embedding_function is set"
+                )
         return embedding.tolist() if hasattr(embedding, "tolist") else embedding  # type: ignore
 
     async def _aembed_texts(self, texts: Iterable[str]) -> List[List[float]]:
@@ -376,14 +389,21 @@ class Qdrant(_Qdrant):
                 embeddings = embeddings.tolist()  # type: ignore
         elif self._embeddings_function is not None:
             embeddings = await gather(
-                *[run_in_threadpool(self._embeddings_function, text) for text in texts]
+                *[
+                    run_in_threadpool(self._embeddings_function, text)
+                    for text in texts
+                ]
             )
 
             for embedding_idx in range(len(embeddings)):
                 if hasattr(embeddings[embedding_idx], "tolist"):
-                    embeddings[embedding_idx] = embeddings[embedding_idx].tolist()
+                    embeddings[embedding_idx] = embeddings[
+                        embedding_idx
+                    ].tolist()
         else:
-            raise ValueError("Neither of embeddings or embedding_function is set")
+            raise ValueError(
+                "Neither of embeddings or embedding_function is set"
+            )
 
         return embeddings
 

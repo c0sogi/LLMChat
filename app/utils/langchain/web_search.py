@@ -4,7 +4,15 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 import requests
 from langchain.utils import get_from_dict_or_env
-from pydantic import BaseModel, Extra, Field, PrivateAttr, root_validator, validator
+from pydantic import (
+    BaseModel,
+    Extra,
+    Field,
+    PrivateAttr,
+    root_validator,
+    validator,
+)
+
 from app.utils.api.duckduckgo import DDGS
 
 
@@ -153,7 +161,9 @@ class SearxSearchWrapper(BaseModel):
                     ssl=(lambda: False if self.unsecure else None)(),
                 ) as response:
                     if not response.ok:
-                        raise ValueError("Searx API returned an error: ", response.text)
+                        raise ValueError(
+                            "Searx API returned an error: ", response.text
+                        )
                     result = SearxResults(await response.text())
                     self._result = result
         else:
@@ -164,7 +174,9 @@ class SearxSearchWrapper(BaseModel):
                 verify=not self.unsecure,
             ) as response:
                 if not response.ok:
-                    raise ValueError("Searx API returned an error: ", response.text)
+                    raise ValueError(
+                        "Searx API returned an error: ", response.text
+                    )
                 result = SearxResults(await response.text())
                 self._result = result
 
@@ -233,7 +245,9 @@ class SearxSearchWrapper(BaseModel):
 
         # only return the content of the results list
         elif len(res.results) > 0:
-            toret = "\n\n".join([r.get("content", "") for r in res.results[: self.k]])
+            toret = "\n\n".join(
+                [r.get("content", "") for r in res.results[: self.k]]
+            )
         else:
             toret = "No good search result found"
 
@@ -268,7 +282,9 @@ class SearxSearchWrapper(BaseModel):
 
         # only return the content of the results list
         elif len(res.results) > 0:
-            toret = "\n\n".join([r.get("content", "") for r in res.results[: self.k]])
+            toret = "\n\n".join(
+                [r.get("content", "") for r in res.results[: self.k]]
+            )
         else:
             toret = "No good search result found"
 
@@ -440,7 +456,10 @@ class DuckDuckGoSearchAPIWrapper(BaseModel):
         return "\n\n".join(self.formatted_results(query))
 
     def formatted_results(self, query: str) -> List[str]:
-        return [self._get_formatted_result(result) for result in self.results(query)]
+        return [
+            self._get_formatted_result(result)
+            for result in self.results(query)
+        ]
 
     def formatted_results_with_link(self, query: str) -> Dict[str, str]:
         return {

@@ -30,9 +30,9 @@ from app.models.completion_models import (
     Embedding,
     ModelList,
 )
-from app.models.llms import ExllamaModel, LlamaCppModel, LLMModel, LLMModels
-from app.models.system import free_memory_of_first_item_from_container
 from app.utils.logger import ApiLogger
+from app.utils.module_reloader import ModuleReloader
+from app.utils.system import free_memory_of_first_item_from_container
 
 logger = ApiLogger("||v1||")
 
@@ -90,6 +90,12 @@ except Exception as e:
 
 
 if TYPE_CHECKING:
+    from app.models.llms import (
+        ExllamaModel,
+        LlamaCppModel,
+        LLMModel,
+        LLMModels,
+    )
     from app.utils.chat.embeddings import BaseEmbeddingGenerator
     from app.utils.chat.text_generations import BaseCompletionGenerator
 
@@ -98,6 +104,10 @@ OPENAI_REPLACEMENT_MODELS: dict[str, str] = {
     "gpt-3.5-turbo-16k": "longchat_7b",
     "gpt-4": "pygmalion_13b",
 }
+
+semaphore = anyio.create_semaphore(1)
+completion_generators: deque["BaseCompletionGenerator"] = deque(maxlen=1)
+embedding_generators: deque["BaseEmbeddingGenerator"] = deque(maxlen=1)
 
 
 class RouteErrorHandler(APIRoute):
@@ -116,13 +126,41 @@ class RouteErrorHandler(APIRoute):
                 else:
                     error_msg = "Memory corruption occurred. Terminating..."
                 kill(getpid(), SIGINT)
-                return JSONResponse({"error": error_msg}, 500)
+                return JSONResponse(
+                    {
+                        "error": {
+                            "message": error_msg,
+                            "type": "internal_server_error",
+                            "param": None,
+                            "code": "internal_server_error",
+                        }
+                    },
+                    500,
+                )
             except AssertionError as e:
-                return JSONResponse({"error": str(e)}, status_code=400)
+                return JSONResponse(
+                    {
+                        "error": {
+                            "message": str(e),
+                            "type": "invalid_request_error",
+                            "param": None,
+                            "code": "invalid_request_error",
+                        }
+                    },
+                    status_code=400,
+                )
             except Exception as e:
                 logger.exception(f"Exception in llama-cpp: {e}")
                 return JSONResponse(
-                    {"error": "Internal Server Error in V1"}, status_code=500
+                    {
+                        "error": {
+                            "message": "Unexpected server error",
+                            "type": "internal_server_error",
+                            "param": None,
+                            "code": "internal_server_error",
+                        }
+                    },
+                    status_code=500,
                 )
             finally:
                 ...
@@ -131,9 +169,43 @@ class RouteErrorHandler(APIRoute):
 
 
 router = APIRouter(route_class=RouteErrorHandler)
-semaphore = anyio.create_semaphore(1)
-completion_generators: deque["BaseCompletionGenerator"] = deque(maxlen=1)
-embedding_generators: deque["BaseEmbeddingGenerator"] = deque(maxlen=1)
+
+
+class DynamicLLMS:
+    """Dynamically reloads the llms module when it is changed.
+    This is to prevent the need to restart the server when the llms module is changed.
+    """
+
+    llms_module_reloader: ModuleReloader = ModuleReloader("app.models.llms")
+
+    @classmethod
+    def reload(cls):
+        return cls.llms_module_reloader.reload()
+
+    @classmethod
+    @property
+    def llm_models(cls) -> "LLMModels":
+        return cls.llms_module_reloader.module.LLMModels
+
+    @classmethod
+    @property
+    def llama_cpp_model(cls) -> "LlamaCppModel":
+        return cls.llms_module_reloader.module.LlamaCppModel
+
+    @classmethod
+    @property
+    def exllama_model(cls) -> "ExllamaModel":
+        return cls.llms_module_reloader.module.ExllamaModel
+
+    @classmethod
+    def check_is_llama_cpp_model(cls, llm_model: "LLMModel") -> bool:
+        llms = cls.llms_module_reloader.module
+        return isinstance(llm_model, llms.LlamaCppModel)
+
+    @classmethod
+    def check_is_exllama_model(cls, llm_model: "LLMModel") -> bool:
+        llms = cls.llms_module_reloader.module
+        return isinstance(llm_model, llms.ExllamaModel)
 
 
 async def get_semaphore() -> AsyncGenerator[anyio.Semaphore, None]:
@@ -158,11 +230,12 @@ def get_completion_generator(
                 body.logit_bias = None
 
         # Check if the model is defined in LLMModels enum
-        llm_model: LLMModel = LLMModels.get_value(body.model)
+        DynamicLLMS.reload()
+        llm_model = DynamicLLMS.llm_models.get_value(body.model)
 
         # Check if the model is cached. If so, return the cached completion generator
         for completion_generator in completion_generators:
-            if completion_generator.llm_model is llm_model:
+            if completion_generator.llm_model.name == llm_model.name:
                 return completion_generator
 
         # Before creating a new completion generator, deallocate embeddings to free up memory
@@ -182,12 +255,12 @@ def get_completion_generator(
             )
 
         # Create a new completion generator
-        if isinstance(llm_model, LlamaCppModel):
+        if DynamicLLMS.check_is_llama_cpp_model(llm_model):
             assert not isinstance(
                 LlamaCppCompletionGenerator, str
             ), LlamaCppCompletionGenerator
             to_return = LlamaCppCompletionGenerator.from_pretrained(llm_model)
-        elif isinstance(llm_model, ExllamaModel):
+        elif DynamicLLMS.check_is_exllama_model(llm_model):
             assert not isinstance(
                 ExllamaCompletionGenerator, str
             ), ExllamaCompletionGenerator
@@ -394,8 +467,9 @@ async def create_embedding(
 ) -> Embedding:
     assert body.model is not None, "Model is required"
     try:
-        llm_model = LLMModels.get_value(body.model)
-        if not isinstance(llm_model, LlamaCppModel):
+        DynamicLLMS.reload()
+        llm_model = DynamicLLMS.llm_models.get_value(body.model)
+        if not DynamicLLMS.check_is_llama_cpp_model(llm_model):
             raise NotImplementedError("Using non-llama-cpp model")
 
     except Exception:
@@ -454,10 +528,9 @@ async def create_embedding(
 
 @router.get("/v1/models", response_model=create_model_from_typeddict(ModelList))  # type: ignore
 async def get_models() -> ModelList:
-    llama_cpp_models: list[LlamaCppModel] = [
-        enum.value
-        for enum in LLMModels.member_map.values()
-        if isinstance(enum.value, LlamaCppModel)
+    DynamicLLMS.reload()
+    llama_cpp_models: list = [
+        enum.value for enum in DynamicLLMS.llm_models.member_map.values()
     ]
     return {
         "object": "list",

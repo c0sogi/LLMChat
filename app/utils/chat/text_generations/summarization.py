@@ -1,4 +1,5 @@
 from typing import Optional
+
 from app.common.config import ChatConfig
 from app.shared import Shared
 from app.utils.logger import ApiLogger

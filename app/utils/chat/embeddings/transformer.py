@@ -15,6 +15,7 @@ from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
 from app.utils.colorama import Fore
 from app.utils.logger import ApiLogger
+
 from . import BaseEmbeddingGenerator
 
 device = "cuda" if cuda.is_available() else "cpu"

@@ -1,4 +1,5 @@
 from fastapi import WebSocket
+
 from app.models.chat_models import (
     ResponseType,
     UserChatContext,
@@ -9,7 +10,7 @@ from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.managers.websocket import SendToWebsocket
 
 
-class TestingCommandsMixin:
+class TestingCommands:
     @staticmethod
     @command_response.send_message_and_stop
     def test(

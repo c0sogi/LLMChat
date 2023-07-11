@@ -1,12 +1,13 @@
 from asyncio import sleep
+
 from fastapi import APIRouter, WebSocket
-from app.common.config import HOST_MAIN, OPENAI_API_KEY
+
+from app.common.config import API_ENV, HOST_MAIN, OPENAI_API_KEY
 from app.database.crud import api_keys
 from app.database.schemas.auth import Users
 from app.errors.api_exceptions import Responses_400, Responses_401
-from app.utils.chat.managers.websocket import SendToWebsocket
 from app.utils.chat.managers.stream import ChatStreamManager
-from app.common.config import API_ENV
+from app.utils.chat.managers.websocket import SendToWebsocket
 from app.viewmodels.status import ApiKeyStatus, UserStatus
 
 router = APIRouter()

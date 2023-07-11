@@ -1,21 +1,22 @@
 from asyncio import gather
 from enum import Enum
 from typing import Optional
+
 from app.models.chat_models import (
     ChatRoles,
     ResponseType,
     UserChatContext,
     command_response,
 )
-from app.models.llms import LLMModel, LLMModels
+from app.models.llms import LLMModels
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.commands.helper_functions import delete_chat_room
+from app.utils.chat.chat_rooms import delete_chat_room
 from app.utils.chat.managers.cache import CacheManager
 from app.utils.chat.managers.message import MessageManager
 from app.utils.chat.managers.websocket import SendToWebsocket
 
 
-class CoreCommandsMixin:
+class CoreCommands:
     @classmethod
     @command_response.send_message_and_stop
     def help(cls) -> str:
@@ -160,9 +161,7 @@ class CoreCommandsMixin:
         /changemodel <model>"""
         if model not in LLMModels.member_names:
             return f"Model must be one of {', '.join(LLMModels.member_names)}"
-        llm_model: Enum = LLMModels.get_member_with_type_of_value(
-            model, value_type=LLMModel
-        )
+        llm_model: Enum = LLMModels.get_member(model)
         user_chat_context.llm_model = llm_model
         await CacheManager.update_profile_and_model(user_chat_context)
         return (
@@ -180,6 +179,7 @@ class CoreCommandsMixin:
         return f"I've added {key}={value} to your optional info."
 
     @classmethod
+    @command_response.send_message_and_stop
     def info(
         cls, key: str, value: str, user_chat_context: UserChatContext
     ) -> str:

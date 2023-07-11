@@ -1,3 +1,6 @@
+from typing import Any
+
+
 class ChatException(Exception):  # Base exception for chat
     def __init__(self, *, msg: str | None = None) -> None:
         self.msg = msg
@@ -64,13 +67,10 @@ class ChatInterruptedException(ChatException):
         super().__init__(msg=msg)
 
 
-class ChatStreamingInterruptedException(ChatInterruptedException):
-    def __init__(self, *, msg: str | None = None) -> None:
-        self.msg = msg
-        super().__init__(msg=msg)
+class ChatFunctionCallException(ChatException):
+    """Raised when function is called."""
 
-
-class ChatGeneralInterruptedException(ChatInterruptedException):
-    def __init__(self, *, msg: str | None = None) -> None:
-        self.msg = msg
-        super().__init__(msg=msg)
+    def __init__(self, *, func_name: str, func_kwargs: dict[str, Any]) -> None:
+        self.func_name = func_name
+        self.func_kwargs = func_kwargs
+        super().__init__(msg=f"Function {func_name}({func_kwargs}) is called.")

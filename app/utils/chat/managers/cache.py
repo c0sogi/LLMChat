@@ -1,16 +1,18 @@
 from asyncio import gather
 from dataclasses import asdict, fields
+
 from orjson import dumps as orjson_dumps
 from orjson import loads as orjson_loads
+
 from app.common.config import DEFAULT_LLM_MODEL
 from app.database.connection import cache
-from app.models.llms import LLMModel, LLMModels
 from app.models.chat_models import (
     ChatRoles,
     MessageHistory,
     UserChatContext,
     UserChatProfile,
 )
+from app.models.llms import LLMModels
 from app.utils.logger import ApiLogger
 
 
@@ -123,9 +125,8 @@ class CacheManager:
                 stored_string["llm_model"] = DEFAULT_LLM_MODEL
             return UserChatContext(
                 user_chat_profile=user_chat_profile,
-                llm_model=LLMModels.get_member_with_type_of_value(
+                llm_model=LLMModels.get_member(
                     stored_string["llm_model"],
-                    value_type=LLMModel,
                 ),
                 user_message_histories=[
                     MessageHistory(**m)

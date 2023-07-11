@@ -1,22 +1,24 @@
+import asyncio
 from collections import deque
 from copy import deepcopy
 from re import Pattern, compile
-from typing import Optional, Sequence, Tuple
+from typing import Optional, Sequence, Tuple, cast
 
 from fastapi.concurrency import run_in_threadpool
-from langchain.schema import HumanMessage, SystemMessage
 from requests_html import AsyncHTMLSession
 
 from app.common.config import ChatConfig
 from app.common.lotties import Lotties
-from app.models.openai_functions import OpenAIFunctions
+from app.models.function_calling.base import FunctionCall, JsonTypes
+from app.models.function_calling.functions import FunctionCalls
 from app.shared import Shared
+from app.utils.api.completion import request_chat_completion
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.chains.click_link import click_link_chain
 from app.utils.chat.managers.websocket import SendToWebsocket
 from app.utils.logger import ApiLogger
 
-from . import aget_query_to_search
+from ..request import request_function_call
+from .click_link import click_link_callback
 
 URL_PATTERN: Pattern = compile(
     r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
@@ -40,14 +42,22 @@ async def _get_browsing_action_and_link_to_click(
     query: str,
     snippets_with_link: dict[str, str],
     relevant_content_and_scores: Sequence[tuple[str, int]],
+    timeout: Optional[float] = 30,
 ) -> tuple[Optional[str], Optional[str]]:
     """Get action and link to click, based on snippets and most relevant content"""
-    browsing_function = deepcopy(OpenAIFunctions.WEB_BROWSING)
+    function: FunctionCall = deepcopy(
+        FunctionCalls.get_function_call(FunctionCalls.control_browser)
+    )
     snippets = "\n\n".join(snippets_with_link.values())
+
     # Define enum for link_to_click, which is one of the link of snippets or None
-    browsing_function["parameters"]["properties"]["link_to_click"]["enum"] = list(
-        snippets_with_link.keys()
-    ) + ["null"]
+    assert function.parameters is not None, "function.parameters is None"
+    for parameter in function.parameters:
+        if "link" in parameter.name:
+            parameter.enum = cast(
+                list[JsonTypes], list(snippets_with_link.keys()) + ["null"]
+            )
+
     # The context is the most relevant content and snippets
     context: str = (
         f"Most relevant content\n```{relevant_content_and_scores[-1][0]}```\nSnippets\n```{snippets}```"
@@ -55,36 +65,35 @@ async def _get_browsing_action_and_link_to_click(
         else f"Snippets\n```{snippets}```"
     )
     # Get action and link to click from function call API
-    browsing_llm_output = (
-        await Shared().browsing_llm.agenerate(
-            messages=[
-                [
-                    SystemMessage(content=context),
-                    HumanMessage(content=query),
-                ]
-            ],
-            functions=[browsing_function],
-            function_call={"name": browsing_function["name"]},
-        )
-    ).llm_output
-    if browsing_llm_output is None:
-        return (None, None)
-    arguments = browsing_llm_output["function_calls"][0]["arguments"]
-    action = arguments.get("action")
-    link_to_click = arguments.get("link_to_click", "null")
+    function_call_parsed = await request_function_call(
+        messages=[
+            {"role": "system", "content": context},
+            {"role": "user", "content": query},
+        ],
+        functions=[function],
+        function_call=function,
+        timeout=timeout,
+    )
+    if "arguments" not in function_call_parsed:
+        raise ValueError("No arguments returned")
+    action = function_call_parsed["arguments"]["action"]
+    link_to_click = function_call_parsed["arguments"].get(
+        "link_to_click", "null"
+    )
     if action == "click_link":
         if link_to_click == "null":
             return (None, None)
-        return ("click_link", link_to_click)
+        return ("click_link", str(link_to_click))
     elif action == "finish_browsing":
         return ("finish_browsing", None)
     else:
-        return (None, None)
+        raise ValueError(f"Unknown action {action}")
 
 
-async def full_web_browsing_chain(
+async def full_web_browsing_callback(
     buffer: BufferedUserContext,
-    query: str,
+    query_to_search: str,
+    user_provided_links: list[str],
     finish: bool,
     wait_next_query: bool,
     show_result: bool = True,
@@ -100,7 +109,6 @@ async def full_web_browsing_chain(
         maxlen=num_content_chunks
     )
     visited_links: set[str] = set()
-    user_provided_links: list[str] = URL_PATTERN.findall(query)
     overall_snippets: Optional[str] = None
 
     def get_best_result():
@@ -129,23 +137,12 @@ async def full_web_browsing_chain(
             # ApiLogger("||get_best_result||").info("[3]" + str(overall_snippets))
             return overall_snippets
 
-    # Begin browsing
-    await SendToWebsocket.message(
-        websocket=buffer.websocket,
-        msg=Lotties.SEARCH_WEB.format("### Browsing web", end=False),
-        chat_room_id=buffer.current_chat_room_id,
-        finish=False,
-    )
     asession = AsyncHTMLSession()
     try:
         # Get query to search, and perform web search
-        query_to_search = await aget_query_to_search(
-            buffer=buffer,
-            query=query,
-            search_llm=Shared().web_search_llm,
-        )
         snippets_with_link: dict[str, str] = await run_in_threadpool(
-            Shared().duckduckgo.formatted_results_with_link, query=query_to_search
+            Shared().duckduckgo.formatted_results_with_link,
+            query=query_to_search,
         )
         for link in user_provided_links:
             snippets_with_link[link] = (
@@ -161,7 +158,7 @@ async def full_web_browsing_chain(
                 action,
                 link_to_click,
             ) = await _get_browsing_action_and_link_to_click(
-                query=query,
+                query=query_to_search,
                 snippets_with_link=snippets_with_link,
                 relevant_content_and_scores=relevant_content_and_scores,
             )
@@ -180,9 +177,11 @@ async def full_web_browsing_chain(
 
                 # Get click result and most relevant content & score
                 # Score: 0 = not relevant, 10 = most relevant
-                click_results: list[tuple[str, int]] = await click_link_chain(
+                click_results: list[
+                    tuple[str, int]
+                ] = await click_link_callback(
                     buffer=buffer,
-                    query=query,
+                    query=query_to_search,
                     link=link_to_click,
                     scrolling_chunk_size=scrolling_chunk_size,
                     scrolling_chunk_overlap=scrolling_chunk_overlap,
@@ -229,7 +228,9 @@ async def full_web_browsing_chain(
         # Exhausted all snippets. No more links to click
         await SendToWebsocket.message(
             websocket=buffer.websocket,
-            msg=Lotties.OK.format("### Finished browsing, but I couldn't find the result."),
+            msg=Lotties.OK.format(
+                "### Finished browsing, but I couldn't find the result."
+            ),
             chat_room_id=buffer.current_chat_room_id,
             finish=finish,
             wait_next_query=wait_next_query,
