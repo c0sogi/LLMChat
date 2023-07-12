@@ -6,7 +6,7 @@ from app.models.completion_models import FunctionCallParsed
 from app.models.function_calling.base import FunctionCall
 from app.utils.api.completion import request_chat_completion
 
-from .parser import parse_function_call_name_and_arguments
+from .parser import make_function_call_parsed_from_dict
 
 
 async def request_function_call(
@@ -36,7 +36,7 @@ async def request_function_call(
     )
     if function_call_unparsed is None:
         raise ValueError("No function call returned")
-    function_call_parsed = parse_function_call_name_and_arguments(
+    function_call_parsed = make_function_call_parsed_from_dict(
         function_call_unparsed
     )
     if force_arguments and "arguments" not in function_call_parsed:

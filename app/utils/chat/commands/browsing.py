@@ -1,12 +1,10 @@
 from typing import Optional
 
-from app.common.lotties import Lotties
 from app.models.chat_models import ResponseType
 from app.models.function_calling.functions import FunctionCalls
+from app.models.llms import OpenAIModel
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.managers.websocket import SendToWebsocket
-
-from app.utils.function_calling.callbacks.translate import translate_callback
+from app.utils.chat.messages.handler import MessageHandler
 from app.utils.function_calling.query import aget_query_to_search
 
 
@@ -18,36 +16,54 @@ class BrowsingCommands:
         """Query LLM with duckduckgo browse results\n
         /browse <query>"""
         if user_query.startswith("/"):
+            # User is trying to invoke another command.
+            # Give control back to the command handler,
+            # and let it handle the command.
+            # e.g. `/browse /help` will invoke `/help` command
             return user_query, ResponseType.REPEAT_COMMAND
 
-        translate: Optional[str] = kwargs.get("translate", None)
-        if translate:
-            translate_chain_result: Optional[str] = await translate_callback(
+        # Save user query to buffer and database
+        await MessageHandler.user(msg=user_query, buffer=buffer)
+
+        if not isinstance(buffer.current_llm_model.value, OpenAIModel):
+            # Non-OpenAI models can't invoke function call,
+            # so we force function calling here
+            query_to_search: str = await aget_query_to_search(
                 buffer=buffer,
                 query=user_query,
-                finish=False,
-                wait_next_query=False,
-                show_result=True,
-                src_lang=translate,
-                trg_lang="en",
+                function=FunctionCalls.get_function_call(
+                    FunctionCalls.web_search
+                ),
             )
-            if translate_chain_result is not None:
-                user_query = translate_chain_result
+            await MessageHandler.function_call(
+                callback_name=FunctionCalls.web_search.__name__,
+                callback_kwargs={"query_to_search": query_to_search},
+                buffer=buffer,
+            )
+        else:
+            # OpenAI models can invoke function call,
+            # so let the AI decide whether to invoke function call
+            functions = buffer.optional_info.get("functions")
+            function_call = buffer.optional_info.get("function_call")
 
-        # Get query to search
-        await SendToWebsocket.message(
-            websocket=buffer.websocket,
-            msg=Lotties.SEARCH_WEB.format("### Browsing web", end=False),
-            chat_room_id=buffer.current_chat_room_id,
-            finish=False,
-        )
-        query_to_search = await aget_query_to_search(
-            buffer=buffer,
-            query=user_query,
-            function=FunctionCalls.get_function_call(FunctionCalls.web_search),
-        )
+            function = FunctionCalls.get_function_call(
+                FunctionCalls.web_search
+            )
 
-        return await FunctionCalls.web_search(
-            query_to_search=query_to_search,
-            buffer=buffer,
-        )
+            try:
+                # Let AI decide whether to invoke function call
+                buffer.optional_info["functions"] = [function]
+                buffer.optional_info["function_call"] = function
+                await MessageHandler.ai(buffer=buffer)
+            finally:
+                # Restore original function call
+                buffer.optional_info["functions"] = functions
+                buffer.optional_info["function_call"] = function_call
+                # Remove function call messages when all function calls are done
+                buffer.current_system_message_histories[:] = [
+                    system_message_history
+                    for system_message_history in buffer.current_system_message_histories
+                    if not system_message_history.role.startswith("function: ")
+                ]
+        # End of command
+        return None, ResponseType.DO_NOTHING

@@ -40,7 +40,9 @@ class UserChatContext:
     llm_model: Enum
     user_message_histories: list[MessageHistory] = field(default_factory=list)
     ai_message_histories: list[MessageHistory] = field(default_factory=list)
-    system_message_histories: list[MessageHistory] = field(default_factory=list)
+    system_message_histories: list[MessageHistory] = field(
+        default_factory=list
+    )
 
     optional_info: dict = field(default_factory=dict)
 
@@ -79,8 +81,12 @@ class UserChatContext:
         return {
             "user_chat_profile": asdict(self.user_chat_profile),
             "llm_model": self.llm_model.name,
-            "user_message_histories": [m.__dict__ for m in self.user_message_histories],
-            "ai_message_histories": [m.__dict__ for m in self.ai_message_histories],
+            "user_message_histories": [
+                m.__dict__ for m in self.user_message_histories
+            ],
+            "ai_message_histories": [
+                m.__dict__ for m in self.ai_message_histories
+            ],
             "system_message_histories": [
                 m.__dict__ for m in self.system_message_histories
             ],
@@ -208,7 +214,6 @@ class UserChatContext:
 
 class ResponseType(str, Enum):
     SEND_MESSAGE_AND_STOP = "send_message_and_stop"
-    SEND_MESSAGE_AND_KEEP_GOING = "send_message_and_keep_going"
     HANDLE_USER = "handle_user"
     HANDLE_AI = "handle_ai"
     HANDLE_BOTH = "handle_both"
@@ -223,12 +228,17 @@ class command_response:
     ) -> Callable[..., Callable]:
         def decorator(
             func: Callable,
-        ) -> Callable[
-            [Any],
-            Tuple[Any, ResponseType] | Awaitable[Tuple[Any, ResponseType]],
-        ]:
+        ) -> (
+            Callable[
+                ...,
+                Tuple[Any, ResponseType],
+            ]
+            | Callable[..., Awaitable[Tuple[Any, ResponseType]]]
+        ):
             @wraps(func)
-            def sync_wrapper(*args: Any, **kwargs: Any) -> Tuple[Any, ResponseType]:
+            def sync_wrapper(
+                *args: Any, **kwargs: Any
+            ) -> Tuple[Any, ResponseType]:
                 result = func(*args, **kwargs)
                 return (result, enum_type)
 
@@ -244,7 +254,6 @@ class command_response:
         return decorator
 
     send_message_and_stop = _wrapper(ResponseType.SEND_MESSAGE_AND_STOP)
-    send_message_and_keep_going = _wrapper(ResponseType.SEND_MESSAGE_AND_KEEP_GOING)
     handle_user = _wrapper(ResponseType.HANDLE_USER)
     handle_ai = _wrapper(ResponseType.HANDLE_AI)
     handle_both = _wrapper(ResponseType.HANDLE_BOTH)

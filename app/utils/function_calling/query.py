@@ -9,7 +9,6 @@ from app.models.chat_models import ChatRoles, MessageHistory
 from app.models.function_calling.base import FunctionCall
 from app.shared import Shared
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.managers.websocket import SendToWebsocket
 from app.utils.chat.messages.converter import (
     chat_completion_api_parse_method,
     message_histories_to_list,
@@ -60,18 +59,7 @@ async def aget_query_to_search(
         )
         if "arguments" not in function_call_parsed:
             raise ValueError("No arguments returned")
-        query_to_search = str(
-            function_call_parsed["arguments"]["query_to_search"]
-        )
-        await SendToWebsocket.message(
-            websocket=buffer.websocket,
-            msg="\n---\n{query_to_search}\n```\n".format(
-                query_to_search=query_to_search.replace("```", "'''")
-            ),
-            chat_room_id=buffer.current_chat_room_id,
-            finish=False,
-        )
-        return query_to_search
+        return str(function_call_parsed["arguments"]["query_to_search"])
     except Exception:
         return query
 
@@ -82,13 +70,11 @@ async def aget_json(
     """Get json from query template and kwargs to format"""
     try:
         json_query = JSON_PATTERN.search(
-            await Shared().llm.apredict(
-                query_template.format(**kwargs_to_format)
-            )
+            await Shared().llm.apredict(query_template.format(**kwargs_to_format))
         )
         if json_query is None:
             raise ValueError("Result is None")
         else:
             return orjson_loads(json_query.group())
     except Exception:
-        return
+        return None

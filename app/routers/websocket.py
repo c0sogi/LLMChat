@@ -19,10 +19,10 @@ async def ws_chat(websocket: WebSocket, api_key: str):
         raise Responses_400.not_supported_feature
     await websocket.accept()  # accept websocket
     if api_key != OPENAI_API_KEY and not API_ENV == "test":
-        api_key, user = await api_keys.get_api_key_and_owner(
+        _api_key, _user = await api_keys.get_api_key_and_owner(
             access_key=api_key
         )
-        if user.status not in (UserStatus.active, UserStatus.admin):
+        if _user.status not in (UserStatus.active, UserStatus.admin):
             await SendToWebsocket.message(
                 websocket=websocket,
                 msg="Your account is not active",
@@ -30,7 +30,7 @@ async def ws_chat(websocket: WebSocket, api_key: str):
             )
             await sleep(60)
             raise Responses_401.not_authorized
-        if api_key.status is not ApiKeyStatus.active:
+        if _api_key.status is not ApiKeyStatus.active:
             await SendToWebsocket.message(
                 websocket=websocket,
                 msg="Your api key is not active",
@@ -39,8 +39,8 @@ async def ws_chat(websocket: WebSocket, api_key: str):
             await sleep(60)
             raise Responses_401.not_authorized
     else:
-        user: Users = Users(email=f"testaccount@{HOST_MAIN}")
+        _user = Users(email=f"testaccount@{HOST_MAIN}")
     await ChatStreamManager.begin_chat(
         websocket=websocket,
-        user=user,
+        user=_user,
     )

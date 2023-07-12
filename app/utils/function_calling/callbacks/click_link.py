@@ -1,4 +1,3 @@
-import asyncio
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -6,10 +5,8 @@ from requests_html import HTML, AsyncHTMLSession
 
 from app.common.lotties import Lotties
 from app.models.base_models import ParserDefinitions
-from app.models.completion_models import FunctionCallParsed
 from app.models.function_calling.functions import FunctionCalls
 from app.shared import Shared
-from app.utils.api.completion import request_chat_completion
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.managers.websocket import SendToWebsocket
 from app.utils.logger import ApiLogger
@@ -119,9 +116,9 @@ async def _get_controlling_page_and_relevance_score(
             if (
                 isinstance(relevance_score, str) and relevance_score.isdigit()
             ) or isinstance(relevance_score, int):
-                return (action, int(relevance_score))
+                return (str(action), int(relevance_score))
             else:
-                return (action, None)
+                return (str(action), None)
         else:
             raise ValueError("Invalid action")
     except Exception:
@@ -157,7 +154,7 @@ async def click_link_callback(
         # Get content from link
         await SendToWebsocket.message(
             websocket=buffer.websocket,
-            msg=Lotties.READ.format(f"### Reading content"),
+            msg=Lotties.READ.format("### Reading content"),
             chat_room_id=buffer.current_chat_room_id,
             finish=False,
         )

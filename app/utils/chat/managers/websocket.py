@@ -154,26 +154,11 @@ class SendToWebsocket:
             Union[AsyncIterator, Iterator],
         ],
         stream_progress: StreamProgress,
-        finish: bool = True,
         actual_role: Optional[str] = None,
         chunk_size: int = 1,
-        model_name: Optional[str] = None,
-        wait_next_query: Optional[bool] = None,
     ) -> None:
         """Send SSE stream to websocket"""
         current_model: LLMModel = buffer.current_llm_model.value
-
-        async def hand_shake() -> None:
-            # Send initial message
-            await cls.message(
-                websocket=buffer.websocket,
-                msg=None,
-                chat_room_id=buffer.current_chat_room_id,
-                finish=False,
-                actual_role=actual_role,
-                model_name=model_name,
-                uuid=stream_progress.uuid,
-            )
 
         async def consumer(async_stream: AsyncIterator) -> None:
             """Helper function to send chunks of data"""
@@ -205,7 +190,7 @@ class SendToWebsocket:
         ) -> None:
             if token_limit < ChatConfig.extra_token_margin:
                 raise ChatTextGenerationException(
-                    msg=f"No tokens left to generate text."
+                    msg="No tokens left to generate text."
                 )
             if response_in_progress is not None:
                 ai_message_histories.append(response_in_progress)
@@ -254,7 +239,7 @@ class SendToWebsocket:
                     return
                 if response_in_progress is not None:
                     ai_message_histories.pop()
-                    new_content: str = (
+                    new_content = (
                         response_in_progress.content.replace(
                             ChatConfig.continue_message, ""
                         )
@@ -262,7 +247,7 @@ class SendToWebsocket:
                         + ChatConfig.continue_message
                     )
                 else:
-                    new_content: str = e.msg + ChatConfig.continue_message
+                    new_content = e.msg + ChatConfig.continue_message
                 await transmission(
                     ai_message_histories=ai_message_histories,
                     user_message_histories=user_message_histories,
@@ -280,30 +265,14 @@ class SendToWebsocket:
                     ),
                 )
 
-        async def good_bye() -> None:
-            await cls.message(
-                websocket=buffer.websocket,
-                msg=stream_progress.buffer,
-                chat_room_id=buffer.current_chat_room_id,
-                finish=finish,
-                actual_role=actual_role,
-                model_name=None,
-                wait_next_query=wait_next_query,
-            )
-
-        try:
-            await hand_shake()
-            await transmission(
-                ai_message_histories=buffer.current_ai_message_histories,
-                user_message_histories=buffer.current_user_message_histories,
-                system_message_histories=buffer.current_system_message_histories,
-                token_limit=(
-                    current_model.max_total_tokens
-                    - current_model.token_margin
-                    - current_model.prefix_tokens
-                    - current_model.suffix_tokens
-                ),
-            )
-
-        finally:
-            await good_bye()
+        await transmission(
+            ai_message_histories=buffer.current_ai_message_histories,
+            user_message_histories=buffer.current_user_message_histories,
+            system_message_histories=buffer.current_system_message_histories,
+            token_limit=(
+                current_model.max_total_tokens
+                - current_model.token_margin
+                - current_model.prefix_tokens
+                - current_model.suffix_tokens
+            ),
+        )

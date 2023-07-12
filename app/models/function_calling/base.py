@@ -1,19 +1,25 @@
 """Helper classes for wrapping functions in OpenAI's API"""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from sys import version_info
 from types import NoneType
 from typing import (
     Any,
-    Callable,
     Generic,
     Literal,
-    NotRequired,
     Optional,
     Type,
     TypeVar,
     TypedDict,
     Union,
 )
+
+# If python version >= 3.11, use the built-in NotRequired type.
+# Otherwise, import it from typing_extensi
+if version_info >= (3, 11):
+    from typing import NotRequired  # type: ignore
+else:
+    from typing_extensions import NotRequired
 
 # The types that can be used in JSON
 JsonTypes = Union[int, float, str, bool, dict, list, None]
@@ -53,7 +59,7 @@ class FunctionCallParameter(Generic[ParamType]):
         """Returns a dictionary representation of the parameter"""
         parameter_property: ParameterProperty = {
             "type": self._get_json_type(self.type)
-        }
+        }  # type: ignore
         if self.description:
             parameter_property["description"] = self.description
         if self.enum:
@@ -95,7 +101,7 @@ class FunctionCall:
 
     def to_dict(self) -> FunctionProperty:
         """Returns a dictionary representation of the function"""
-        function_property: FunctionProperty = FunctionProperty(name=self.name)
+        function_property: FunctionProperty = FunctionProperty(name=self.name)  # type: ignore
         if self.description:
             function_property["description"] = self.description
         if self.parameters:

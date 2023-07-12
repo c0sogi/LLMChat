@@ -1,14 +1,11 @@
 import json
 from inspect import signature
 from re import compile
-from types import NoneType, UnionType
 from typing import (
     Annotated,
     Any,
     Callable,
     Iterable,
-    Type,
-    Union,
     get_args,
     get_origin,
 )
@@ -22,44 +19,33 @@ from app.models.function_calling.base import (
     FunctionCallParameter,
     JsonTypes,
 )
+from app.utils.types import get_type_and_optional
 
 
-def _get_type_and_optional(t) -> tuple[Type, bool]:
-    """Returns the type and whether it's an Optional type."""
-    # Optional[str] is equivalent to Union[str, None], so check if it's a Union type.
-    if get_origin(t) in (UnionType, Union):
-        args: tuple[Type, ...] = get_args(t)
-        # If there's a None type in the Union, it's an Optional type.
-        optional = type(None) in args
-        # Return the first argument that isn't None.
-        first_arg = next(arg for arg in args if arg is not NoneType)
-        return first_arg, optional
-    else:
-        # If it's not a Union type, it's not an Optional type.
-        return t, False
-
-
-def parse_function_call_name_and_arguments(
-    function_call_unparsed: FunctionCallUnparsed,
+def make_function_call_parsed_from_dict(
+    unparsed_dict: dict[str, JsonTypes] | FunctionCallParsed | FunctionCallUnparsed,
 ) -> FunctionCallParsed:
     """
     Parse function call response from API into a FunctionCallParsed object.
     This is a helper method to identify what function will be called and what
     arguments will be passed to it."""
 
-    if "name" not in function_call_unparsed:
+    if "name" not in unparsed_dict:
         raise ValueError("Function call name is required.")
 
     function_call_parsed: FunctionCallParsed = FunctionCallParsed(
-        name=function_call_unparsed["name"]
+        name=str(unparsed_dict["name"])
     )
-    try:
-        function_call_parsed["arguments"] = json.loads(
-            function_call_unparsed["arguments"]
-        )
-    except json.JSONDecodeError:
-        pass
-    return function_call_parsed
+    arguments = unparsed_dict.get("arguments", {})
+    if isinstance(arguments, dict):
+        function_call_parsed["arguments"] = arguments
+        return function_call_parsed
+    else:
+        try:
+            function_call_parsed["arguments"] = json.loads(str(arguments))
+        except json.JSONDecodeError:
+            pass
+        return function_call_parsed
 
 
 def parse_function_call_from_function(func: Callable) -> FunctionCall:
@@ -91,7 +77,7 @@ def parse_function_call_from_function(func: Callable) -> FunctionCall:
 
         else:
             _param_type = annotation
-        param_type, optional = _get_type_and_optional(_param_type)
+        param_type, optional = get_type_and_optional(_param_type)
         if not optional:
             required.append(name)
         if param_type not in json_types:

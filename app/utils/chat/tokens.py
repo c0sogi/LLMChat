@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, Optional, Union
 from langchain import PromptTemplate
 
 from app.common.config import ChatConfig
-from app.errors.chat_exceptions import ChatTextGenerationException
 from app.models.chat_models import ChatRoles, MessageHistory, UserChatContext
 
 if TYPE_CHECKING:
@@ -24,43 +23,15 @@ def get_token_limit_with_n_messages(
     with the given number of messages from each message history.
     This is used to determine if the LLM model has enough tokens to generate a response.
     """
-    llm_model = user_chat_context.llm_model.value
-    user_tokens: int = sum(
-        [
-            m.tokens
-            for m in user_chat_context.user_message_histories[
-                -min(
-                    n_user_messages,
-                    len(user_chat_context.user_message_histories),
-                ) :
-            ]
-        ]
-    )
-    ai_tokens: int = sum(
-        [
-            m.tokens
-            for m in user_chat_context.ai_message_histories[
-                -min(
-                    n_ai_messages, len(user_chat_context.ai_message_histories)
-                ) :
-            ]
-        ]
-    )
-    system_tokens: int = sum(
-        [
-            m.tokens
-            for m in user_chat_context.system_message_histories[
-                -min(
-                    n_system_messages,
-                    len(user_chat_context.system_message_histories),
-                ) :
-            ]
-        ]
-    )
+    llm_model: LLMModel = user_chat_context.llm_model.value
+    users: list[MessageHistory] = user_chat_context.user_message_histories
+    ais: list[MessageHistory] = user_chat_context.ai_message_histories
+    syss: list[MessageHistory] = user_chat_context.system_message_histories
+
     return llm_model.max_total_tokens - (
-        user_tokens
-        + ai_tokens
-        + system_tokens
+        sum([m.tokens for m in users[-min(n_user_messages, len(users)) :]])
+        + sum([m.tokens for m in ais[-min(n_ai_messages, len(ais)) :]])
+        + sum([m.tokens for m in syss[-min(n_system_messages, len(syss)) :]])
         + prefix_prompt_tokens
         + suffix_prompt_tokens
         + llm_model.token_margin
@@ -99,6 +70,28 @@ def make_formatted_query(
     return query_template.format(context=context, question=question)
 
 
+def make_truncated_text(
+    user_chat_context: UserChatContext,
+    text: str,
+) -> str:
+    llm_model = user_chat_context.llm_model.value
+    token_limit: int = (
+        get_token_limit_with_n_messages(
+            user_chat_context=user_chat_context,
+            n_ai_messages=0,
+            n_system_messages=0,
+            n_user_messages=0,
+            suffix_prompt_tokens=llm_model.suffix_tokens,
+            prefix_prompt_tokens=llm_model.prefix_tokens,
+        )
+        - 100
+    )
+    return llm_model.tokenizer.get_chunk_of(
+        text,
+        tokens=token_limit - user_chat_context.get_tokens_of(text),
+    )
+
+
 def cutoff_message_histories(
     user_chat_context: UserChatContext,
     user_message_histories: list[MessageHistory],
@@ -123,7 +116,7 @@ def cutoff_message_histories(
             tokens=llm_model.prefix_tokens,
             role=llm_model.user_chat_roles.system,
             actual_role=ChatRoles.SYSTEM.value,
-            timestamp=10000101000000,  # 1000/01/01 00:00:00
+            timestamp=-1,  # This is a dummy timestamp.
         )
     if suffix_prompt:
         suffix_message = MessageHistory(
@@ -131,7 +124,7 @@ def cutoff_message_histories(
             tokens=llm_model.suffix_tokens,
             role=llm_model.user_chat_roles.system,
             actual_role=ChatRoles.SYSTEM.value,
-            timestamp=99991231235959,  # 9999/12/31 23:59:59
+            timestamp=2**50,  # This is a dummy timestamp.
         )
 
     # Calculates a cap on the number of tokens excluding prefix and suffix messages.
@@ -142,10 +135,7 @@ def cutoff_message_histories(
         if suffix_message
         else token_limit
     )
-    print(f"- DEBUG: token_limit: {token_limit}")
-    print(f"- DEBUG: prefix_tokens: {prefix_message}")
-    print(f"- DEBUG: suffix_tokens: {suffix_message}")
-    print(f"- DEBUG: remaining_tokens: {remaining_tokens}")
+    print(f"- DEBUG: remaining_tokens: {remaining_tokens}", flush=True)
 
     # If the remaining tokens are negative, return an empty tuple.
     if remaining_tokens < 0:
@@ -158,8 +148,7 @@ def cutoff_message_histories(
         + [
             m
             for m in system_message_histories
-            if int(str(m.timestamp)[:4])
-            not in (range(2000), range(3001, 9999))
+            if not m.is_prefix and not m.is_suffix
         ],
         key=lambda m: m.timestamp,
     )

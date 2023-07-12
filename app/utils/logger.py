@@ -127,7 +127,7 @@ class ApiLogger(CustomLogger):
         if cls.__name__ not in cls._instances:
             cls(cls.__name__)
         super(ApiLogger, cls._instances[cls.__name__]).info(
-            msg=msg, *args, **kwargs
+            msg, *args, **kwargs
         )
 
     @classmethod
@@ -135,7 +135,7 @@ class ApiLogger(CustomLogger):
         if cls.__name__ not in cls._instances:
             cls(cls.__name__)
         super(ApiLogger, cls._instances[cls.__name__]).debug(
-            msg=msg, *args, **kwargs
+            msg, *args, **kwargs
         )
 
     @classmethod
@@ -143,7 +143,7 @@ class ApiLogger(CustomLogger):
         if cls.__name__ not in cls._instances:
             cls(cls.__name__)
         super(ApiLogger, cls._instances[cls.__name__]).warning(
-            msg=msg, *args, **kwargs
+            msg, *args, **kwargs
         )
 
     @classmethod
@@ -151,7 +151,7 @@ class ApiLogger(CustomLogger):
         if cls.__name__ not in cls._instances:
             cls(cls.__name__)
         super(ApiLogger, cls._instances[cls.__name__]).error(
-            msg=msg, *args, **kwargs
+            msg, *args, **kwargs
         )
 
     @classmethod
@@ -159,7 +159,7 @@ class ApiLogger(CustomLogger):
         if cls.__name__ not in cls._instances:
             cls(cls.__name__)
         super(ApiLogger, cls._instances[cls.__name__]).exception(
-            msg=msg, *args, **kwargs
+            msg, *args, **kwargs
         )
 
     @classmethod
@@ -167,7 +167,7 @@ class ApiLogger(CustomLogger):
         if cls.__name__ not in cls._instances:
             cls(cls.__name__)
         super(ApiLogger, cls._instances[cls.__name__]).critical(
-            msg=msg, *args, **kwargs
+            msg, *args, **kwargs
         )
 
     @classmethod

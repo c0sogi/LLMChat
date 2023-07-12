@@ -25,4 +25,7 @@
         "*.inc": "cpp"
     },
     "python.linting.pylintEnabled": false,
+    "pylint.path": [
+        "-"
+    ],
 }

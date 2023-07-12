@@ -5,13 +5,6 @@ from functools import partial
 from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar
 
 from langchain import PromptTemplate
-from langchain.schema import (
-    AIMessage,
-    BaseMessage,
-    FunctionMessage,
-    HumanMessage,
-    SystemMessage,
-)
 
 from app.common.constants import ChatTurnTemplates
 from app.models.base_models import (
@@ -19,18 +12,24 @@ from app.models.base_models import (
     MessageHistory,
     UserChatRoles,
 )
-from app.models.chat_models import ChatRoles, MessageHistory, UserChatContext
+from app.models.chat_models import ChatRoles
 
 from .turn_templates import shatter_chat_turn_prompt
 
 if TYPE_CHECKING:
-    from app.models.llms import LLMModel
+    from langchain.schema import BaseMessage
 
 T = TypeVar("T")
 
 
-def langchain_parse_method(message_history: MessageHistory) -> BaseMessage:
+def langchain_parse_method(message_history: MessageHistory) -> "BaseMessage":
     """Parse message history to langchain message format."""
+    from langchain.schema import (
+        AIMessage,
+        FunctionMessage,
+        HumanMessage,
+        SystemMessage,
+    )
 
     if message_history.summarized is not None:
         message_history = deepcopy(message_history)
@@ -63,17 +62,23 @@ def chat_completion_api_parse_method(
         return APIChatMessage(
             role="user",
             content=message_history.content,
-        ).dict()
+        ).dict(exclude_none=True)
     elif message_history.actual_role == ChatRoles.AI.value:
         return APIChatMessage(
             role="assistant",
             content=message_history.content,
-        ).dict()
+        ).dict(exclude_none=True)
     else:
+        if message_history.role.startswith("function: "):
+            return APIChatMessage(
+                role="function",
+                content=message_history.content,
+                name=message_history.role.removeprefix("function: "),
+            ).dict(exclude_none=True)
         return APIChatMessage(
             role="system",
             content=message_history.content,
-        ).dict()
+        ).dict(exclude_none=True)
 
 
 def text_completion_api_parse_method(
@@ -141,9 +146,9 @@ def message_histories_to_str(
     user_message_histories: list[MessageHistory],
     ai_message_histories: list[MessageHistory],
     system_message_histories: Optional[list[MessageHistory]] = None,
-    parse_method: Optional[Callable[[MessageHistory], Any]] = None,
+    parse_method: Optional[Callable[[MessageHistory], str]] = None,
     chat_turn_prompt: PromptTemplate = ChatTurnTemplates.ROLE_CONTENT_1,
-):
+) -> str:
     """Convert message histories to string.
     Messages are sorted by timestamp.
     Prefix and suffix prompts are added to the list of messages."""
@@ -151,16 +156,16 @@ def message_histories_to_str(
     shattered: tuple[str, ...] = shatter_chat_turn_prompt(
         "role", "content", chat_turn_prompt=chat_turn_prompt
     )
+    if parse_method is None:
+        parse_method = partial(
+            text_completion_api_parse_method,
+            chat_turn_prompt=chat_turn_prompt,
+        )
 
     return (
         "".join(
             message_histories_to_list(
-                parse_method=partial(
-                    text_completion_api_parse_method,
-                    chat_turn_prompt=chat_turn_prompt,
-                )
-                if parse_method is None
-                else parse_method,
+                parse_method=parse_method,
                 user_message_histories=user_message_histories,
                 ai_message_histories=ai_message_histories,
                 system_message_histories=system_message_histories,

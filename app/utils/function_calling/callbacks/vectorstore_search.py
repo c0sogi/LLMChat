@@ -2,47 +2,29 @@ from typing import Optional, Tuple
 
 from app.common.config import ChatConfig, config
 from app.common.lotties import Lotties
-from app.models.function_calling.functions import FunctionCalls
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.managers.vectorstore import Document, VectorStoreManager
 from app.utils.chat.managers.websocket import SendToWebsocket
+from app.utils.chat.tokens import make_truncated_text
 from app.utils.logger import ApiLogger
-
-from ..query import aget_query_to_search
 
 
 async def vectorstore_search_callback(
     buffer: BufferedUserContext,
-    query: str,
+    query_to_search: str,
     finish: bool,
     wait_next_query: bool,
     show_result: bool = False,
     k: int = ChatConfig.vectorstore_n_results_limit,
 ) -> Optional[str]:
-    await SendToWebsocket.message(
-        websocket=buffer.websocket,
-        msg=Lotties.SEARCH_DOC.format("### Searching vectorstore", end=False),
-        chat_room_id=buffer.current_chat_room_id,
-        finish=False,
-    )
     try:
-        query_to_search: str = await aget_query_to_search(
-            buffer=buffer,
-            query=query,
-            function=FunctionCalls.get_function_call(
-                FunctionCalls.vectorstore_search
-            ),
-        )
         found_text_and_score: list[
             Tuple[Document, float]
         ] = await VectorStoreManager.asimilarity_search_multiple_collections_with_score(
             query=query_to_search,
             collection_names=[buffer.user_id, config.shared_vectorestore_name],
             k=k,
-        )  # lower score is the better!
-        # ApiLogger("||vectorstore_query_chain||").info(
-        #     [score for _, score in found_text_and_score]
-        # )
+        )
         if not found_text_and_score:
             raise Exception("No result found")
 
@@ -61,10 +43,15 @@ async def vectorstore_search_callback(
             finish=finish,
             wait_next_query=wait_next_query,
         )
+        if found_text:
+            found_text = make_truncated_text(
+                user_chat_context=buffer.current_user_chat_context,
+                text=found_text,
+            )
         return found_text
 
     except Exception as e:
-        ApiLogger("||vectorstore_query_chain||").exception(e)
+        ApiLogger("||vectorstore_search_callback||").exception(e)
         await SendToWebsocket.message(
             msg=Lotties.FAIL.format("### Failed to search vectorstore"),
             websocket=buffer.websocket,
@@ -72,3 +59,4 @@ async def vectorstore_search_callback(
             finish=finish,
             wait_next_query=wait_next_query,
         )
+        return None

@@ -1,11 +1,10 @@
 from typing import Annotated, Callable, Optional
 
-from app.common.constants import QueryTemplates
-from app.models.chat_models import ChatRoles, ResponseType
+from app.common.lotties import Lotties
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.tokens import make_formatted_query
+from app.utils.chat.managers.websocket import SendToWebsocket
+
 from app.utils.function_calling.parser import parse_function_call_from_function
-from app.utils.logger import ApiLogger
 
 from .base import FunctionCall
 
@@ -28,11 +27,16 @@ class FunctionCallsMetaClass(type):
                 cls.function_calls[function_call.name] = function_call
 
     def get_function_call(cls, function: Callable) -> FunctionCall:
+        """Get the FunctionCall object for the given function."""
         if function.__name__ not in cls.function_calls:
             cls.function_calls[
                 function.__name__
             ] = parse_function_call_from_function(function)
         return cls.function_calls[function.__name__]
+
+    def get_function(cls, function_name: str) -> Callable:
+        """Get the function for the given function name."""
+        return getattr(cls, function_name)
 
 
 class FunctionCalls(metaclass=FunctionCallsMetaClass):
@@ -40,11 +44,6 @@ class FunctionCalls(metaclass=FunctionCallsMetaClass):
     This class is used to parse all functions in the FunctionCalls class into
     FunctionCall objects. FunctionCall objects are used to represent the
     specification of a function and will be used for `function_calling`."""
-
-    @classmethod
-    def _get_function(cls, function_name: str) -> Callable:
-        print(f"- DEBUG: Getting function {function_name}")
-        return getattr(cls, function_name)
 
     @staticmethod
     def control_browser(
@@ -104,26 +103,40 @@ class FunctionCalls(metaclass=FunctionCallsMetaClass):
             "earching the web.",
         ],
         buffer: BufferedUserContext,
-    ) -> tuple[None, ResponseType]:
+    ) -> Optional[str]:
         """Perform web search for a user's question."""
 
-        from app.utils.chat.managers.message import MessageManager
-        from app.utils.chat.messages.handler import MessageHandler
         from app.utils.function_calling.callbacks.full_browsing import (
             URL_PATTERN,
             full_web_browsing_callback,
         )
 
+        # Get user's question, or use the last user message if the user did not
+        # provide a question.
+        # Also, get the links in the user's question if exist.
+        # The links will be used to browse the web if AI chooses to do so.
         user_query = (
-            buffer.last_user_message.removeprefix("/browse ")
+            buffer.current_user_message_histories[-1].content
+            if buffer.current_user_message_histories
+            else buffer.last_user_message.removeprefix("/browse")
             if buffer.last_user_message
             else query_to_search
         )
-        if not user_query:
-            user_provided_links = []
-        else:
-            user_provided_links = URL_PATTERN.findall(user_query)
+        user_provided_links = URL_PATTERN.findall(user_query)
 
+        # Notify frontend that we are browsing the web.
+        await SendToWebsocket.message(
+            websocket=buffer.websocket,
+            msg=Lotties.SEARCH_WEB.format(
+                "### Browsing web\n---\n{query_to_search}".format(
+                    query_to_search=query_to_search.replace("```", "'''")
+                )
+            ),
+            chat_room_id=buffer.current_chat_room_id,
+            finish=False,
+        )
+
+        # Return the browsing result.
         browsing_result: Optional[str] = await full_web_browsing_callback(
             buffer=buffer,
             query_to_search=query_to_search,
@@ -131,33 +144,8 @@ class FunctionCalls(metaclass=FunctionCallsMetaClass):
             finish=True,
             wait_next_query=True,
         )
-        if browsing_result:
-            query_to_send: str = make_formatted_query(
-                user_chat_context=buffer.current_user_chat_context,
-                question=user_query,
-                context=browsing_result,
-                query_template=QueryTemplates.CONTEXT_QUESTION__WEB_BROWSING,
-            )
-        else:
-            query_to_send: str = user_query
 
-        ApiLogger("||browse||").info(query_to_send)
-        await MessageHandler.user(
-            msg=query_to_send,
-            buffer=buffer,
-            use_tight_token_limit=False,
-        )
-        try:
-            await MessageHandler.ai(buffer=buffer)
-        finally:
-            if browsing_result is not None:
-                await MessageManager.set_message_history_safely(
-                    user_chat_context=buffer.current_user_chat_context,
-                    role=ChatRoles.USER,
-                    index=-1,
-                    new_content=user_query,
-                )
-        return None, ResponseType.DO_NOTHING
+        return browsing_result
 
     @staticmethod
     async def vectorstore_search(
@@ -165,18 +153,41 @@ class FunctionCalls(metaclass=FunctionCallsMetaClass):
             str,
             "Hypothetical answer to facilitate searching in the Vector database.",
         ],
-        **kwargs,
+        buffer: BufferedUserContext,
     ) -> Optional[str]:
         """Perform vector similarity-based search for user's question."""
         from app.utils.function_calling.callbacks.vectorstore_search import (
             vectorstore_search_callback,
         )
 
-        buffer = kwargs.get("buffer")
-        assert buffer is not None, "Buffer must be provided."
-        return await vectorstore_search_callback(
+        # user_query = (
+        #     buffer.current_user_message_histories[-1].content
+        #     if buffer.current_user_message_histories
+        #     else buffer.last_user_message.removeprefix("/query")
+        #     if buffer.last_user_message
+        #     else query_to_search
+        # )
+
+        # Notify frontend that we are browsing the web.
+        await SendToWebsocket.message(
+            websocket=buffer.websocket,
+            msg=Lotties.SEARCH_DOC.format(
+                "### Searching vectorstore\n---\n{query_to_search}".format(
+                    query_to_search=query_to_search.replace("```", "'''")
+                )
+            ),
+            chat_room_id=buffer.current_chat_room_id,
+            finish=False,
+        )
+
+        # Return the browsing result.
+        vectorstore_search_result: Optional[
+            str
+        ] = await vectorstore_search_callback(
             buffer=buffer,
-            query=query_to_search,
+            query_to_search=query_to_search,
             finish=True,
             wait_next_query=True,
         )
+
+        return vectorstore_search_result

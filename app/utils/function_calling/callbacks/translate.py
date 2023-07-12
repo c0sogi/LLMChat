@@ -23,12 +23,8 @@ async def translate_callback(
         finish=False,
     )
     try:
-        r = await Translator.translate(
-            text=query, src_lang=src_lang, trg_lang=trg_lang
-        )
-        r_show = (
-            show_result_prefix + r if show_result_prefix is not None else r
-        )
+        r = await Translator.translate(text=query, src_lang=src_lang, trg_lang=trg_lang)
+        r_show = show_result_prefix + r if show_result_prefix is not None else r
         await SendToWebsocket.message(
             msg=Lotties.OK.format("### Finished translation")
             + (r_show if show_result else ""),
@@ -46,3 +42,4 @@ async def translate_callback(
             finish=finish,
             wait_next_query=wait_next_query,
         )
+        return None

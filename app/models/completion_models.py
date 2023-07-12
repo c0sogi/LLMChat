@@ -1,4 +1,12 @@
-from typing import Dict, List, Optional, Literal, NotRequired, TypedDict
+from sys import version_info
+from typing import Dict, List, Optional, Literal, TypedDict
+
+# If python version >= 3.11, use the built-in NotRequired type.
+# Otherwise, import it from typing_extensi
+if version_info >= (3, 11):
+    from typing import NotRequired  # type: ignore
+else:
+    from typing_extensions import NotRequired
 
 from .function_calling.base import JsonTypes
 

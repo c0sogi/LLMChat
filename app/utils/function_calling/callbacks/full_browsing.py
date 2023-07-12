@@ -1,4 +1,3 @@
-import asyncio
 from collections import deque
 from copy import deepcopy
 from re import Pattern, compile
@@ -12,7 +11,6 @@ from app.common.lotties import Lotties
 from app.models.function_calling.base import FunctionCall, JsonTypes
 from app.models.function_calling.functions import FunctionCalls
 from app.shared import Shared
-from app.utils.api.completion import request_chat_completion
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.managers.websocket import SendToWebsocket
 from app.utils.logger import ApiLogger

@@ -17,7 +17,7 @@ from app.models.completion_models import (
     FunctionCallUnparsed,
 )
 
-##### CHAT COMPLETION #####
+# ==== CHAT COMPLETION ====#
 
 
 def make_chat_completion(
@@ -160,13 +160,13 @@ def make_chat_completion_chunk_from_json(json_data: dict) -> ChatCompletionChunk
         model=json_data["model"],
         role=delta.get("role"),
         content=delta.get("content"),
-        finish_reason=json_data.get("finish_reason"),
+        finish_reason=json_data["choices"][0].get("finish_reason"),
         function_name=function_name,
         function_args=function_arguments,
     )
 
 
-##### TEXT COMPLETION #####
+# ==== TEXT COMPLETION ==== #
 
 
 def make_completion_chunk(

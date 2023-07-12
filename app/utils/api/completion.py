@@ -1,3 +1,4 @@
+from json import dumps
 import logging
 from datetime import timedelta
 from re import Pattern, compile
@@ -148,6 +149,7 @@ def _get_response_exception(
 
     # Rate limits were previously coded as 400's with code 'rate_limit'
     if rcode == 429:
+        print("- DEBUG: RateLimitError", error_data.get("message"), flush=True)
         return error.RateLimitError(
             error_data.get("message"), rbody, rcode, resp, rheaders
         )
@@ -209,6 +211,9 @@ async def _handle_error_response(
         if isinstance(error, dict):
             error_msg = str(error.get("message"))
             if "maximum context length" in error_msg:
+                print(
+                    "- DEBUG: ChatTooMuchTokenException", error_msg, flush=True
+                )
                 raise ChatTooMuchTokenException(msg="")
         else:
             error_msg = str(error)
@@ -400,8 +405,10 @@ async def request_chat_completion_with_streaming(
     """
     kwargs.pop("stream", None)
     print(
-        f"- DEBUG: ||request_chat_completion_with_streaming|| Sending messages: {messages}"
+        f"- DEBUG: Sending messages: \n{dumps(messages, indent=2)}", flush=True
     )
+    print(f"- DEBUG: Sending functions: {functions}", flush=True)
+    print(f"- DEBUG: Sending function_call: {function_call}", flush=True)
 
     async def get_chat_completion_chunks(
         *args, **kwargs

@@ -111,6 +111,7 @@ class BufferedUserContext:
             ):
                 if message_history.uuid == message_history_uuid:
                     return message_history_index
+            return None
         except ValueError:
             return None
 

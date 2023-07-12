@@ -12,32 +12,29 @@ class MessageManager:
         user_chat_context: UserChatContext,
         content: str,
         role: ChatRoles,
+        custom_role: Optional[str] = None,
         update_cache: bool = True,
         calculated_tokens_to_use: Optional[int] = None,
         uuid: Optional[str] = None,
     ) -> None:
         if role is ChatRoles.AI:
-            user_defined_role: str = user_chat_context.user_chat_roles.ai
+            user_chat_role = user_chat_context.user_chat_roles.ai
             actual_role: str = ChatRoles.AI.value
             histories_to_update: list[
                 MessageHistory
             ] = user_chat_context.ai_message_histories
         elif role is ChatRoles.USER:
-            user_defined_role: str = user_chat_context.user_chat_roles.user
-            actual_role: str = ChatRoles.USER.value
-            histories_to_update: list[
-                MessageHistory
-            ] = user_chat_context.user_message_histories
+            user_chat_role = user_chat_context.user_chat_roles.user
+            actual_role = ChatRoles.USER.value
+            histories_to_update = user_chat_context.user_message_histories
         elif role is ChatRoles.SYSTEM:
-            user_defined_role: str = user_chat_context.user_chat_roles.system
-            actual_role: str = ChatRoles.SYSTEM.value
-            histories_to_update: list[
-                MessageHistory
-            ] = user_chat_context.system_message_histories
+            user_chat_role = user_chat_context.user_chat_roles.system
+            actual_role = ChatRoles.SYSTEM.value
+            histories_to_update = user_chat_context.system_message_histories
         else:
             raise ValueError(f"Invalid role: {role}")
         message_history: MessageHistory = MessageHistory(
-            role=user_defined_role,
+            role=user_chat_role if custom_role is None else custom_role,
             content=content,
             tokens=user_chat_context.get_tokens_of(content)
             + user_chat_context.llm_model.value.token_margin
@@ -71,13 +68,9 @@ class MessageManager:
                 MessageHistory
             ] = user_chat_context.ai_message_histories
         elif role is ChatRoles.USER:
-            histories_to_pop: list[
-                MessageHistory
-            ] = user_chat_context.user_message_histories
+            histories_to_pop = user_chat_context.user_message_histories
         elif role is ChatRoles.SYSTEM:
-            histories_to_pop: list[
-                MessageHistory
-            ] = user_chat_context.system_message_histories
+            histories_to_pop = user_chat_context.system_message_histories
         else:
             raise ValueError(f"Invalid role: {role}")
         if count is None or count == 1:
@@ -131,11 +124,11 @@ class MessageManager:
                     user_chat_context.ai_message_histories[index]
                 )
             elif role is ChatRoles.USER:
-                histories_to_change: MessageHistory = (
-                    user_chat_context.user_message_histories[index]
-                )
+                histories_to_change = user_chat_context.user_message_histories[
+                    index
+                ]
             elif role is ChatRoles.SYSTEM:
-                histories_to_change: MessageHistory = (
+                histories_to_change = (
                     user_chat_context.system_message_histories[index]
                 )
             else:
@@ -172,10 +165,10 @@ class MessageManager:
             n_deleted: int = len(user_chat_context.ai_message_histories)
             user_chat_context.ai_message_histories = []
         elif role is ChatRoles.USER:
-            n_deleted: int = len(user_chat_context.user_message_histories)
+            n_deleted = len(user_chat_context.user_message_histories)
             user_chat_context.user_message_histories = []
         elif role is ChatRoles.SYSTEM:
-            n_deleted: int = len(user_chat_context.system_message_histories)
+            n_deleted = len(user_chat_context.system_message_histories)
             user_chat_context.system_message_histories = []
         else:
             raise ValueError(f"Invalid role: {role}")

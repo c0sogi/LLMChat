@@ -1,18 +1,14 @@
-from typing import Optional, Tuple
+from typing import Optional
 
 from app.common.config import config
-from app.common.constants import QueryTemplates
 from app.common.lotties import Lotties
-from app.models.chat_models import ChatRoles, ResponseType, command_response
+from app.models.chat_models import ResponseType, command_response
+from app.models.function_calling.functions import FunctionCalls
+from app.models.llms import OpenAIModel
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.managers.message import MessageManager
 from app.utils.chat.managers.vectorstore import VectorStoreManager
 from app.utils.chat.messages.handler import MessageHandler
-from app.utils.chat.tokens import make_formatted_query
-from app.utils.function_calling.callbacks.translate import translate_callback
-from app.utils.function_calling.callbacks.vectorstore_search import (
-    vectorstore_search_callback,
-)
+from app.utils.function_calling.query import aget_query_to_search
 from app.viewmodels.status import UserStatus
 
 
@@ -20,59 +16,60 @@ class VectorstoreCommands:
     @staticmethod
     async def query(
         user_query: str, /, buffer: BufferedUserContext, **kwargs
-    ) -> Tuple[Optional[str], ResponseType]:
+    ) -> tuple[Optional[str], ResponseType]:
         """Query from redis vectorstore\n
         /query <query>"""
         if user_query.startswith("/"):
+            # User is trying to invoke another command.
+            # Give control back to the command handler,
+            # and let it handle the command.
+            # e.g. `/query /help` will invoke `/help` command
             return user_query, ResponseType.REPEAT_COMMAND
 
-        translate: Optional[str] = kwargs.get("translate", None)
-        if translate:
-            translate_chain_result: Optional[str] = await translate_callback(
+        # Save user query to buffer and database
+        await MessageHandler.user(msg=user_query, buffer=buffer)
+
+        if not isinstance(buffer.current_llm_model.value, OpenAIModel):
+            # Non-OpenAI models can't invoke function call,
+            # so we force function calling here
+            query_to_search: str = await aget_query_to_search(
                 buffer=buffer,
                 query=user_query,
-                finish=False,
-                wait_next_query=False,
-                show_result=True,
-                src_lang=translate,
-                trg_lang="en",
+                function=FunctionCalls.get_function_call(
+                    FunctionCalls.vectorstore_search
+                ),
             )
-            if translate_chain_result is not None:
-                user_query = translate_chain_result
-        vectorstore_query_result: Optional[
-            str
-        ] = await vectorstore_search_callback(
-            buffer=buffer,
-            query=user_query,
-            finish=True,
-            wait_next_query=True,
-            show_result=False,
-        )
-        if vectorstore_query_result:
-            query_to_send: str = make_formatted_query(
-                user_chat_context=buffer.current_user_chat_context,
-                question=user_query,
-                context=vectorstore_query_result,
-                query_template=QueryTemplates.CONTEXT_QUESTION__CONTEXT_ONLY,
+            await MessageHandler.function_call(
+                callback_name=FunctionCalls.vectorstore_search.__name__,
+                callback_kwargs={"query_to_search": query_to_search},
+                buffer=buffer,
             )
         else:
-            query_to_send: str = user_query
+            # OpenAI models can invoke function call,
+            # so let the AI decide whether to invoke function call
+            functions = buffer.optional_info.get("functions")
+            function_call = buffer.optional_info.get("function_call")
 
-        await MessageHandler.user(
-            msg=query_to_send,
-            buffer=buffer,
-            use_tight_token_limit=False,
-        )
-        try:
-            await MessageHandler.ai(buffer=buffer)
-        finally:
-            if vectorstore_query_result is not None:
-                await MessageManager.set_message_history_safely(
-                    user_chat_context=buffer.current_user_chat_context,
-                    role=ChatRoles.USER,
-                    index=-1,
-                    new_content=user_query,
-                )
+            function = FunctionCalls.get_function_call(
+                FunctionCalls.vectorstore_search
+            )
+
+            try:
+                # Let AI decide whether to invoke function call
+                buffer.optional_info["functions"] = [function]
+                buffer.optional_info["function_call"] = function
+                await MessageHandler.ai(buffer=buffer)
+            finally:
+                # Restore original function call
+                buffer.optional_info["functions"] = functions
+                buffer.optional_info["function_call"] = function_call
+                # Remove function call messages when all function calls are done
+                buffer.current_system_message_histories[:] = [
+                    system_message_history
+                    for system_message_history in buffer.current_system_message_histories
+                    if not system_message_history.role.startswith("function: ")
+                ]
+        # End of command
         return None, ResponseType.DO_NOTHING
 
     @staticmethod
