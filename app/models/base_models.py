@@ -123,6 +123,7 @@ class MessageFromWebsocket(BaseModel):
     msg: str
     translate: Optional[str] = None
     chat_room_id: str
+    uuid: Optional[str] = None
 
 
 class CreateChatRoom(BaseModel):  # stub

@@ -3,7 +3,7 @@ from typing import Annotated, Callable, Optional
 from app.common.lotties import Lotties
 from app.utils.chat.buffer import BufferedUserContext
 from app.utils.chat.managers.websocket import SendToWebsocket
-
+from app.utils.chat.tokens import make_truncated_text
 from app.utils.function_calling.parser import parse_function_call_from_function
 
 from .base import FunctionCall
@@ -144,8 +144,15 @@ class FunctionCalls(metaclass=FunctionCallsMetaClass):
             finish=True,
             wait_next_query=True,
         )
-
-        return browsing_result
+        return (
+            make_truncated_text(
+                user_chat_context=buffer.current_user_chat_context,
+                text=browsing_result,
+                with_n_user_messages=1,
+            )
+            if browsing_result
+            else None
+        )
 
     @staticmethod
     async def vectorstore_search(
@@ -159,14 +166,6 @@ class FunctionCalls(metaclass=FunctionCallsMetaClass):
         from app.utils.function_calling.callbacks.vectorstore_search import (
             vectorstore_search_callback,
         )
-
-        # user_query = (
-        #     buffer.current_user_message_histories[-1].content
-        #     if buffer.current_user_message_histories
-        #     else buffer.last_user_message.removeprefix("/query")
-        #     if buffer.last_user_message
-        #     else query_to_search
-        # )
 
         # Notify frontend that we are browsing the web.
         await SendToWebsocket.message(
@@ -189,5 +188,12 @@ class FunctionCalls(metaclass=FunctionCallsMetaClass):
             finish=True,
             wait_next_query=True,
         )
-
-        return vectorstore_search_result
+        return (
+            make_truncated_text(
+                user_chat_context=buffer.current_user_chat_context,
+                text=vectorstore_search_result,
+                with_n_user_messages=1,
+            )
+            if vectorstore_search_result
+            else None
+        )

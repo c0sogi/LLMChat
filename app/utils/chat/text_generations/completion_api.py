@@ -1,4 +1,4 @@
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Literal, Optional
 from urllib.parse import urlparse
 
 from langchain import PromptTemplate
@@ -120,9 +120,9 @@ def _make_chat_completion_kwargs(
     functions: Optional[list[FunctionCall]] = buffer.optional_info.get(
         "functions"
     )
-    function_call: Optional[FunctionCall | str] = buffer.optional_info.get(
-        "function_call"
-    )
+    function_call: Optional[
+        FunctionCall | Literal["auto", "none"]
+    ] = buffer.optional_info.get("function_call")
     if functions is not None:
         max_tokens -= get_num_tokens_from_functions(functions)
     return _make_common_kwargs(buffer=buffer, max_tokens=max_tokens) | {

@@ -1,21 +1,21 @@
-from json import dumps
 import logging
 from datetime import timedelta
+from json import dumps
 from re import Pattern, compile
 from typing import (
-    TYPE_CHECKING,
     Any,
     AsyncIterator,
     Awaitable,
     Callable,
     Dict,
     List,
+    Literal,
     Optional,
     TypeVar,
     Union,
 )
 
-from aiohttp import ClientResponse, ClientSession
+from aiohttp import ClientResponse, ClientSession, client_exceptions
 from openai import error
 from orjson import dumps as orjson_dumps
 from orjson import loads as orjson_loads
@@ -45,7 +45,6 @@ from app.utils.chat.text_generations.converter import (
     make_completion_chunk_from_json,
     make_completion_from_json,
 )
-from app.utils.logger import ApiLogger
 
 T = TypeVar("T")
 TimeUnitType = Union[int, float, timedelta]
@@ -86,6 +85,7 @@ def _create_retry_decorator(
             | retry_if_exception_type(error.ServiceUnavailableError)
             | retry_if_exception_type(error.InvalidAPIType)
             | retry_if_exception_type(error.SignatureVerificationError)
+            | retry_if_exception_type(client_exceptions.ClientError)
         ),
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
@@ -93,11 +93,11 @@ def _create_retry_decorator(
 
 def _decode_function_call(
     functions: Optional[List[FunctionCall]] = None,
-    function_call: Optional[FunctionCall | str] = None,
+    function_call: Optional[FunctionCall | Literal["auto", "none"]] = None,
 ) -> Dict[str, Union[str, Dict[str, str]]]:
     """Decode functions & function_call into dict"""
     result: Dict[str, Any] = {}
-    if functions is not None:
+    if functions:
         result["functions"] = [function.to_dict() for function in functions]
     if function_call is not None:
         if isinstance(function_call, FunctionCall):
@@ -205,9 +205,6 @@ async def _handle_error_response(
         error: Any = resp.get("error")
         response.release()
 
-        ApiLogger("||agenerate_from_chat_completion_api||").error(
-            f"API request Error: {error}"
-        )
         if isinstance(error, dict):
             error_msg = str(error.get("message"))
             if "maximum context length" in error_msg:
@@ -243,11 +240,11 @@ async def acompletion_with_retry(
     """Use tenacity to retry the async completion call."""
 
     @_create_retry_decorator(max_retries)
-    async def _completion_with_retry(**kwargs: Any) -> Any:
+    async def _completion_with_retry() -> Any:
         return await async_callback(*args, **kwargs)
 
     try:
-        return await _completion_with_retry(*args, **kwargs)
+        return await _completion_with_retry()
     except error.OpenAIError as e:
         raise ChatConnectionException(
             msg=f"Completion API error: {e}"
@@ -269,22 +266,19 @@ async def request_text_completion(
     """
     kwargs.pop("stream", None)
 
-    async def get_text_completion(*args, **kwargs) -> Completion:
-        async for text_completion in acreate_completion(*args, **kwargs):
-            if TYPE_CHECKING:
-                assert isinstance(text_completion, Completion)
-            return text_completion
+    async def get_text_completion() -> Completion:
+        async for text_completion in acreate_completion(
+            prompt=prompt,
+            model=model,
+            api_base=api_base,
+            api_key=api_key,
+            stream=False,
+            **kwargs,
+        ):
+            return text_completion  # type: ignore
         raise ChatConnectionException(msg="Completion API error")
 
-    return await acompletion_with_retry(
-        get_text_completion,
-        prompt=prompt,
-        model=model,
-        api_base=api_base,
-        api_key=api_key,
-        stream=False,
-        **kwargs,
-    )
+    return await acompletion_with_retry(get_text_completion)
 
 
 async def request_text_completion_with_streaming(
@@ -302,22 +296,21 @@ async def request_text_completion_with_streaming(
     """
     kwargs.pop("stream", None)
 
-    async def get_text_completion_chunks(
-        *args, **kwargs
-    ) -> AsyncIterator[Completion | CompletionChunk]:
-        return acreate_completion(*args, **kwargs)
+    async def get_text_completion_chunks() -> AsyncIterator[
+        Completion | CompletionChunk
+    ]:
+        return acreate_completion(
+            model=model,
+            prompt=prompt,
+            api_base=api_base,
+            api_key=api_key,
+            stream=True,
+            **kwargs,
+        )
 
     async for chunk in await acompletion_with_retry(
         get_text_completion_chunks,
-        model=model,
-        prompt=prompt,
-        api_base=api_base,
-        api_key=api_key,
-        stream=True,
-        **kwargs,
     ):
-        if TYPE_CHECKING:
-            assert isinstance(chunk, CompletionChunk)
         yield chunk
 
 
@@ -327,7 +320,7 @@ async def request_chat_completion(
     api_base: str = "https://api.openai.com/v1",
     api_key: Optional[str] = None,
     functions: Optional[List[FunctionCall]] = None,
-    function_call: Optional[FunctionCall | str] = None,
+    function_call: Optional[FunctionCall | Literal["auto", "none"]] = None,
     **kwargs: Any,
 ) -> ChatCompletion:
     """Request chat completion with streaming from API with proper retry logic.
@@ -353,24 +346,21 @@ async def request_chat_completion(
     """
     kwargs.pop("stream", None)
 
-    async def get_chat_completion(*args, **kwargs) -> ChatCompletion:
-        async for chat_completion in acreate_chat_completion(*args, **kwargs):
-            if TYPE_CHECKING:
-                assert isinstance(chat_completion, ChatCompletion)
-            return chat_completion
+    async def get_chat_completion() -> ChatCompletion:
+        async for chat_completion in acreate_chat_completion(
+            messages=messages,
+            model=model,
+            api_base=api_base,
+            api_key=api_key,
+            functions=functions,
+            function_call=function_call,
+            stream=False,
+            **kwargs,
+        ):
+            return chat_completion  # type: ignore
         raise ChatConnectionException(msg="Completion API error")
 
-    return await acompletion_with_retry(
-        get_chat_completion,
-        messages=messages,
-        model=model,
-        api_base=api_base,
-        api_key=api_key,
-        functions=functions,
-        function_call=function_call,
-        stream=False,
-        **kwargs,
-    )
+    return await acompletion_with_retry(get_chat_completion)
 
 
 async def request_chat_completion_with_streaming(
@@ -379,7 +369,7 @@ async def request_chat_completion_with_streaming(
     api_base: str = "https://api.openai.com/v1",
     api_key: Optional[str] = None,
     functions: Optional[List[FunctionCall]] = None,
-    function_call: Optional[FunctionCall | str] = None,
+    function_call: Optional[FunctionCall | Literal["auto", "none"]] = None,
     **kwargs: Any,
 ) -> AsyncIterator[ChatCompletionChunk]:
     """Request chat completion with streaming from API with proper retry logic.
@@ -410,25 +400,24 @@ async def request_chat_completion_with_streaming(
     print(f"- DEBUG: Sending functions: {functions}", flush=True)
     print(f"- DEBUG: Sending function_call: {function_call}", flush=True)
 
-    async def get_chat_completion_chunks(
-        *args, **kwargs
-    ) -> AsyncIterator[ChatCompletion | ChatCompletionChunk]:
-        return acreate_chat_completion(*args, **kwargs)
+    async def get_chat_completion_chunks() -> AsyncIterator[
+        ChatCompletion | ChatCompletionChunk
+    ]:
+        return acreate_chat_completion(
+            model=model,
+            messages=messages,
+            api_base=api_base,
+            api_key=api_key,
+            functions=functions,
+            function_call=function_call,
+            stream=True,
+            **kwargs,
+        )
 
     async for chunk in await acompletion_with_retry(
         get_chat_completion_chunks,
-        model=model,
-        messages=messages,
-        api_base=api_base,
-        api_key=api_key,
-        functions=functions,
-        function_call=function_call,
-        stream=True,
-        **kwargs,
     ):
-        if TYPE_CHECKING:
-            assert isinstance(chunk, ChatCompletionChunk)
-        yield chunk
+        yield chunk  # type: ignore
 
 
 async def acreate_completion(
@@ -472,7 +461,7 @@ async def acreate_chat_completion(
     api_base: str = "https://api.openai.com/v1",
     api_key: Optional[str] = None,
     functions: Optional[List[FunctionCall]] = None,
-    function_call: Optional[FunctionCall | str] = None,
+    function_call: Optional[FunctionCall | Literal["auto", "none"]] = None,
     stream: bool = False,
     **kwargs: Any,
 ) -> AsyncIterator[ChatCompletion | ChatCompletionChunk]:
@@ -486,9 +475,7 @@ async def acreate_chat_completion(
             functions=functions, function_call=function_call
         )
     )
-    async with ClientSession(
-        timeout=ChatConfig.timeout,
-    ) as session:  # initialize client
+    async with ClientSession(timeout=ChatConfig.timeout) as session:
         async with session.post(
             url,
             headers=headers,

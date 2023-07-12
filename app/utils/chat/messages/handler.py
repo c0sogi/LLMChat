@@ -85,7 +85,9 @@ async def _ai_context_manager(
     model: LLMModel,
     stream_progress: StreamProgress,
 ):
-    backup_context: UserChatContext = deepcopy(buffer.current_user_chat_context)
+    backup_context: UserChatContext = deepcopy(
+        buffer.current_user_chat_context
+    )
     chat_text_generator_error: Optional[ChatTextGenerationException] = None
     try:
         # Hand shake with frontend
@@ -109,16 +111,15 @@ async def _ai_context_manager(
         )
     except ChatFunctionCallException as function_call_exception:
         # Handle function call exception
-        buffer.optional_info[
-            "function_call"
-        ] = "none"  # Do not invoke function call again
         await MessageHandler.function_call(
             callback_name=function_call_exception.func_name,
             callback_kwargs=function_call_exception.func_kwargs,
             buffer=buffer,
         )
     except ChatException as chat_exception:
-        chat_text_generator_error = ChatTextGenerationException(msg=chat_exception.msg)
+        chat_text_generator_error = ChatTextGenerationException(
+            msg=chat_exception.msg
+        )
     except OpenAIError as e:
         raise ChatTextGenerationException(msg=str(e))
     except (
@@ -128,8 +129,12 @@ async def _ai_context_manager(
     ):
         pass
     except Exception as exception:
-        ApiLogger.cerror(f"unexpected chat exception: {exception}", exc_info=True)
-        chat_text_generator_error = ChatTextGenerationException(msg="Unknown error")
+        ApiLogger.cerror(
+            f"unexpected chat exception: {exception}", exc_info=True
+        )
+        chat_text_generator_error = ChatTextGenerationException(
+            msg="Unknown error"
+        )
     finally:
         if chat_text_generator_error is not None:
             # Restore context, and send error message to frontend
@@ -208,8 +213,12 @@ async def _ai_summarization(buffer: BufferedUserContext) -> None:
                     user_id=buffer.user_id,
                     chat_room_id=buffer.current_chat_room_id,
                     role="ai",
-                    to_summarize=buffer.current_ai_message_histories[-1].content,
-                    message_history_uuid=buffer.current_ai_message_histories[-1].uuid,
+                    to_summarize=buffer.current_ai_message_histories[
+                        -1
+                    ].content,
+                    message_history_uuid=buffer.current_ai_message_histories[
+                        -1
+                    ].uuid,
                 )
             )
         )
@@ -279,6 +288,22 @@ async def _command_interpreter(
     return None
 
 
+@asynccontextmanager
+async def _function_call_context_manager(buffer: BufferedUserContext):
+    # Do not invoke function call again
+    buffer.optional_info["function_call"] = "none"
+    yield
+    # Remove function call messages when all function calls are done
+    buffer.current_system_message_histories[:] = [
+        system_message_history
+        for system_message_history in buffer.current_system_message_histories
+        if not system_message_history.role.startswith("function:")
+    ]
+    # Restore original function call
+    buffer.optional_info["functions"] = None
+    buffer.optional_info["function_call"] = None
+
+
 async def _get_command_response(
     callback: Callable,
     callback_args: list[str],
@@ -315,7 +340,10 @@ async def _get_command_response(
             callback_response = await run_in_threadpool(
                 callback, *args_to_pass, **kwargs_to_pass
             )
-        if isinstance(callback_response, tuple) and len(callback_response) == 2:
+        if (
+            isinstance(callback_response, tuple)
+            and len(callback_response) == 2
+        ):
             callback_response, response_type = callback_response
             if response_type is ResponseType.SEND_MESSAGE_AND_STOP:
                 await SendToWebsocket.message(
@@ -343,7 +371,10 @@ async def _interruption_event_watcher(
         while True:
             await event.wait()  # Wait for interruption event
 
-            if hold_interruption_event is None or not hold_interruption_event.is_set():
+            if (
+                hold_interruption_event is None
+                or not hold_interruption_event.is_set()
+            ):
                 # If hold_interruption_event is not given, or it's not set,
                 # raise ChatInterruptedException immediately
                 return
@@ -361,7 +392,9 @@ async def _interruption_event_watcher(
     for pending_task in pending:
         pending_task.cancel()  # Cancel the other one
     for done_task in done:
-        if done_task is future:  # If coro_or_future completes first, return its result
+        if (
+            done_task is future
+        ):  # If coro_or_future completes first, return its result
             return done_task.result()  # type: ignore
     raise ChatInterruptedException()  # If interruption event completes first, raise ChatInterruptedException
 
@@ -378,8 +411,12 @@ async def _user_summarization(buffer: BufferedUserContext) -> None:
                     user_id=buffer.user_id,
                     chat_room_id=buffer.current_chat_room_id,
                     role="user",
-                    to_summarize=buffer.current_user_message_histories[-1].content,
-                    message_history_uuid=buffer.current_user_message_histories[-1].uuid,
+                    to_summarize=buffer.current_user_message_histories[
+                        -1
+                    ].content,
+                    message_history_uuid=buffer.current_user_message_histories[
+                        -1
+                    ].uuid,
                 )
             )
         )
@@ -396,7 +433,9 @@ async def summarization_task(
         user_id=user_id,
         chat_room_id=chat_room_id,
         role=role,
-        content=await run_in_threadpool(get_summarization, to_summarize=to_summarize),
+        content=await run_in_threadpool(
+            get_summarization, to_summarize=to_summarize
+        ),
         uuid=message_history_uuid,
     )
 
@@ -409,8 +448,9 @@ class MessageHandler:
         use_tight_token_limit: bool = True,
     ) -> None:
         """Handle user message, including translation"""
-        if not buffer.current_user_message_histories and UTC.check_string_valid(
-            buffer.current_chat_room_name
+        if (
+            not buffer.current_user_message_histories
+            and UTC.check_string_valid(buffer.current_chat_room_name)
         ):
             buffer.current_chat_room_name = msg[:20]
             await CacheManager.update_profile(
@@ -438,7 +478,8 @@ class MessageHandler:
         token_limit: int = (
             current_llm_model.max_tokens_per_request
             if use_tight_token_limit
-            else current_llm_model.max_total_tokens - ChatConfig.extra_token_margin
+            else current_llm_model.max_total_tokens
+            - ChatConfig.extra_token_margin
         )
         if user_token > token_limit:  # if user message is too long
             raise ChatTooMuchTokenException(
@@ -449,7 +490,9 @@ class MessageHandler:
             user_chat_context=buffer.current_user_chat_context,
             content=msg,
             role=ChatRoles.USER,
-            calculated_tokens_to_use=user_token + current_llm_model.token_margin,
+            uuid=buffer.optional_info.get("uuid"),
+            calculated_tokens_to_use=user_token
+            + current_llm_model.token_margin,
         )
         await _user_summarization(buffer=buffer)
 
@@ -467,7 +510,9 @@ class MessageHandler:
             buffer=buffer, model=model, stream_progress=stream_progress
         ):
             await _interruption_event_watcher(
-                _ai_stream(model=model, buffer=buffer, stream_progress=stream_progress),
+                _ai_stream(
+                    model=model, buffer=buffer, stream_progress=stream_progress
+                ),
                 event=buffer.done,
             )
             await MessageManager.add_message_history_safely(
@@ -516,17 +561,21 @@ class MessageHandler:
             f"- DEBUG: Handling function call {callback_name} with {callback_kwargs}",
             flush=True,
         )
-        function_call_callback_result: Optional[Any] = await _command_interpreter(
-            callback_name=callback_name,
-            callback_args=[],
-            callback_kwargs=callback_kwargs,
-            callback_finder=FunctionCalls.get_function,
-            buffer=buffer,
-        )
-        if function_call_callback_result:
-            await _save_function_call_result(
+        async with _function_call_context_manager(buffer=buffer):
+            function_call_callback_result: Optional[
+                Any
+            ] = await _command_interpreter(
+                callback_name=callback_name,
+                callback_args=[],
+                callback_kwargs=callback_kwargs,
+                callback_finder=FunctionCalls.get_function,
                 buffer=buffer,
-                function_call_name=callback_name,
-                function_call_result=str(function_call_callback_result),
             )
-        await MessageHandler.ai(buffer=buffer)
+            if function_call_callback_result:
+                await _save_function_call_result(
+                    buffer=buffer,
+                    function_call_name=callback_name,
+                    function_call_result=str(function_call_callback_result),
+                    update_cache=False,
+                )
+            await MessageHandler.ai(buffer=buffer)

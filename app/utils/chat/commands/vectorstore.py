@@ -47,28 +47,13 @@ class VectorstoreCommands:
         else:
             # OpenAI models can invoke function call,
             # so let the AI decide whether to invoke function call
-            functions = buffer.optional_info.get("functions")
-            function_call = buffer.optional_info.get("function_call")
-
             function = FunctionCalls.get_function_call(
                 FunctionCalls.vectorstore_search
             )
+            buffer.optional_info["functions"] = [function]
+            buffer.optional_info["function_call"] = function
+            await MessageHandler.ai(buffer=buffer)
 
-            try:
-                # Let AI decide whether to invoke function call
-                buffer.optional_info["functions"] = [function]
-                buffer.optional_info["function_call"] = function
-                await MessageHandler.ai(buffer=buffer)
-            finally:
-                # Restore original function call
-                buffer.optional_info["functions"] = functions
-                buffer.optional_info["function_call"] = function_call
-                # Remove function call messages when all function calls are done
-                buffer.current_system_message_histories[:] = [
-                    system_message_history
-                    for system_message_history in buffer.current_system_message_histories
-                    if not system_message_history.role.startswith("function: ")
-                ]
         # End of command
         return None, ResponseType.DO_NOTHING
 

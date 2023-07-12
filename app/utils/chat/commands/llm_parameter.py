@@ -12,10 +12,10 @@ class LLMParameterCommands:
         /temp <temp_to_change>"""
         try:
             assert (
-                0 <= temp_to_change <= 1
-            )  # assert temperature is between 0 and 1
-        except AssertionError:  # if temperature is not between 0 and 1
-            return "Temperature must be between 0 and 1"
+                0 <= temp_to_change <= 2
+            )  # assert temperature is between 0 and 2
+        except AssertionError:  # if temperature is not between 0 and 2
+            return "Temperature must be between 0 and 2"
         else:
             previous_temperature: str = str(
                 user_chat_context.user_chat_profile.temperature

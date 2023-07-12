@@ -69,11 +69,11 @@ def chat_completion_api_parse_method(
             content=message_history.content,
         ).dict(exclude_none=True)
     else:
-        if message_history.role.startswith("function: "):
+        if message_history.role.startswith("function:"):
             return APIChatMessage(
                 role="function",
                 content=message_history.content,
-                name=message_history.role.removeprefix("function: "),
+                name=message_history.role.removeprefix("function:").strip(),
             ).dict(exclude_none=True)
         return APIChatMessage(
             role="system",

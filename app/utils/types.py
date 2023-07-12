@@ -81,7 +81,9 @@ def arguments_provider(
             # For (*, param),
             if param.annotation in available_annotated:
                 # if param is available annotated, we pass the annotated value
-                kwargs_to_pass[param.name] = available_annotated[param.annotation]
+                kwargs_to_pass[param.name] = available_annotated[
+                    param.annotation
+                ]
             elif param.name in available_kwargs:
                 # if param is in available kwargs,
                 if param.annotation is Parameter.empty:
@@ -90,7 +92,9 @@ def arguments_provider(
                 else:
                     # if param is annotated, we convert the value to annotated type
                     t = get_type(param.annotation)
-                    kwargs_to_pass[param.name] = t(available_kwargs[param.name])
+                    kwargs_to_pass[param.name] = t(
+                        available_kwargs[param.name]
+                    )
             elif param.annotation is Parameter.empty:
                 # if param is not annotated,
                 if param.default is Parameter.empty:
@@ -108,7 +112,9 @@ def arguments_provider(
                         # if the annotated type is optional, we pass None
                         kwargs_to_pass[param.name] = None
                     else:
-                        raise ValueError(f"Required argument {param.name} is missing")
+                        raise ValueError(
+                            f"Required argument {param.name} is missing"
+                        )
                 else:
                     # if there's no provided value to pass, but has default value,
                     # we try to pass the default value, and convert it to annotated type
@@ -119,7 +125,9 @@ def arguments_provider(
             # For (param),
             if param.annotation in available_annotated:
                 # if param is available annotated, we pass the annotated value
-                kwargs_to_pass[param.name] = available_annotated[param.annotation]
+                kwargs_to_pass[param.name] = available_annotated[
+                    param.annotation
+                ]
             elif param.name in available_kwargs:
                 # if param is in available kwargs,
                 if param.annotation is Parameter.empty:
@@ -128,7 +136,9 @@ def arguments_provider(
                 else:
                     # if param is annotated, we convert the value to annotated type
                     t = get_type(param.annotation)
-                    kwargs_to_pass[param.name] = t(available_kwargs[param.name])
+                    kwargs_to_pass[param.name] = t(
+                        available_kwargs[param.name]
+                    )
             elif param.annotation is Parameter.empty:
                 # if param is not annotated,
                 if available_args:
@@ -155,7 +165,9 @@ def arguments_provider(
                         # if the annotated type is optional, we pass None
                         kwargs_to_pass[param.name] = None
                     else:
-                        raise ValueError(f"Required argument {param.name} is missing")
+                        raise ValueError(
+                            f"Required argument {param.name} is missing"
+                        )
                 else:
                     # if there's no provided value to pass, but has default value,
                     # we try to pass the default value
@@ -165,7 +177,9 @@ def arguments_provider(
             # For (/, param),
             if param.annotation in available_annotated:
                 # if param is available annotated, we pass the annotated value
-                kwargs_to_pass[param.name] = available_annotated[param.annotation]
+                kwargs_to_pass[param.name] = available_annotated[
+                    param.annotation
+                ]
             elif available_args:
                 # if there's available args,
                 if param.annotation is Parameter.empty:
@@ -200,9 +214,15 @@ def arguments_provider(
                         # if the annotated type is optional, we pass None
                         args_to_pass.append(None)
                     else:
-                        raise ValueError(f"Required argument {param.name} is missing")
+                        raise ValueError(
+                            f"Required argument {param.name} is missing"
+                        )
                 else:
                     # if param has default value, we try to pass the default value
                     args_to_pass.append(param.default)
-
+    print(
+        f"- DEBUG: Calling command: {func.__name__} with {len(args_to_pass)} args "
+        f"and {[k for k in kwargs_to_pass.keys()]} kwargs",
+        flush=True,
+    )
     return args_to_pass, kwargs_to_pass

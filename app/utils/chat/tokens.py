@@ -44,6 +44,9 @@ def make_formatted_query(
     question: str,
     context: str,
     query_template: Union[PromptTemplate, str],
+    with_n_user_messages: int = 0,
+    with_n_ai_messages: int = 0,
+    with_n_system_messages: int = 0,
 ) -> str:
     """Make a formatted query to the LLM model, with the given question and context.
     Token limit is calculated based on the number of messages in the user, AI, and system message histories.
@@ -52,9 +55,9 @@ def make_formatted_query(
     token_limit: int = (
         get_token_limit_with_n_messages(
             user_chat_context=user_chat_context,
-            n_ai_messages=0,
-            n_system_messages=0,
-            n_user_messages=0,
+            n_user_messages=with_n_user_messages,
+            n_ai_messages=with_n_ai_messages,
+            n_system_messages=with_n_system_messages,
             suffix_prompt_tokens=llm_model.suffix_tokens,
             prefix_prompt_tokens=llm_model.prefix_tokens,
         )
@@ -73,14 +76,17 @@ def make_formatted_query(
 def make_truncated_text(
     user_chat_context: UserChatContext,
     text: str,
+    with_n_user_messages: int = 0,
+    with_n_ai_messages: int = 0,
+    with_n_system_messages: int = 0,
 ) -> str:
     llm_model = user_chat_context.llm_model.value
     token_limit: int = (
         get_token_limit_with_n_messages(
             user_chat_context=user_chat_context,
-            n_ai_messages=0,
-            n_system_messages=0,
-            n_user_messages=0,
+            n_user_messages=with_n_system_messages,
+            n_ai_messages=with_n_user_messages,
+            n_system_messages=with_n_ai_messages,
             suffix_prompt_tokens=llm_model.suffix_tokens,
             prefix_prompt_tokens=llm_model.prefix_tokens,
         )

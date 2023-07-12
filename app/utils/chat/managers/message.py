@@ -135,12 +135,12 @@ class MessageManager:
                 raise ValueError(f"Invalid role: {role}")
         except IndexError:
             return None
-        if new_content is not None:  # =
+        if new_content is not None:
             histories_to_change.content = new_content
             histories_to_change.tokens = user_chat_context.get_tokens_of(
                 new_content
             )
-        if summarized_content is not None:  # =
+        if summarized_content is not None:
             histories_to_change.summarized = summarized_content
             histories_to_change.summarized_tokens = (
                 user_chat_context.get_tokens_of(summarized_content)
@@ -152,6 +152,33 @@ class MessageManager:
                 chat_room_id=user_chat_context.chat_room_id,
                 role=role,
                 message_history=histories_to_change,
+                index=index,
+            )
+
+    @classmethod
+    async def delete_message_history_safely(
+        cls,
+        user_chat_context: UserChatContext,
+        role: ChatRoles,
+        index: int,
+        update_cache: bool = True,
+    ) -> None:
+        try:
+            if role is ChatRoles.AI:
+                user_chat_context.ai_message_histories.pop(index)
+            elif role is ChatRoles.USER:
+                user_chat_context.user_message_histories.pop(index)
+            elif role is ChatRoles.SYSTEM:
+                user_chat_context.system_message_histories.pop(index)
+            else:
+                raise ValueError(f"Invalid role: {role}")
+        except IndexError:
+            return None
+        if update_cache:
+            await CacheManager.delete_one_message_history(
+                user_id=user_chat_context.user_id,
+                chat_room_id=user_chat_context.chat_room_id,
+                role=role,
                 index=index,
             )
 

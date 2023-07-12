@@ -28,7 +28,9 @@ class CoreCommands:
 
     @staticmethod
     @command_response.do_nothing
-    async def deletechatroom(chat_room_id: str, buffer: BufferedUserContext) -> None:
+    async def deletechatroom(
+        chat_room_id: str, buffer: BufferedUserContext
+    ) -> None:
         chat_room_id_before: str = buffer.current_chat_room_id
         delete_result: bool = await delete_chat_room(
             chat_room_id_to_delete=chat_room_id,
@@ -45,6 +47,25 @@ class CoreCommands:
                 buffer=buffer,
                 send_previous_chats=True,
                 send_chat_rooms=delete_result,
+            )
+
+    @staticmethod
+    @command_response.do_nothing
+    async def deletemessage(
+        role: str, message_uuid: str, buffer: BufferedUserContext
+    ) -> None:
+        actual_role = ChatRoles.get_static_member(role)
+        message_index = await buffer.find_index_of_message_history(
+            user_chat_context=buffer.current_user_chat_context,
+            message_history_uuid=message_uuid,
+            role=actual_role,
+        )
+        if message_index is not None:
+            await MessageManager.delete_message_history_safely(
+                user_chat_context=buffer.current_user_chat_context,
+                role=actual_role,
+                index=message_index,
+                update_cache=True,
             )
 
     @staticmethod
@@ -105,7 +126,8 @@ class CoreCommands:
         if (
             last_ai_message_history
             and last_user_message_history
-            and last_ai_message_history.timestamp > last_user_message_history.timestamp
+            and last_ai_message_history.timestamp
+            > last_user_message_history.timestamp
         ):
             # The last ai message history is newer than the last user message history
             # so we have to remove the last ai message history
@@ -147,14 +169,18 @@ class CoreCommands:
             )
 
     @classmethod
-    async def model(cls, model: str, user_chat_context: UserChatContext) -> str:
+    async def model(
+        cls, model: str, user_chat_context: UserChatContext
+    ) -> str:
         """Alias for changemodel\n
         /model <model>"""
         return await cls.changemodel(model, user_chat_context)
 
     @staticmethod
     @command_response.send_message_and_stop
-    async def changemodel(model: str, user_chat_context: UserChatContext) -> str:
+    async def changemodel(
+        model: str, user_chat_context: UserChatContext
+    ) -> str:
         """Change GPT model\n
         /changemodel <model>"""
         if model not in LLMModels.member_names:
@@ -162,7 +188,9 @@ class CoreCommands:
         llm_model: Enum = LLMModels.get_member(model)
         user_chat_context.llm_model = llm_model
         await CacheManager.update_profile_and_model(user_chat_context)
-        return f"Model changed to {model}. Actual model: {llm_model.value.name}"
+        return (
+            f"Model changed to {model}. Actual model: {llm_model.value.name}"
+        )
 
     @staticmethod
     @command_response.send_message_and_stop
@@ -176,7 +204,11 @@ class CoreCommands:
 
     @classmethod
     @command_response.send_message_and_stop
-    def info(cls, key: str, value: str, user_chat_context: UserChatContext) -> str:
+    def info(
+        cls, key: str, value: str, user_chat_context: UserChatContext
+    ) -> str:
         """Alias for addoptionalinfo\n
         /info <key> <value>"""
-        return cls.addoptionalinfo(key, value, user_chat_context=user_chat_context)
+        return cls.addoptionalinfo(
+            key, value, user_chat_context=user_chat_context
+        )

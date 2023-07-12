@@ -1,5 +1,5 @@
 from asyncio import wait_for
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from app.common.config import OPENAI_API_KEY, ChatConfig
 from app.models.completion_models import FunctionCallParsed
@@ -12,7 +12,7 @@ from .parser import make_function_call_parsed_from_dict
 async def request_function_call(
     messages: list[dict[str, str]],
     functions: list[FunctionCall],
-    function_call: Optional[FunctionCall | str] = "auto",
+    function_call: Optional[FunctionCall | Literal["auto", "none"]] = "auto",
     model: str = ChatConfig.global_openai_model,
     api_base: str = "https://api.openai.com/v1",
     api_key: Optional[str] = OPENAI_API_KEY,
