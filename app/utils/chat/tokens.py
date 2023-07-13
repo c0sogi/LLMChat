@@ -92,10 +92,7 @@ def make_truncated_text(
         )
         - 100
     )
-    return llm_model.tokenizer.get_chunk_of(
-        text,
-        tokens=token_limit - user_chat_context.get_tokens_of(text),
-    )
+    return llm_model.tokenizer.get_chunk_of(text, tokens=token_limit)
 
 
 def cutoff_message_histories(
@@ -151,19 +148,12 @@ def cutoff_message_histories(
     messages_without_prefix_and_suffix: list[MessageHistory] = sorted(
         user_message_histories
         + ai_message_histories
-        + [
-            m
-            for m in system_message_histories
-            if not m.is_prefix and not m.is_suffix
-        ],
+        + [m for m in system_message_histories if not m.is_prefix and not m.is_suffix],
         key=lambda m: m.timestamp,
     )
 
     # If the total tokens of all messages are less than or equal to the remaining tokens, return the input as it is.
-    if (
-        sum(m.tokens for m in messages_without_prefix_and_suffix)
-        <= remaining_tokens
-    ):
+    if sum(m.tokens for m in messages_without_prefix_and_suffix) <= remaining_tokens:
         _system_message_histories = [
             m
             for m in messages_without_prefix_and_suffix
@@ -188,20 +178,14 @@ def cutoff_message_histories(
     index = bisect_left(all_tokens, all_tokens[-1] - remaining_tokens)
 
     # Slice the selected messages from the index to the end.
-    selected_messages: list[
-        MessageHistory
-    ] = messages_without_prefix_and_suffix[index:]
+    selected_messages: list[MessageHistory] = messages_without_prefix_and_suffix[index:]
 
     # Separate selected messages by each type using list comprehensions.
-    user_messages = [
-        m for m in selected_messages if m in user_message_histories
-    ]
+    user_messages = [m for m in selected_messages if m in user_message_histories]
     ai_messages = [m for m in selected_messages if m in ai_message_histories]
 
     # Add prefix and suffix messages to the system message.
-    system_messages = [
-        m for m in selected_messages if m in system_message_histories
-    ]
+    system_messages = [m for m in selected_messages if m in system_message_histories]
     if prefix_message:
         system_messages.insert(0, prefix_message)
     if suffix_message:
