@@ -2,6 +2,7 @@ import logging
 from datetime import timedelta
 from json import dumps
 from re import Pattern, compile
+from socket import gaierror
 from typing import (
     Any,
     AsyncIterator,
@@ -86,6 +87,7 @@ def _create_retry_decorator(
             | retry_if_exception_type(error.InvalidAPIType)
             | retry_if_exception_type(error.SignatureVerificationError)
             | retry_if_exception_type(client_exceptions.ClientError)
+            | retry_if_exception_type(gaierror)
         ),
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
