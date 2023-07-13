@@ -11,8 +11,6 @@ from starlette_admin.contrib.sqla.view import ModelView
 from starlette_admin.views import DropDown, Link
 
 from app.auth.admin import MyAuthProvider
-from app.common.app_settings_llama_cpp import monitor_llama_cpp_server
-from app.common.config import JWT_SECRET, Config
 from app.database.connection import cache, db
 from app.database.schemas.auth import ApiKeys, ApiWhiteLists, Users
 from app.dependencies import USER_DEPENDENCY, api_service_dependency
@@ -24,6 +22,9 @@ from app.utils.chat.managers.cache import CacheManager
 from app.utils.js_initializer import js_url_initializer
 from app.utils.logger import ApiLogger
 from app.viewmodels.admin import ApiKeyAdminView, UserAdminView
+
+from .app_settings_llama_cpp import monitor_llama_cpp_server
+from .config import JWT_SECRET, Config
 
 
 async def on_startup():
@@ -163,9 +164,13 @@ def create_app(config: Config) -> FastAPI:
             middlewares=[Middleware(SessionMiddleware, secret_key=JWT_SECRET)],
         )
         admin.add_view(UserAdminView(Users, icon="fa fa-users", label="Users"))
-        admin.add_view(ApiKeyAdminView(ApiKeys, icon="fa fa-key", label="API Keys"))
         admin.add_view(
-            ModelView(ApiWhiteLists, icon="fa fa-list", label="API White Lists")
+            ApiKeyAdminView(ApiKeys, icon="fa fa-key", label="API Keys")
+        )
+        admin.add_view(
+            ModelView(
+                ApiWhiteLists, icon="fa fa-list", label="API White Lists"
+            )
         )
         admin.add_view(
             DropDown(
@@ -187,7 +192,9 @@ def create_app(config: Config) -> FastAPI:
     Trusted host middleware: Allowed host only
     """
 
-    new_app.add_middleware(dispatch=access_control, middleware_class=BaseHTTPMiddleware)
+    new_app.add_middleware(
+        dispatch=access_control, middleware_class=BaseHTTPMiddleware
+    )
     new_app.add_middleware(
         CORSMiddleware,
         allow_origins=config.allowed_sites,

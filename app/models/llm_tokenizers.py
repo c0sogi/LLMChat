@@ -1,24 +1,28 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union
+
+from tiktoken import Encoding, encoding_for_model, get_encoding
+
 from app.utils.chat.text_generations.path import resolve_model_path_to_posix
-from tiktoken import get_encoding, encoding_for_model, Encoding
 from app.utils.logger import ApiLogger
 
 if TYPE_CHECKING:
     from transformers.models.llama import LlamaTokenizer as _LlamaTokenizer
+
     from repositories.exllama.tokenizer import ExLlamaTokenizer
 
 
 class BaseTokenizer(ABC):
     _fallback_tokenizer: Optional[Encoding] = None
 
+    @classmethod
     @property
-    def fallback_tokenizer(self) -> Encoding:
+    def fallback_tokenizer(cls) -> Encoding:
         ApiLogger.cwarning("Using fallback tokenizer!!!")
-        if self._fallback_tokenizer is None:
-            self._fallback_tokenizer = get_encoding("cl100k_base")
-        return self._fallback_tokenizer
+        if cls._fallback_tokenizer is None:
+            cls._fallback_tokenizer = get_encoding("cl100k_base")
+        return cls._fallback_tokenizer
 
     @property
     @abstractmethod
@@ -89,7 +93,9 @@ class OpenAITokenizer(BaseTokenizer):
 class LlamaTokenizer(BaseTokenizer):
     def __init__(self, model_name: str):
         try:
-            from transformers.models.llama import LlamaTokenizer as _LlamaTokenizer
+            from transformers.models.llama import (
+                LlamaTokenizer as _LlamaTokenizer,
+            )
 
             self._tokenizer_type = _LlamaTokenizer
         except Exception as e:

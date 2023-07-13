@@ -90,10 +90,14 @@ class CustomLogger(logging.Logger):
             logging_config.file_log_name is not None
             and logging_config.file_log_level is not None
         ):
-            if not os.path.exists(os.path.dirname(logging_config.file_log_name)):
+            if not os.path.exists(
+                os.path.dirname(logging_config.file_log_name)
+            ):
                 os.makedirs(os.path.dirname(logging_config.file_log_name))
             file_handler = logging.FileHandler(
-                filename=logging_config.file_log_name, mode="a", encoding="utf-8"
+                filename=logging_config.file_log_name,
+                mode="a",
+                encoding="utf-8",
             )
             file_handler.setLevel(logging_config.file_log_level)
             file_handler.setFormatter(formatter)
@@ -122,32 +126,40 @@ class ApiLogger(CustomLogger):
     def cinfo(cls, msg: str, *args, **kwargs) -> None:
         if cls.__name__ not in cls._instances:
             cls(cls.__name__)
-        super(ApiLogger, cls._instances[cls.__name__]).info(msg=msg, *args, **kwargs)
+        super(ApiLogger, cls._instances[cls.__name__]).info(
+            msg, *args, **kwargs
+        )
 
     @classmethod
     def cdebug(cls, msg: str, *args, **kwargs) -> None:
         if cls.__name__ not in cls._instances:
             cls(cls.__name__)
-        super(ApiLogger, cls._instances[cls.__name__]).debug(msg=msg, *args, **kwargs)
+        super(ApiLogger, cls._instances[cls.__name__]).debug(
+            msg, *args, **kwargs
+        )
 
     @classmethod
     def cwarning(cls, msg: str, *args, **kwargs) -> None:
         if cls.__name__ not in cls._instances:
             cls(cls.__name__)
-        super(ApiLogger, cls._instances[cls.__name__]).warning(msg=msg, *args, **kwargs)
+        super(ApiLogger, cls._instances[cls.__name__]).warning(
+            msg, *args, **kwargs
+        )
 
     @classmethod
     def cerror(cls, msg: str, *args, **kwargs) -> None:
         if cls.__name__ not in cls._instances:
             cls(cls.__name__)
-        super(ApiLogger, cls._instances[cls.__name__]).error(msg=msg, *args, **kwargs)
+        super(ApiLogger, cls._instances[cls.__name__]).error(
+            msg, *args, **kwargs
+        )
 
     @classmethod
     def cexception(cls, msg: str, *args, **kwargs) -> None:
         if cls.__name__ not in cls._instances:
             cls(cls.__name__)
         super(ApiLogger, cls._instances[cls.__name__]).exception(
-            msg=msg, *args, **kwargs
+            msg, *args, **kwargs
         )
 
     @classmethod
@@ -155,7 +167,7 @@ class ApiLogger(CustomLogger):
         if cls.__name__ not in cls._instances:
             cls(cls.__name__)
         super(ApiLogger, cls._instances[cls.__name__]).critical(
-            msg=msg, *args, **kwargs
+            msg, *args, **kwargs
         )
 
     @classmethod
@@ -163,12 +175,16 @@ class ApiLogger(CustomLogger):
         cls,
         request: Request,
         response: Response,
-        error: Optional[InternalServerError | HTTPException | APIException] = None,
+        error: Optional[
+            InternalServerError | HTTPException | APIException
+        ] = None,
         **kwargs,
     ) -> None:
         """Log request and response data to console and file"""
         processed_time = (
-            time() - request.state.start if hasattr(request.state, "start") else -1
+            time() - request.state.start
+            if hasattr(request.state, "start")
+            else -1
         )
         user = request.state.user
         utc_now = datetime.utcnow()
@@ -184,11 +200,15 @@ class ApiLogger(CustomLogger):
             "client": {
                 "ip": request.state.ip,
                 "id": user.id if user and user.id else None,
-                "email": _mask_email(email=user.email) if user and user.email else None,
+                "email": _mask_email(email=user.email)
+                if user and user.email
+                else None,
             },
             "processedTime(ms)": round(processed_time * 1000, 5),
             "datetimeUTC": utc_now.strftime("%Y/%m/%d %H:%M:%S"),
-            "datetimeKST": (utc_now + timedelta(hours=9)).strftime("%Y/%m/%d %H:%M:%S"),
+            "datetimeKST": (utc_now + timedelta(hours=9)).strftime(
+                "%Y/%m/%d %H:%M:%S"
+            ),
         } | kwargs
         log: str = dumps(json_data, indent=4)
         cls.cerror(

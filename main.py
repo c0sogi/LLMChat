@@ -1,6 +1,6 @@
 from os import environ
-
 from maintools import initialize_before_launch
+
 
 if __name__ == "__mp_main__":
     """Option 1: Skip section for multiprocess spawning

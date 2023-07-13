@@ -1,21 +1,21 @@
-from asyncio import gather
 from enum import Enum
 from typing import Optional
+
 from app.models.chat_models import (
     ChatRoles,
     ResponseType,
     UserChatContext,
     command_response,
 )
-from app.models.llms import LLMModel, LLMModels
+from app.models.llms import LLMModels
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.commands.helper_functions import delete_chat_room
+from app.utils.chat.chat_rooms import delete_chat_room
 from app.utils.chat.managers.cache import CacheManager
 from app.utils.chat.managers.message import MessageManager
 from app.utils.chat.managers.websocket import SendToWebsocket
 
 
-class CoreCommandsMixin:
+class CoreCommands:
     @classmethod
     @command_response.send_message_and_stop
     def help(cls) -> str:
@@ -47,6 +47,25 @@ class CoreCommandsMixin:
                 buffer=buffer,
                 send_previous_chats=True,
                 send_chat_rooms=delete_result,
+            )
+
+    @staticmethod
+    @command_response.do_nothing
+    async def deletemessage(
+        role: str, message_uuid: str, buffer: BufferedUserContext
+    ) -> None:
+        actual_role = ChatRoles.get_static_member(role)
+        message_index = await buffer.find_index_of_message_history(
+            user_chat_context=buffer.current_user_chat_context,
+            message_history_uuid=message_uuid,
+            role=actual_role,
+        )
+        if message_index is not None:
+            await MessageManager.delete_message_history_safely(
+                user_chat_context=buffer.current_user_chat_context,
+                role=actual_role,
+                index=message_index,
+                update_cache=True,
             )
 
     @staticmethod
@@ -93,55 +112,61 @@ class CoreCommandsMixin:
     ) -> tuple[Optional[str], ResponseType]:
         """Retry last message\n
         /retry"""
-        if buffer.last_user_message is None:
-            if (
-                len(buffer.current_ai_message_histories)
-                == len(buffer.current_user_message_histories)
-                > 0
-            ):
-                await MessageManager.pop_message_history_safely(
-                    user_chat_context=buffer.current_user_chat_context,
-                    role=ChatRoles.AI,
-                )
-                return (None, ResponseType.HANDLE_AI)
-            else:
-                return (
-                    "There is no message to retry.",
-                    ResponseType.SEND_MESSAGE_AND_STOP,
-                )
-        if buffer.last_user_message.startswith("/"):
-            changable = False
-            for command in ("/browse", "/query"):
-                if buffer.last_user_message.startswith(command):
-                    changable = True
-                    break
-            if changable and (
-                len(buffer.current_ai_message_histories)
-                == len(buffer.current_user_message_histories)
-                > 0
-            ):
-                await gather(
-                    MessageManager.pop_message_history_safely(
-                        user_chat_context=buffer.current_user_chat_context,
-                        role=ChatRoles.USER,
-                    ),
-                    MessageManager.pop_message_history_safely(
-                        user_chat_context=buffer.current_user_chat_context,
-                        role=ChatRoles.AI,
-                    ),
-                )
-            return (buffer.last_user_message, ResponseType.REPEAT_COMMAND)
+        last_user_message = buffer.last_user_message
+        last_user_message_history = (
+            buffer.current_user_message_histories[-1]
+            if buffer.current_user_message_histories
+            else None
+        )
+        last_ai_message_history = (
+            buffer.current_ai_message_histories[-1]
+            if buffer.current_ai_message_histories
+            else None
+        )
+        if (
+            last_ai_message_history
+            and last_user_message_history
+            and last_ai_message_history.timestamp
+            > last_user_message_history.timestamp
+        ):
+            # The last ai message history is newer than the last user message history
+            # so we have to remove the last ai message history
+            await MessageManager.pop_message_history_safely(
+                user_chat_context=buffer.current_user_chat_context,
+                role=ChatRoles.AI,
+            )
+
+        if last_user_message and last_user_message_history is None:
+            # There is no user message history, but there is a user message
+            if last_user_message.startswith("/"):
+                # Try to retry the last user message (which is a command)
+                return last_user_message, ResponseType.REPEAT_COMMAND
+            # Try to retry the last user message (which is not a command)
+            return last_user_message, ResponseType.HANDLE_BOTH
+        elif not last_user_message and last_user_message_history is not None:
+            # There is no user message, but there is a user message history
+            return None, ResponseType.HANDLE_AI
+        elif last_user_message and last_user_message_history is not None:
+            # We have both user message and user message history
+            # so we have to remove the last user message history
+            # since we are going to retry the last user message
+            # instead of the last user message history
+            # last user message has higher priority than last user message history
+            await MessageManager.pop_message_history_safely(
+                user_chat_context=buffer.current_user_chat_context,
+                role=ChatRoles.USER,
+            )
+            if last_user_message.startswith("/"):
+                # Try to retry the last user message (which is a command)
+                return last_user_message, ResponseType.REPEAT_COMMAND
+            # Try to retry the last user message (which is not a command)
+            return last_user_message, ResponseType.HANDLE_BOTH
         else:
-            if (
-                len(buffer.current_ai_message_histories)
-                == len(buffer.current_user_message_histories)
-                > 0
-            ):
-                await MessageManager.pop_message_history_safely(
-                    user_chat_context=buffer.current_user_chat_context,
-                    role=ChatRoles.AI,
-                )
-            return (None, ResponseType.HANDLE_AI)
+            # Can't retry since there is no user input to retry
+            return (
+                "You have no message to retry",
+                ResponseType.SEND_MESSAGE_AND_STOP,
+            )
 
     @classmethod
     async def model(
@@ -160,9 +185,7 @@ class CoreCommandsMixin:
         /changemodel <model>"""
         if model not in LLMModels.member_names:
             return f"Model must be one of {', '.join(LLMModels.member_names)}"
-        llm_model: Enum = LLMModels.get_member_with_type_of_value(
-            model, value_type=LLMModel
-        )
+        llm_model: Enum = LLMModels.get_member(model)
         user_chat_context.llm_model = llm_model
         await CacheManager.update_profile_and_model(user_chat_context)
         return (
@@ -180,6 +203,7 @@ class CoreCommandsMixin:
         return f"I've added {key}={value} to your optional info."
 
     @classmethod
+    @command_response.send_message_and_stop
     def info(
         cls, key: str, value: str, user_chat_context: UserChatContext
     ) -> str:

@@ -6,26 +6,31 @@ from orjson import loads as orjson_loads
 from app.common.config import ChatConfig
 from app.common.constants import JSON_PATTERN
 from app.models.chat_models import ChatRoles, MessageHistory
+from app.models.function_calling.base import FunctionCall
 from app.shared import Shared
 from app.utils.chat.buffer import BufferedUserContext
-
 from app.utils.chat.messages.converter import (
+    chat_completion_api_parse_method,
     message_histories_to_list,
-    openai_parse_method,
 )
 from app.utils.chat.tokens import cutoff_message_histories
-from app.utils.chat.managers.websocket import SendToWebsocket
-from app.utils.langchain.chat_openai import CustomChatOpenAI
 
-shared = Shared()
+from .request import request_function_call
 
 
 async def aget_query_to_search(
     buffer: BufferedUserContext,
     query: str,
-    search_llm: CustomChatOpenAI,
+    function: FunctionCall,
+    timeout: Optional[float] = 30,
 ) -> str:
-    user_message_histories, ai_message_histories = cutoff_message_histories(
+    """Get query to search from user query and current context"""
+    (
+        user_message_histories,
+        ai_message_histories,
+        system_message_histories,
+    ) = cutoff_message_histories(
+        user_chat_context=buffer.current_user_chat_context,
         ai_message_histories=buffer.current_ai_message_histories,
         user_message_histories=buffer.current_user_message_histories
         + [
@@ -40,46 +45,36 @@ async def aget_query_to_search(
         system_message_histories=[],
         token_limit=ChatConfig.query_context_token_limit,
     )
-    web_search_llm_output = (
-        await search_llm.agenerate(
-            messages=[
-                message_histories_to_list(
-                    user_chat_roles=buffer.current_user_chat_roles,
-                    parse_method=openai_parse_method,
-                    user_message_histories=user_message_histories,
-                    ai_message_histories=ai_message_histories,
-                )
-            ],
+    try:
+        function_call_parsed = await request_function_call(
+            messages=message_histories_to_list(
+                parse_method=chat_completion_api_parse_method,
+                user_message_histories=user_message_histories,
+                ai_message_histories=ai_message_histories,
+                system_message_histories=system_message_histories,
+            ),
+            functions=[function],
+            function_call=function,
+            timeout=timeout,
         )
-    ).llm_output
-    if web_search_llm_output is None:
+        if "arguments" not in function_call_parsed:
+            raise ValueError("No arguments returned")
+        return str(function_call_parsed["arguments"]["query_to_search"])
+    except Exception:
         return query
-    query_to_search = web_search_llm_output["function_calls"][0]["arguments"][
-        "query_to_search"
-    ]
-    await SendToWebsocket.message(
-        websocket=buffer.websocket,
-        msg="\n---\n{query_to_search}\n```\n".format(
-            query_to_search=query_to_search.replace("```", "'''")
-        ),
-        chat_room_id=buffer.current_chat_room_id,
-        finish=False,
-    )
-    return query_to_search
 
 
 async def aget_json(
     query_template: PromptTemplate, **kwargs_to_format: str
 ) -> Optional[Any]:
+    """Get json from query template and kwargs to format"""
     try:
         json_query = JSON_PATTERN.search(
-            await Shared().llm.apredict(
-                query_template.format(**kwargs_to_format)
-            )
+            await Shared().llm.apredict(query_template.format(**kwargs_to_format))
         )
         if json_query is None:
             raise ValueError("Result is None")
         else:
             return orjson_loads(json_query.group())
     except Exception:
-        return
+        return None

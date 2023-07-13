@@ -1,14 +1,10 @@
 from app.common.constants import SystemPrompts
 from app.models.base_models import MessageHistory
-from app.models.chat_models import (
-    ChatRoles,
-    UserChatContext,
-    command_response,
-)
+from app.models.chat_models import ChatRoles, UserChatContext, command_response
 from app.utils.chat.managers.message import MessageManager
 
 
-class PromptCommandsMixin:
+class PromptCommands:
     @staticmethod
     @command_response.send_message_and_stop
     async def codex(user_chat_context: UserChatContext) -> str:
@@ -59,11 +55,9 @@ class PromptCommandsMixin:
 
     @staticmethod
     @command_response.send_message_and_stop
-    async def poplastmessage(
-        role: str, user_chat_context: UserChatContext
-    ) -> str:
+    async def pop(role: str, user_chat_context: UserChatContext) -> str:
         """Pop last message (user or system or ai)\n
-        /poplastmessage <user|system|ai>"""
+        /pop <user|system|ai>"""
         try:
             actual_role: ChatRoles = ChatRoles.get_static_member(role)
         except ValueError:
@@ -82,11 +76,11 @@ class PromptCommandsMixin:
 
     @staticmethod
     @command_response.send_message_and_stop
-    async def setlastmessage(
+    async def set(
         role, new_message: str, /, user_chat_context: UserChatContext
     ) -> str:
         """Set last message (user or system or ai)\n
-        /setlastmessage <user|system|ai> <new_message>"""
+        /set <user|system|ai> <new_message>"""
         try:
             actual_role: ChatRoles = ChatRoles.get_static_member(role)
         except ValueError:
@@ -104,17 +98,3 @@ class PromptCommandsMixin:
         ):  # if set message history failed
             return f"There is no {role} message to set."
         return f"Set {role} message: {new_message}"  # return success message
-
-    @classmethod
-    async def pop(cls, role: str, user_chat_context: UserChatContext) -> str:
-        """Alias for poplastmessage\n
-        /pop <user|system|ai>"""
-        return await cls.poplastmessage(role, user_chat_context)
-
-    @classmethod
-    async def set(
-        cls, role, new_message: str, /, user_chat_context: UserChatContext
-    ) -> str:
-        """Alias for setlastmessage\n
-        /set <user|system|ai> <new_message>"""
-        return await cls.setlastmessage(role, new_message, user_chat_context)

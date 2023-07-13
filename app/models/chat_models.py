@@ -3,18 +3,17 @@ from datetime import datetime
 from enum import Enum
 from functools import wraps
 from inspect import iscoroutinefunction
-from typing import Any, Callable, Tuple, Type, TypeVar, Union
+from typing import Any, Awaitable, Callable, Tuple
 from uuid import uuid4
 
 from orjson import dumps as orjson_dumps
 from orjson import loads as orjson_loads
-
 from app.common.config import DEFAULT_LLM_MODEL
-from app.models.base_models import MessageHistory
-from app.models.base_models import UserChatRoles
-from app.models.llms import LLMModel, LLMModels
 from app.mixins.enum import EnumMixin
 from app.utils.date_utils import UTC
+
+from .base_models import MessageHistory, UserChatRoles
+from .llms import LLMModels
 
 
 class ChatRoles(EnumMixin):
@@ -64,9 +63,8 @@ class UserChatContext:
         stored: dict = orjson_loads(stred_json)
         return cls(
             user_chat_profile=UserChatProfile(**stored["user_chat_profile"]),
-            llm_model=LLMModels.get_member_with_type_of_value(
+            llm_model=LLMModels.get_member(
                 stored["llm_model"].replace(".", "_").replace("-", "_"),
-                value_type=LLMModel,
             ),
             user_message_histories=[
                 MessageHistory(**m) for m in stored["user_message_histories"]
@@ -98,7 +96,10 @@ class UserChatContext:
         return orjson_dumps(self.json()).decode("utf-8")
 
     def tokenize(self, message: str) -> list[int]:
-        return self.llm_model.value.tokenizer.encode(message)
+        try:
+            return self.llm_model.value.tokenizer.encode(message)
+        except Exception:
+            return []
 
     def get_tokens_of(self, message: str) -> int:
         return len(self.tokenize(message))
@@ -213,7 +214,6 @@ class UserChatContext:
 
 class ResponseType(str, Enum):
     SEND_MESSAGE_AND_STOP = "send_message_and_stop"
-    SEND_MESSAGE_AND_KEEP_GOING = "send_message_and_keep_going"
     HANDLE_USER = "handle_user"
     HANDLE_AI = "handle_ai"
     HANDLE_BOTH = "handle_both"
@@ -223,8 +223,18 @@ class ResponseType(str, Enum):
 
 class command_response:
     @staticmethod
-    def _wrapper(enum_type: ResponseType) -> Callable:
-        def decorator(func: Callable) -> Callable:
+    def _wrapper(
+        enum_type: ResponseType,
+    ) -> Callable[..., Callable]:
+        def decorator(
+            func: Callable,
+        ) -> (
+            Callable[
+                ...,
+                Tuple[Any, ResponseType],
+            ]
+            | Callable[..., Awaitable[Tuple[Any, ResponseType]]]
+        ):
             @wraps(func)
             def sync_wrapper(
                 *args: Any, **kwargs: Any
@@ -244,9 +254,6 @@ class command_response:
         return decorator
 
     send_message_and_stop = _wrapper(ResponseType.SEND_MESSAGE_AND_STOP)
-    send_message_and_keep_going = _wrapper(
-        ResponseType.SEND_MESSAGE_AND_KEEP_GOING
-    )
     handle_user = _wrapper(ResponseType.HANDLE_USER)
     handle_ai = _wrapper(ResponseType.HANDLE_AI)
     handle_both = _wrapper(ResponseType.HANDLE_BOTH)

@@ -1,10 +1,10 @@
 """Wrapper for llama_cpp to generate text completions."""
-from ctypes import c_void_p
-from os import getpid, kill
-from signal import SIGINT
-from subprocess import CalledProcessError
 import sys
+from os import getpid, kill
 from pathlib import Path
+from signal import SIGINT
+from typing import TYPE_CHECKING, Iterator, Literal, Optional
+
 from app.models.base_models import APIChatMessage, TextGenerationSettings
 from app.models.completion_models import (
     ChatCompletion,
@@ -12,17 +12,11 @@ from app.models.completion_models import (
     Completion,
     CompletionChunk,
 )
-
-
-from pathlib import Path
-from typing import TYPE_CHECKING, Iterator, Literal, Optional
 from app.utils.chat.build_llama_shared_lib import build_shared_lib
-from app.utils.chat.text_generations.path import resolve_model_path_to_posix
-
 from app.utils.logger import ApiLogger
 
 from . import BaseCompletionGenerator
-
+from .path import resolve_model_path_to_posix
 
 logger = ApiLogger("||🦙 llama_cpp.generator||")
 
@@ -124,7 +118,7 @@ def _create_chat_completion(
     messages: list[APIChatMessage],
     stream: bool,
     settings: TextGenerationSettings,
-) -> ChatCompletion | Iterator[llama_cpp.ChatCompletionChunk]:
+) -> ChatCompletion | Iterator[ChatCompletionChunk]:
     prompt: str = LlamaCppCompletionGenerator.convert_messages_into_prompt(
         messages, settings=settings
     )
@@ -344,8 +338,8 @@ class LlamaCppCompletionGenerator(BaseCompletionGenerator):
 
 
 if __name__ == "__main__":
-    from app.models.llms import LlamaCppModel
     from app.models.llm_tokenizers import LlamaTokenizer
+    from app.models.llms import LlamaCppModel
 
     llama_cpp_model = LlamaCppModel(
         model_path="orca-mini-3b.ggmlv3.q4_1.bin",

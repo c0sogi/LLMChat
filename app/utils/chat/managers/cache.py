@@ -1,16 +1,19 @@
 from asyncio import gather
 from dataclasses import asdict, fields
+from uuid import uuid4
+
 from orjson import dumps as orjson_dumps
 from orjson import loads as orjson_loads
+
 from app.common.config import DEFAULT_LLM_MODEL
 from app.database.connection import cache
-from app.models.llms import LLMModel, LLMModels
 from app.models.chat_models import (
     ChatRoles,
     MessageHistory,
     UserChatContext,
     UserChatProfile,
 )
+from app.models.llms import LLMModels
 from app.utils.logger import ApiLogger
 
 
@@ -123,25 +126,27 @@ class CacheManager:
                 stored_string["llm_model"] = DEFAULT_LLM_MODEL
             return UserChatContext(
                 user_chat_profile=user_chat_profile,
-                llm_model=LLMModels.get_member_with_type_of_value(
+                llm_model=LLMModels.get_member(
                     stored_string["llm_model"],
-                    value_type=LLMModel,
                 ),
                 user_message_histories=[
                     MessageHistory(**m)
                     for m in stored_list["user_message_histories"]
+                    if m["content"]
                 ]
                 if stored_list["user_message_histories"] is not None
                 else [],
                 ai_message_histories=[
                     MessageHistory(**m)
                     for m in stored_list["ai_message_histories"]
+                    if m["content"]
                 ]
                 if stored_list["ai_message_histories"] is not None
                 else [],
                 system_message_histories=[
                     MessageHistory(**m)
                     for m in stored_list["system_message_histories"]
+                    if m["content"]
                 ]
                 if stored_list["system_message_histories"] is not None
                 else [],
@@ -415,6 +420,24 @@ class CacheManager:
         ]
 
     @classmethod
+    async def delete_one_message_history(
+        cls,
+        user_id: str,
+        chat_room_id: str,
+        index: int,
+        role: ChatRoles,
+    ) -> bool:
+        result: bool = True
+        unique_id: str = uuid4().hex
+        field = f"{ChatRoles.get_name(role).lower()}_message_histories"
+        key = cls._generate_key(user_id, chat_room_id, field)
+        # Set the value at index to the unique ID
+        result &= await cache.redis.lset(key, index=index, value=unique_id)
+        # Remove the unique ID from the list
+        result &= bool(await cache.redis.lrem(key, count=1, value=unique_id))
+        return result
+
+    @classmethod
     async def delete_message_history(
         cls,
         user_id: str,
@@ -457,8 +480,6 @@ class CacheManager:
     ) -> bool:
         field = f"{ChatRoles.get_name(role).lower()}_message_histories"
         key = cls._generate_key(user_id, chat_room_id, field)
-        # value in redis is a list of message histories
-        # set the last element of the list to the new message history
         result = await cache.redis.lset(
             key, index, orjson_dumps(message_history.__dict__)
         )

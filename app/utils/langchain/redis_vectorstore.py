@@ -20,7 +20,6 @@ from typing import (
 from uuid import uuid4
 
 import numpy as np
-import pkg_resources
 from langchain.docstore.document import Document
 from langchain.embeddings.base import Embeddings
 from langchain.schema import BaseRetriever
@@ -44,10 +43,12 @@ try:
         from redis.client import Pipeline as PipelineType
         from redis.client import Redis as RedisType
     from redis.commands.search.field import TextField, VectorField
-    from redis.commands.search.indexDefinition import IndexDefinition, IndexType
+    from redis.commands.search.indexDefinition import (
+        IndexDefinition,
+        IndexType,
+    )
     from redis.commands.search.query import Query
 
-    pkg_resources.require("redis>=4.2.0rc1")
     import redis.asyncio as aioredis
 
     if TYPE_CHECKING:
@@ -58,12 +59,6 @@ except ImportError:
         "Could not import redis python package. "
         "Please install it with `pip install redis`."
     )
-except pkg_resources.ResolutionError:
-    raise ValueError(
-        "Redis version >= 4.2.0rc1 is required. "
-        "Please upgrade it with `pip install redis>=4.2.0rc1`."
-    )
-
 
 # required modules
 REDIS_REQUIRED_MODULES = [
@@ -123,18 +118,20 @@ def _check_index_exists(client: RedisType, index_name: str) -> bool:
     """Check if Redis index exists."""
     try:
         client.ft(index_name).info()
-    except:
+    except Exception:
         ApiLogger.cinfo("Index does not exist")
         return False
     ApiLogger.cinfo("Index already exists")
     return True
 
 
-async def _acheck_index_exists(client: AsyncRedisType, index_name: str) -> bool:
+async def _acheck_index_exists(
+    client: AsyncRedisType, index_name: str
+) -> bool:
     """Check if Redis index exists, asynchronously."""
     try:
         await client.ft(index_name).info()
-    except:
+    except Exception:
         ApiLogger.cinfo("Index does not exist")
         return False
     ApiLogger.cinfo("Index exists!")
@@ -152,7 +149,9 @@ def _redis_client_from_url(redis_url: str, **kwargs: Any) -> RedisType:
     return client
 
 
-async def _aredis_client_from_url(redis_url: str, **kwargs: Any) -> AsyncRedisType:
+async def _aredis_client_from_url(
+    redis_url: str, **kwargs: Any
+) -> AsyncRedisType:
     """Create a Redis client from a URL checking if the required modules are installed, asynchronously."""
     try:
         client = aioredis.from_url(url=redis_url, **kwargs)
@@ -212,7 +211,9 @@ def _redis_embed_texts_to_pipeline(
             key,
             mapping={
                 content_key: text,
-                vector_key: np.array(embeddings[i], dtype=np.float32).tobytes(),
+                vector_key: np.array(
+                    embeddings[i], dtype=np.float32
+                ).tobytes(),
                 metadata_key: orjson_dumps(metadata),
             },
         )
@@ -239,7 +240,9 @@ def _ensure_index_exist(
         # Create Redis Index
         client.ft(index_name).create_index(
             fields=schema,
-            definition=IndexDefinition(prefix=[prefix], index_type=IndexType.HASH),
+            definition=IndexDefinition(
+                prefix=[prefix], index_type=IndexType.HASH
+            ),
         )
 
 
@@ -264,7 +267,9 @@ async def _aensure_index_exist(
         # Create Redis Index
         await client.ft(index_name).create_index(
             fields=schema,
-            definition=IndexDefinition(prefix=[prefix], index_type=IndexType.HASH),
+            definition=IndexDefinition(
+                prefix=[prefix], index_type=IndexType.HASH
+            ),
         )
 
 
@@ -290,7 +295,7 @@ class Redis(VectorStore):
             client.close()
             self.client = aioredis.from_url(url=redis_url, **kwargs)
         else:
-            self.client = client
+            self.client = client  # type: ignore
         self.content_key = content_key
         self.metadata_key = metadata_key
         self.vector_key = vector_key
@@ -420,7 +425,9 @@ class Redis(VectorStore):
         docs_and_scores = self.similarity_search_with_score(
             query, index_name=index_name, k=k
         )
-        return [doc for doc, score in docs_and_scores if score < score_threshold]
+        return [
+            doc for doc, score in docs_and_scores if score < score_threshold
+        ]
 
     async def asimilarity_search_limit_score(
         self,
@@ -454,7 +461,9 @@ class Redis(VectorStore):
         docs_and_scores = await self.asimilarity_search_with_score(
             query, index_name=index_name, k=k
         )
-        return [doc for doc, score in docs_and_scores if score < score_threshold]
+        return [
+            doc for doc, score in docs_and_scores if score < score_threshold
+        ]
 
     def _similarity_search_with_score(
         self, query: str, k: int = 4
@@ -466,9 +475,7 @@ class Redis(VectorStore):
         return_fields = [self.metadata_key, self.content_key, "vector_score"]
         vector_field = self.vector_key
         hybrid_fields = "*"
-        base_query = (
-            f"{hybrid_fields}=>[KNN {k} @{vector_field} $vector AS vector_score]"
-        )
+        base_query = f"{hybrid_fields}=>[KNN {k} @{vector_field} $vector AS vector_score]"
         redis_query = (
             Query(base_query)
             .return_fields(*return_fields)
@@ -493,7 +500,9 @@ class Redis(VectorStore):
         Returns:
             List of Documents most similar to the query and score for each
         """
-        redis_query, params_dict = self._similarity_search_with_score(query, k=k)
+        redis_query, params_dict = self._similarity_search_with_score(
+            query, k=k
+        )
 
         # perform vector search
         results = self.client.ft(index_name).search(redis_query, params_dict)
@@ -501,7 +510,8 @@ class Redis(VectorStore):
         docs = [
             (
                 Document(
-                    page_content=result.content, metadata=orjson_loads(result.metadata)
+                    page_content=result.content,
+                    metadata=orjson_loads(result.metadata),
                 ),
                 float(result.vector_score),
             )
@@ -532,7 +542,8 @@ class Redis(VectorStore):
         docs = [
             (
                 Document(
-                    page_content=result.content, metadata=orjson_loads(result.metadata)
+                    page_content=result.content,
+                    metadata=orjson_loads(result.metadata),
                 ),
                 float(result.vector_score),
             )
@@ -721,7 +732,7 @@ class Redis(VectorStore):
             client.ft(index_name).dropindex(delete_documents)
             ApiLogger.cinfo("Drop index")
             return True
-        except:
+        except Exception:
             # Index not exist
             return False
 
@@ -747,7 +758,9 @@ class Redis(VectorStore):
         if "redis_url" in kwargs:
             kwargs.pop("redis_url")
         try:
-            client = await _aredis_client_from_url(redis_url=redis_url, **kwargs)
+            client = await _aredis_client_from_url(
+                redis_url=redis_url, **kwargs
+            )
         except ValueError as e:
             raise ValueError(f"Your redis connected error: {e}")
         # Check if index exists
@@ -755,7 +768,7 @@ class Redis(VectorStore):
             await client.ft(index_name).dropindex(delete_documents)
             ApiLogger.cinfo("Drop index")
             return True
-        except:
+        except Exception:
             # Index not exist
             return False
 
@@ -808,7 +821,9 @@ class Redis(VectorStore):
         if "redis_url" in kwargs:
             kwargs.pop("redis_url")
         try:
-            client = await _aredis_client_from_url(redis_url=redis_url, **kwargs)
+            client = await _aredis_client_from_url(
+                redis_url=redis_url, **kwargs
+            )
             # ensure that the index already exists
             assert await _acheck_index_exists(
                 client, index_name
@@ -851,7 +866,9 @@ class RedisVectorStoreRetriever(BaseRetriever, BaseModel):
                 raise ValueError(f"search_type of {search_type} not allowed.")
         return values
 
-    def get_relevant_documents(self, query: str, index_name: str) -> List[Document]:
+    def _get_relevant_documents(
+        self, query: str, index_name: str
+    ) -> List[Document]:
         if self.search_type == "similarity":
             docs = self.vectorstore.similarity_search(
                 query, index_name=index_name, k=self.k
@@ -867,7 +884,7 @@ class RedisVectorStoreRetriever(BaseRetriever, BaseModel):
             raise ValueError(f"search_type of {self.search_type} not allowed.")
         return docs
 
-    async def aget_relevant_documents(
+    async def _aget_relevant_documents(
         self, query: str, index_name: str
     ) -> List[Document]:
         if self.search_type == "similarity":

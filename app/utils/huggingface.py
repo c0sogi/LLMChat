@@ -35,6 +35,7 @@ class HuggingfaceDownloader:
     _ggml_pattern: Pattern = compile(r".*ggml.*\.bin")
     _tokenizer_pattern: Pattern = compile(r"(tokenizer|ice).*\.model")
     _text_pattern: Pattern = compile(r".*\.(txt|json|py|md)")
+    output_folder: Optional[Path] = None
 
     def __init__(self):
         self.session = Session()
@@ -70,23 +71,31 @@ class HuggingfaceDownloader:
         )
         logger.info("Links:" + "".join([f"\n- {link}" for link in links]))
         logger.info(
-            "SHA256:" + "".join([f"\n- {fname}: {fhash}" for fname, fhash in sha256]),
+            "SHA256:"
+            + "".join([f"\n- {fname}: {fhash}" for fname, fhash in sha256]),
         )
         logger.info(f"Is LoRA: {is_lora}")
 
         # Getting the output folder
-        output_folder: Path = self.get_output_folder(
+        self.output_folder = self.get_output_folder(
             model, branch, is_lora, base_folder=base_folder
         )
-        logger.info(f"Output folder: {output_folder}")
+        logger.info(f"Output folder: {self.output_folder}")
 
         if check:
             # Check previously downloaded files
-            self.check_model_files_by_sha256(sha256=sha256, output_folder=output_folder)
+            self.check_model_files_by_sha256(
+                sha256=sha256, output_folder=self.output_folder
+            )
         else:
             # Download files
             self.download_model_files(
-                model, branch, links, sha256, output_folder, threads=threads
+                model,
+                branch,
+                links,
+                sha256,
+                self.output_folder,
+                threads=threads,
             )
         return self
 
@@ -134,10 +143,19 @@ class HuggingfaceDownloader:
 
             for json_idx in range(len(json_decoded)):
                 fname: str = json_decoded[json_idx]["path"]
-                if fname.endswith(("adapter_config.json", "adapter_model.bin")):
+                if fname.endswith(
+                    ("adapter_config.json", "adapter_model.bin")
+                ):
                     is_lora = True
 
-                is_pytorch, is_safetensors, is_pt, is_ggml, is_tokenizer, is_text = (
+                (
+                    is_pytorch,
+                    is_safetensors,
+                    is_pt,
+                    is_ggml,
+                    is_tokenizer,
+                    is_text,
+                ) = (
                     self._pytorch_pattern.match(fname),
                     self._safetensors_pattern.match(fname),
                     self._pt_pattern.match(fname),
@@ -149,10 +167,19 @@ class HuggingfaceDownloader:
                 if is_text is None:
                     is_text = is_tokenizer
                 if any(
-                    (is_pytorch, is_safetensors, is_pt, is_ggml, is_tokenizer, is_text)
+                    (
+                        is_pytorch,
+                        is_safetensors,
+                        is_pt,
+                        is_ggml,
+                        is_tokenizer,
+                        is_text,
+                    )
                 ):
                     if "lfs" in json_decoded[json_idx]:
-                        sha256.append([fname, json_decoded[json_idx]["lfs"]["oid"]])
+                        sha256.append(
+                            [fname, json_decoded[json_idx]["lfs"]["oid"]]
+                        )
 
                     if is_text:
                         links.append(
@@ -196,7 +223,11 @@ class HuggingfaceDownloader:
         return links, sha256, is_lora
 
     def get_output_folder(
-        self, model: str, branch: str, is_lora: bool, base_folder: Optional[str] = None
+        self,
+        model: str,
+        branch: str,
+        is_lora: bool,
+        base_folder: Optional[str] = None,
     ) -> Path:
         if base_folder is None:
             base_folder = "models" if not is_lora else "loras"
@@ -324,7 +355,9 @@ class HuggingfaceDownloader:
         )
         logger.info(f"Downloading with metadata:\n{metadata}")
 
-        sha256_str: str = "\n".join([f"    {item[1]} {item[0]}" for item in sha256])
+        sha256_str: str = "\n".join(
+            [f"    {item[1]} {item[0]}" for item in sha256]
+        )
         if sha256_str:
             metadata += f"sha256sum:\n{sha256_str}"
 
@@ -334,7 +367,10 @@ class HuggingfaceDownloader:
         # Downloading the files
         logger.info(f"Downloading the model to {output_folder}...")
         self.start_download_threads(
-            links, output_folder, start_from_scratch=start_from_scratch, threads=threads
+            links,
+            output_folder,
+            start_from_scratch=start_from_scratch,
+            threads=threads,
         )
 
     def check_model_files_by_sha256(
@@ -393,7 +429,9 @@ if __name__ == "__main__":
         help="Number of files to download simultaneously.",
     )
     parser.add_argument(
-        "--text-only", action="store_true", help="Only download text files (txt/json)."
+        "--text-only",
+        action="store_true",
+        help="Only download text files (txt/json).",
     )
     parser.add_argument(
         "--output",
@@ -402,10 +440,14 @@ if __name__ == "__main__":
         help="The folder where the model should be saved.",
     )
     parser.add_argument(
-        "--clean", action="store_true", help="Does not resume the previous download."
+        "--clean",
+        action="store_true",
+        help="Does not resume the previous download.",
     )
     parser.add_argument(
-        "--check", action="store_true", help="Validates the checksums of model files."
+        "--check",
+        action="store_true",
+        help="Validates the checksums of model files.",
     )
     args = parser.parse_args()
 

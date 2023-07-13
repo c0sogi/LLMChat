@@ -2,10 +2,9 @@
 
 from copy import deepcopy
 from functools import partial
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar
 
 from langchain import PromptTemplate
-from langchain.schema import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from app.common.constants import ChatTurnTemplates
 from app.models.base_models import (
@@ -13,13 +12,24 @@ from app.models.base_models import (
     MessageHistory,
     UserChatRoles,
 )
-from app.models.chat_models import ChatRoles, MessageHistory
-from app.utils.chat.messages.turn_templates import shatter_chat_turn_prompt
+from app.models.chat_models import ChatRoles
+
+from .turn_templates import shatter_chat_turn_prompt
+
+if TYPE_CHECKING:
+    from langchain.schema import BaseMessage
+
+T = TypeVar("T")
 
 
-def openai_parse_method(message_history: MessageHistory) -> BaseMessage:
-    """Parse message history to OpenAI message format.
-    Used when sending message to LangChain's Chat LLM."""
+def langchain_parse_method(message_history: MessageHistory) -> "BaseMessage":
+    """Parse message history to langchain message format."""
+    from langchain.schema import (
+        AIMessage,
+        FunctionMessage,
+        HumanMessage,
+        SystemMessage,
+    )
 
     if message_history.summarized is not None:
         message_history = deepcopy(message_history)
@@ -30,10 +40,17 @@ def openai_parse_method(message_history: MessageHistory) -> BaseMessage:
     elif message_history.actual_role == ChatRoles.AI.value:
         return AIMessage(content=message_history.content)
     else:
+        if message_history.role.startswith("function:"):
+            return FunctionMessage(
+                name=message_history.role.removeprefix("function:"),
+                content=message_history.content,
+            )
         return SystemMessage(content=message_history.content)
 
 
-def chat_completion_api_parse_method(message_history: MessageHistory) -> dict:
+def chat_completion_api_parse_method(
+    message_history: MessageHistory,
+) -> dict[str, str]:
     """Parse message history to Chat Completion API message format.
     Used when sending message to Chat Completion API."""
 
@@ -45,17 +62,23 @@ def chat_completion_api_parse_method(message_history: MessageHistory) -> dict:
         return APIChatMessage(
             role="user",
             content=message_history.content,
-        ).dict()
+        ).dict(exclude_none=True)
     elif message_history.actual_role == ChatRoles.AI.value:
         return APIChatMessage(
             role="assistant",
             content=message_history.content,
-        ).dict()
+        ).dict(exclude_none=True)
     else:
+        if message_history.role.startswith("function:"):
+            return APIChatMessage(
+                role="function",
+                content=message_history.content,
+                name=message_history.role.removeprefix("function:").strip(),
+            ).dict(exclude_none=True)
         return APIChatMessage(
             role="system",
             content=message_history.content,
-        ).dict()
+        ).dict(exclude_none=True)
 
 
 def text_completion_api_parse_method(
@@ -98,57 +121,24 @@ def init_parse_method(message_history: MessageHistory) -> dict[str, Any]:
 
 
 def message_histories_to_list(
-    user_chat_roles: UserChatRoles,
-    parse_method: Callable[[MessageHistory], Any],
+    parse_method: Callable[[MessageHistory], T],
     user_message_histories: list[MessageHistory],
     ai_message_histories: list[MessageHistory],
     system_message_histories: Optional[list[MessageHistory]] = None,
-    prefix_prompt: Optional[str] = None,
-    prefix_prompt_tokens: int = 0,
-    suffix_prompt: Optional[str] = None,
-    suffix_prompt_tokens: int = 0,
-) -> list[Any]:
+) -> list[T]:
     """Convert message histories to list of messages.
     Messages are sorted by timestamp.
     Prefix and suffix prompts are added to the list of messages."""
 
-    message_histories: list[Any] = []
-    if prefix_prompt is not None:
-        message_histories.append(
-            parse_method(
-                MessageHistory(
-                    role=user_chat_roles.system,
-                    content=prefix_prompt,
-                    tokens=prefix_prompt_tokens,
-                    actual_role=ChatRoles.SYSTEM.value,
-                )
-            )
+    return [
+        parse_method(message_history)
+        for message_history in sorted(
+            user_message_histories
+            + ai_message_histories
+            + (system_message_histories or []),
+            key=lambda m: m.timestamp,
         )
-
-    message_histories.extend(
-        [
-            parse_method(message_history)
-            for message_history in sorted(
-                user_message_histories
-                + ai_message_histories
-                + (system_message_histories if system_message_histories else []),
-                key=lambda m: m.timestamp,
-            )
-        ]
-    )  # organize message histories
-
-    if suffix_prompt is not None:
-        message_histories.append(
-            parse_method(
-                MessageHistory(
-                    role=user_chat_roles.system,
-                    content=suffix_prompt,
-                    tokens=suffix_prompt_tokens,
-                    actual_role=ChatRoles.SYSTEM.value,
-                )
-            )
-        )
-    return message_histories
+    ]
 
 
 def message_histories_to_str(
@@ -156,13 +146,9 @@ def message_histories_to_str(
     user_message_histories: list[MessageHistory],
     ai_message_histories: list[MessageHistory],
     system_message_histories: Optional[list[MessageHistory]] = None,
-    prefix_prompt: Optional[str] = None,
-    prefix_prompt_tokens: int = 0,
-    suffix_prompt: Optional[str] = None,
-    suffix_prompt_tokens: int = 0,
-    parse_method: Optional[Callable[[MessageHistory], Any]] = None,
+    parse_method: Optional[Callable[[MessageHistory], str]] = None,
     chat_turn_prompt: PromptTemplate = ChatTurnTemplates.ROLE_CONTENT_1,
-):
+) -> str:
     """Convert message histories to string.
     Messages are sorted by timestamp.
     Prefix and suffix prompts are added to the list of messages."""
@@ -170,23 +156,19 @@ def message_histories_to_str(
     shattered: tuple[str, ...] = shatter_chat_turn_prompt(
         "role", "content", chat_turn_prompt=chat_turn_prompt
     )
+    if parse_method is None:
+        parse_method = partial(
+            text_completion_api_parse_method,
+            chat_turn_prompt=chat_turn_prompt,
+        )
+
     return (
         "".join(
             message_histories_to_list(
-                user_chat_roles=user_chat_roles,
-                parse_method=partial(
-                    text_completion_api_parse_method,
-                    chat_turn_prompt=chat_turn_prompt,
-                )
-                if parse_method is None
-                else parse_method,
+                parse_method=parse_method,
                 user_message_histories=user_message_histories,
                 ai_message_histories=ai_message_histories,
                 system_message_histories=system_message_histories,
-                prefix_prompt=prefix_prompt,
-                prefix_prompt_tokens=prefix_prompt_tokens,
-                suffix_prompt=suffix_prompt,
-                suffix_prompt_tokens=suffix_prompt_tokens,
             )
         )
         + f"{shattered[0]}{user_chat_roles.ai}{shattered[2]}"

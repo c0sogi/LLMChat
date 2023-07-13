@@ -8,17 +8,23 @@ from threading import Event as ThreadEvent
 from threading import Thread
 from typing import Optional
 
-from langchain.chains.combine_documents.map_reduce import MapReduceDocumentsChain
+from langchain.chains.combine_documents.map_reduce import (
+    MapReduceDocumentsChain,
+)
 from langchain.chains.combine_documents.stuff import StuffDocumentsChain
 from langchain.chains.summarize import load_summarize_chain, stuff_prompt
+from langchain.chat_models import ChatOpenAI
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.embeddings.base import Embeddings
 from langchain.utilities import SearxSearchWrapper
 
-from app.common.config import OPENAI_API_KEY, ChatConfig, SingletonMetaClass, config
+from app.common.config import (
+    OPENAI_API_KEY,
+    ChatConfig,
+    SingletonMetaClass,
+    config,
+)
 from app.common.constants import SummarizationTemplates
-from app.models.openai_functions import OpenAIFunctions
-from app.utils.langchain.chat_openai import CustomChatOpenAI
 from app.utils.langchain.embeddings_api import APIEmbeddings
 from app.utils.langchain.token_text_splitter import CustomTokenTextSplitter
 from app.utils.langchain.web_search import DuckDuckGoSearchAPIWrapper
@@ -28,18 +34,17 @@ from app.utils.langchain.web_search import DuckDuckGoSearchAPIWrapper
 class Shared(metaclass=SingletonMetaClass):
     openai_embeddings: OpenAIEmbeddings = field(init=False)
     local_embeddings: Optional[APIEmbeddings] = field(init=False)
-    llm: CustomChatOpenAI = field(init=False)
-    browsing_llm: CustomChatOpenAI = field(init=False)
-    web_search_llm: CustomChatOpenAI = field(init=False)
-    vectorstore_search_llm: CustomChatOpenAI = field(init=False)
-    control_web_page_llm: CustomChatOpenAI = field(init=False)
     map_reduce_summarize_chain: MapReduceDocumentsChain = field(init=False)
     stuff_summarize_chain: StuffDocumentsChain = field(init=False)
     token_text_splitter: CustomTokenTextSplitter = field(
-        default_factory=lambda: CustomTokenTextSplitter(encoding_name="cl100k_base")
+        default_factory=lambda: CustomTokenTextSplitter(
+            encoding_name="cl100k_base"
+        )
     )
     searx: SearxSearchWrapper = field(
-        default_factory=lambda: SearxSearchWrapper(searx_host="http://localhost:8080")
+        default_factory=lambda: SearxSearchWrapper(
+            searx_host="http://localhost:8080"
+        )
     )
     duckduckgo: DuckDuckGoSearchAPIWrapper = field(
         default_factory=lambda: DuckDuckGoSearchAPIWrapper()
@@ -64,39 +69,11 @@ class Shared(metaclass=SingletonMetaClass):
         self._process_terminate_signal = None
         self._thread = None
         self._thread_terminate_signal = None
-        common_llm_kwargs = {
-            "model_name": ChatConfig.global_openai_model,
-            "openai_api_key": OPENAI_API_KEY,
-            "streaming": False,
-        }
-        self.llm = CustomChatOpenAI(**common_llm_kwargs)
-        self.browsing_llm = CustomChatOpenAI(
-            model_kwargs={
-                "functions": [OpenAIFunctions.WEB_BROWSING],
-                "function_call": OpenAIFunctions.WEB_BROWSING,
-            },
-            **common_llm_kwargs,
-        )
-        self.web_search_llm = CustomChatOpenAI(
-            model_kwargs={
-                "functions": [OpenAIFunctions.WEB_SEARCH],
-                "function_call": OpenAIFunctions.WEB_SEARCH,
-            },
-            **common_llm_kwargs,
-        )
-        self.vectorstore_search_llm = CustomChatOpenAI(
-            model_kwargs={
-                "functions": [OpenAIFunctions.VECTORSTORE_SEARCH],
-                "function_call": OpenAIFunctions.VECTORSTORE_SEARCH,
-            },
-            **common_llm_kwargs,
-        )
-        self.control_web_page_llm = CustomChatOpenAI(
-            model_kwargs={
-                "functions": [OpenAIFunctions.CONTROL_WEB_PAGE],
-                "function_call": OpenAIFunctions.CONTROL_WEB_PAGE,
-            },
-            **common_llm_kwargs,
+        self.llm = ChatOpenAI(
+            client=None,
+            model=ChatConfig.global_openai_model,
+            openai_api_key=OPENAI_API_KEY,
+            streaming=False,
         )
         self.map_reduce_summarize_chain = load_summarize_chain(  # type: ignore
             self.llm,

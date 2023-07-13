@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import WebSocket
@@ -9,27 +10,25 @@ from pydantic import ValidationError
 from app.database.schemas.auth import Users
 from app.errors.chat_exceptions import (
     ChatException,
-    ChatGeneralInterruptedException,
-    ChatOtherException,
-    ChatStreamingInterruptedException,
+    ChatInterruptedException,
     ChatTextGenerationException,
-    ChatTooMuchTokenException,
 )
 from app.models.base_models import MessageFromWebsocket, SummarizedResult
+from app.models.chat_commands import ChatCommands
 from app.models.chat_models import ChatRoles, UserChatContext, UserChatProfile
-from app.models.llms import LLMModel, LLMModels
+from app.models.llms import LLMModels
 from app.utils.chat.buffer import BufferedUserContext
-from app.utils.chat.commands import ChatCommands
-from app.utils.chat.commands.helper_functions import (
-    command_handler,
-    create_new_chat_room,
+from app.utils.chat.chat_rooms import create_new_chat_room
+from app.utils.chat.messages.handler import (
+    MessageHandler,
+    _interruption_event_watcher,
 )
-from app.utils.chat.managers.cache import CacheManager
-from app.utils.chat.managers.message import MessageManager
-from app.utils.chat.managers.vectorstore import VectorStoreManager
-from app.utils.chat.managers.websocket import SendToWebsocket
-from app.utils.chat.messages.handler import MessageHandler
 from app.utils.logger import ApiLogger
+
+from .cache import CacheManager
+from .message import MessageManager
+from .vectorstore import VectorStoreManager
+from .websocket import SendToWebsocket
 
 
 async def _initialize_callback(user_id: str) -> list[UserChatProfile]:
@@ -116,76 +115,50 @@ async def _harvest_done_tasks(buffer: BufferedUserContext) -> None:
         ]
 
 
-async def _chat_exception_handler(
-    buffer: BufferedUserContext, chat_exception: ChatException
-):
-    if isinstance(chat_exception, ChatTextGenerationException):
+@asynccontextmanager
+async def _chat_cycle_context_manager(buffer: BufferedUserContext):
+    try:
         await asyncio.gather(
-            SendToWebsocket.message(
+            SendToWebsocket.init(buffer=buffer, send_tokens=True),
+            _harvest_done_tasks(buffer=buffer),
+        )
+        yield
+    except ChatException as chat_exception:
+        if isinstance(chat_exception, ChatTextGenerationException):
+            await SendToWebsocket.message(
                 websocket=buffer.websocket,
                 msg=f"\n\nAn error occurred while generating text: **{chat_exception.msg}**",
                 chat_room_id=buffer.current_chat_room_id,
                 finish=True,
                 model_name=buffer.current_user_chat_context.llm_model.value.name,
-            ),
-            MessageManager.pop_message_history_safely(
-                user_chat_context=buffer.current_user_chat_context,
-                role=ChatRoles.USER,
-            ),
-        )
-    elif isinstance(chat_exception, ChatStreamingInterruptedException):
-        await MessageManager.add_message_history_safely(
-            user_chat_context=buffer.current_user_chat_context,
-            role=ChatRoles.AI,
-            content=str(chat_exception.msg),
-        )
-    elif isinstance(chat_exception, ChatGeneralInterruptedException):
-        await SendToWebsocket.message(
-            websocket=buffer.websocket,
-            msg="",
-            chat_room_id=buffer.current_chat_room_id,
-            finish=True,
-        )
-    elif isinstance(chat_exception, ChatOtherException):
-        await SendToWebsocket.message(
-            websocket=buffer.websocket,
-            msg=str(chat_exception.msg),
-            chat_room_id=buffer.current_chat_room_id,
-        )
-    elif isinstance(chat_exception, ChatTooMuchTokenException):
-        await SendToWebsocket.message(
-            websocket=buffer.websocket,
-            msg=str(chat_exception.msg),
-            chat_room_id=buffer.current_user_chat_context.chat_room_id,
-        )  # send too much token exception message to websocket
+            )
+        elif isinstance(chat_exception, ChatInterruptedException):
+            if buffer.done.is_set():
+                # If the chat is interrupted outside of AI's turn, then
+                # we need to send EOS to the client.
+                buffer.done.clear()
+                await SendToWebsocket.message(
+                    websocket=buffer.websocket,
+                    msg="",
+                    chat_room_id=buffer.current_chat_room_id,
+                    finish=True,
+                    model_name=buffer.current_user_chat_context.llm_model.value.name,
+                )
 
-
-async def _interruption_event_watcher(
-    future: asyncio.Future,
-    event: asyncio.Event,
-    hold_interruption_event: asyncio.Event,
-):
-    async def monitoring_events():
-        while True:
-            await event.wait()
-            if not hold_interruption_event.is_set():
-                break
-            await asyncio.sleep(0.1)
-
-    done, pending = await asyncio.wait(
-        [
-            future,
-            asyncio.ensure_future(monitoring_events()),
-        ],
-        return_when=asyncio.FIRST_COMPLETED,  # Return after the first one completes
-    )
-    for t in pending:
-        t.cancel()
-    for t in done:
-        if t is future:
-            return t.result()
-        event.clear()
-        raise ChatGeneralInterruptedException(msg="Chat interrupted by user")
+            if chat_exception.msg:
+                await MessageManager.add_message_history_safely(
+                    user_chat_context=buffer.current_user_chat_context,
+                    role=ChatRoles.AI,
+                    content=chat_exception.msg,
+                )
+        else:
+            await SendToWebsocket.message(
+                websocket=buffer.websocket,
+                msg=str(chat_exception.msg),
+                chat_room_id=buffer.current_chat_room_id,
+            )  # send too much token exception message to websocket
+    finally:
+        buffer.optional_info["uuid"] = None
 
 
 async def _change_context(
@@ -237,9 +210,8 @@ async def _handle_json_reception(
             )
             await SendToWebsocket.init(buffer=buffer, send_chat_rooms=True)
     elif "model" in dict_json:
-        found_model = LLMModels.get_member_with_type_of_value(
+        found_model = LLMModels.get_member(
             dict_json["model"],
-            value_type=LLMModel,
         )
         buffer.current_user_chat_context.llm_model = found_model
         await SendToWebsocket.init(buffer=buffer, send_selected_model=True)
@@ -255,25 +227,20 @@ async def _handle_text_reception(
         buffer.done.set()
 
 
-async def _handle_command(
-    message_from_websocket: MessageFromWebsocket, buffer: BufferedUserContext
-) -> None:
-    splitted: list[str] = message_from_websocket.msg[1:].split(" ")
-    if not message_from_websocket.msg.startswith("/retry"):
-        buffer.last_user_message = message_from_websocket.msg
-    await _interruption_event_watcher(
-        future=asyncio.ensure_future(
-            command_handler(
-                callback_name=splitted[0],
-                callback_args=splitted[1:],
-                translate=message_from_websocket.translate,
-                buffer=buffer,
-                callback_finder=ChatCommands._find_callback_with_command,
-            )
-        ),
-        event=buffer.done,
-        hold_interruption_event=buffer.is_stream_in_progress,
-    )
+@asynccontextmanager
+async def _websocket_context_manager(buffer: BufferedUserContext):
+    try:
+        yield
+    except Exception as e:
+        if isinstance(e, RuntimeError) and "receive" in str(e):
+            return
+        ApiLogger.cerror(f"Exception in chat: {e}", exc_info=True)
+        await SendToWebsocket.message(
+            websocket=buffer.websocket,
+            msg="Internal server error. Please try again.",
+            chat_room_id=buffer.current_chat_room_id,
+        )
+        raise e
 
 
 async def _websocket_receiver(buffer: BufferedUserContext) -> None:
@@ -308,19 +275,11 @@ async def _websocket_receiver(buffer: BufferedUserContext) -> None:
 
 async def _websocket_sender(buffer: BufferedUserContext) -> None:
     while True:  # loop until connection is closed
-        try:
-            await SendToWebsocket.init(buffer=buffer, send_tokens=True)
-            await _harvest_done_tasks(buffer=buffer)
+        async with _chat_cycle_context_manager(buffer=buffer):
             item: MessageFromWebsocket | str = await buffer.queue.get()
             await _harvest_done_tasks(buffer=buffer)
 
-            if isinstance(item, str):
-                await SendToWebsocket.message(
-                    websocket=buffer.websocket,
-                    msg=item,
-                    chat_room_id=buffer.current_chat_room_id,
-                )
-            elif isinstance(item, MessageFromWebsocket):
+            if isinstance(item, MessageFromWebsocket):
                 if item.chat_room_id != buffer.current_chat_room_id:
                     # This is a message from another chat room, interpreted as change of context, ignoring message
                     await _change_context(
@@ -329,30 +288,38 @@ async def _websocket_sender(buffer: BufferedUserContext) -> None:
                     )
                 elif item.msg.startswith("/"):
                     # if user message is command, handle command
-                    await _handle_command(
-                        message_from_websocket=item, buffer=buffer
+                    buffer.optional_info["uuid"] = item.uuid
+                    buffer.optional_info["translate"] = item.translate
+                    splitted: list[str] = item.msg[1:].split(" ")
+                    if not item.msg.startswith("/retry"):
+                        buffer.last_user_message = item.msg
+                    await _interruption_event_watcher(
+                        MessageHandler.command(
+                            callback_name=splitted[0],
+                            callback_args=splitted[1:],
+                            callback_finder=ChatCommands._find_callback_with_command,
+                            buffer=buffer,
+                        ),
+                        event=buffer.done,
                     )
                 else:
+                    buffer.optional_info["uuid"] = item.uuid
+                    buffer.optional_info["translate"] = item.translate
                     buffer.last_user_message = item.msg
-                    await MessageHandler.user(
-                        msg=item.msg,
-                        translate=item.translate,
-                        buffer=buffer,
-                    )
-                    await MessageHandler.ai(
-                        translate=item.translate,
-                        buffer=buffer,
-                    )
-        except ChatException as chat_exception:
-            await _chat_exception_handler(
-                buffer=buffer, chat_exception=chat_exception
-            )
+                    await MessageHandler.user(msg=item.msg, buffer=buffer)
+                    await MessageHandler.ai(buffer=buffer)
+            else:
+                await SendToWebsocket.message(
+                    websocket=buffer.websocket,
+                    msg=str(item),
+                    chat_room_id=buffer.current_chat_room_id,
+                )
 
 
 class ChatStreamManager:
     @classmethod
     async def begin_chat(cls, websocket: WebSocket, user: Users) -> None:
-        # initialize variables
+        # initialize buffer
         buffer: BufferedUserContext = BufferedUserContext(
             user=user,
             websocket=websocket,
@@ -360,6 +327,8 @@ class ChatStreamManager:
             read_callback=CacheManager.read_context_from_profile,
         )
         await buffer.init()
+
+        # initialize websocket
         await SendToWebsocket.init(
             buffer=buffer,
             send_chat_rooms=True,
@@ -367,18 +336,10 @@ class ChatStreamManager:
             send_models=True,
             send_selected_model=True,
         )
-        try:
+
+        # start chat
+        async with _websocket_context_manager(buffer=buffer):
             await asyncio.gather(
                 _websocket_receiver(buffer=buffer),
                 _websocket_sender(buffer=buffer),
             )
-        except Exception as e:
-            if isinstance(e, RuntimeError) and "receive" in str(e):
-                return
-            ApiLogger.cerror(f"Exception in chat: {e}", exc_info=True)
-            await SendToWebsocket.message(
-                websocket=buffer.websocket,
-                msg="Internal server error. Please try again.",
-                chat_room_id=buffer.current_chat_room_id,
-            )
-            raise e

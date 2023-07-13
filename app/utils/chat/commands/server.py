@@ -9,7 +9,7 @@ from app.models.chat_models import command_response
 from app.shared import Shared
 
 
-class ServerCommandsMixin:
+class ServerCommands:
     @staticmethod
     @command_response.send_message_and_stop
     async def free() -> str:

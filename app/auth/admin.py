@@ -16,7 +16,9 @@ class MyAuthProvider(AuthProvider):
     ) -> Response:
         if len(username) < 3:
             """Form data validation"""
-            raise FormValidationError({"username": "Ensure username has at least 03 characters"})
+            raise FormValidationError(
+                {"username": "Ensure username has at least 03 characters"}
+            )
 
         if username == config.mysql_user and password == config.mysql_password:
             """Save `username` in session"""

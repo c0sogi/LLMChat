@@ -1,10 +1,9 @@
 from typing import TYPE_CHECKING, Callable, Optional
-from urllib.parse import urljoin
 
 import numpy as np
 import tensorflow_hub as hub
-from app.utils.colorama import Fore
 
+from app.utils.colorama import Fore
 from app.utils.logger import ApiLogger
 
 from . import BaseEmbeddingGenerator
@@ -34,7 +33,8 @@ class SentenceEncoderEmbeddingGenerator(BaseEmbeddingGenerator):
     ) -> "SentenceEncoderEmbeddingGenerator":
         self = cls()
         self._model_name = model_name
-        self.model = hub.load(urljoin(self.base_url, model_name))  # type: ignore
+        url = f"{self.base_url.rstrip('/')}/{model_name.lstrip('/')}"
+        self.model = hub.load(url)  # type: ignore
         ApiLogger("||embeddings||").info(
             f"🤖 TFHub {Fore.WHITE}{model_name}{Fore.GREEN} loaded!",
         )

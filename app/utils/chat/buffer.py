@@ -5,14 +5,14 @@ from typing import Any, Awaitable, Callable, Optional, Union
 from fastapi import WebSocket
 
 from app.database.schemas.auth import Users
+from app.models.base_models import UserChatRoles
 from app.models.chat_models import (
     ChatRoles,
+    LLMModels,
     MessageHistory,
     UserChatContext,
     UserChatProfile,
-    LLMModels,
 )
-from app.models.base_models import UserChatRoles
 
 
 class ContextList:
@@ -30,12 +30,15 @@ class ContextList:
     def __iter__(self):
         return iter(self.data)
 
-    def __getitem__(self, index: int) -> Union[UserChatContext, UserChatProfile]:
+    def __getitem__(
+        self, index: int
+    ) -> Union[UserChatContext, UserChatProfile]:
         return self.data[index]
 
     async def at(self, index: int) -> UserChatContext:
         if isinstance(self.data[index], UserChatProfile):
             self.data[index] = await self.read_callback(self.data[index])
+
         return self.data[index]
 
     def insert(self, index: int, value: Any) -> None:
@@ -56,14 +59,15 @@ class BufferedUserContext:
     task_list: list[asyncio.Task[Any]] = field(default_factory=list)  # =
     last_user_message: Optional[str] = None
     optional_info: dict = field(default_factory=dict)
-    is_stream_in_progress: asyncio.Event = field(default_factory=asyncio.Event)
     _sorted_ctxts: ContextList = field(init=False)
     _current_ctxt: UserChatContext = field(init=False)
 
     def __len__(self):
         return len(self._sorted_ctxts)
 
-    def __getitem__(self, index: int) -> Union[UserChatContext, UserChatProfile]:
+    def __getitem__(
+        self, index: int
+    ) -> Union[UserChatContext, UserChatProfile]:
         return self._sorted_ctxts[index]
 
     async def init(self):
@@ -102,9 +106,12 @@ class BufferedUserContext:
                 message_histories = user_chat_context.system_message_histories
             else:
                 raise ValueError("role must be one of 'user', 'ai', 'system'")
-            for message_history_index, message_history in enumerate(message_histories):
+            for message_history_index, message_history in enumerate(
+                message_histories
+            ):
                 if message_history.uuid == message_history_uuid:
                     return message_history_index
+            return None
         except ValueError:
             return None
 
@@ -118,7 +125,8 @@ class BufferedUserContext:
     @property
     def sorted_chat_room_ids(self) -> list[str]:
         return [
-            context_or_profile.chat_room_id for context_or_profile in self._sorted_ctxts
+            context_or_profile.chat_room_id
+            for context_or_profile in self._sorted_ctxts
         ]
 
     @property
@@ -141,7 +149,7 @@ class BufferedUserContext:
 
     @property
     def current_llm_model(self) -> LLMModels:
-        return self._current_ctxt.llm_model
+        return self._current_ctxt.llm_model  # type: ignore
 
     @property
     def current_chat_room_name(self) -> str:

@@ -30,7 +30,6 @@ class EnumMixin(Enum):
     def member_map(
         cls: Type[EnumMixinGeneric],
     ) -> dict[str, EnumMixinGeneric | Enum]:
-        a = cls.static_member_map | cls.dynamic_member_map
         return cls.static_member_map | cls.dynamic_member_map
 
     @classmethod
@@ -67,7 +66,7 @@ class EnumMixin(Enum):
                     return cls.member_map[attribute].name
                 elif attribute.upper() in cls.member_map:
                     return cls.member_map[attribute.upper()].name
-                return cls[attribute.lower()].name
+                return cls.member_map[attribute.lower()].name
             if (
                 attribute in cls.member_map.values()
             ):  # when attribute is member
@@ -90,7 +89,7 @@ class EnumMixin(Enum):
                     return cls.member_map[attribute].value
                 elif attribute.upper() in cls.member_map:
                     return cls.member_map[attribute.upper()].value
-                return cls[attribute.lower()].value
+                return cls.member_map[attribute.lower()].value
             elif (
                 attribute in cls.member_map.values()
             ):  # when attribute is member
@@ -103,34 +102,27 @@ class EnumMixin(Enum):
             )
 
     @classmethod
-    def get_member_with_type_of_value(
+    def get_member(
         cls: Type[EnumMixinGeneric],
         attribute: Union[EnumMixinGeneric, Enum, str],
-        value_type: Type,
     ) -> EnumMixinGeneric | Enum:
         try:
-            if isinstance(attribute, cls):  # when attribute is member
-                to_return = attribute
-            elif isinstance(attribute, str):  # when attribute is string
+            if isinstance(attribute, str):  # when attribute is string
                 if attribute in cls.member_names:
-                    to_return = cls.member_map[attribute]
+                    return cls.member_map[attribute]
                 elif attribute.upper() in cls.member_map:
-                    to_return = cls.member_map[attribute.upper()]
-                to_return = cls[attribute.lower()]
+                    return cls.member_map[attribute.upper()]
+                return cls.member_map[attribute.lower()]
+            elif (
+                attribute in cls.member_map.values()
+            ):  # when attribute is member
+                return attribute
             else:
                 raise TypeError
         except (KeyError, TypeError):
             raise ValueError(
                 f"attribute must be a string or an instance of {cls.__name__}, got {attribute}"
             )
-        else:
-            if isinstance(to_return.value, value_type):
-                return to_return
-            else:
-                raise TypeError(
-                    f"Value of {to_return} must be an instance of {value_type.__name__}, "
-                    f"got {type(to_return.value).__name__}"
-                )
 
     @classmethod
     def get_static_member(

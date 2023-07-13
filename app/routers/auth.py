@@ -7,6 +7,7 @@ from app.database.crud.users import is_email_exist, register_new_user
 from app.database.schemas.auth import Users
 from app.dependencies import USER_DEPENDENCY
 from app.errors.api_exceptions import Responses_400, Responses_404
+from app.models.base_models import SnsType, Token, UserRegister, UserToken
 from app.utils.auth.register_validation import (
     is_email_length_in_range,
     is_email_valid_format,
@@ -14,7 +15,6 @@ from app.utils.auth.register_validation import (
 )
 from app.utils.auth.token import create_access_token, token_decode
 from app.utils.chat.managers.cache import CacheManager
-from app.models.base_models import SnsType, Token, UserRegister, UserToken
 
 router = APIRouter(prefix="/auth")
 
@@ -75,7 +75,9 @@ async def unregister(
     registered_user: UserToken = UserToken(**token_decode(authorization))
     if registered_user.email is not None:
         await CacheManager.delete_user(user_id=registered_user.email)
-    await Users.delete_filtered(Users.email == registered_user.email, autocommit=True)
+    await Users.delete_filtered(
+        Users.email == registered_user.email, autocommit=True
+    )
 
 
 @router.post("/login/{sns_type}", status_code=200, response_model=Token)
@@ -87,7 +89,9 @@ async def login(
     if sns_type == SnsType.EMAIL:
         if not (user_info.email and user_info.password):
             raise Responses_400.no_email_or_password
-        matched_user: Users = await Users.first_filtered_by(email=user_info.email)
+        matched_user: Users = await Users.first_filtered_by(
+            email=user_info.email
+        )
         if matched_user is None or matched_user.password is None:
             raise Responses_404.not_found_user
         if not bcrypt.checkpw(

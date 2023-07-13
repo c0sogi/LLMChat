@@ -47,3 +47,5 @@ if __name__ == "__main__":
     print(UTC.check_string_valid("2023-05-22T05:08:29Z"))  # True
     print(UTC.check_string_valid("2023-05-22T05:08:29"))  # False
     print(UTC.check_string_valid("2023/05/22T05:08:29.087279Z"))  # False
+    print(UTC.timestamp_to_datetime(10000101000000))  # Prefix timestamp
+    print(UTC.timestamp_to_datetime(99991231235959))  # Suffix timestamp

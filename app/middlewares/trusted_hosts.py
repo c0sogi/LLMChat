@@ -1,7 +1,9 @@
 from typing import Sequence
+
 from starlette.datastructures import URL, Headers
 from starlette.responses import PlainTextResponse, RedirectResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
+
 from app.errors.api_exceptions import Responses_500
 
 
@@ -14,18 +16,28 @@ class TrustedHostMiddleware:
         www_redirect: bool = True,
     ):
         self.app: ASGIApp = app
-        self.allowed_hosts: list = ["*"] if allowed_hosts is None else list(allowed_hosts)
-        self.allow_any: bool = "*" in allowed_hosts if allowed_hosts is not None else True
+        self.allowed_hosts: list = (
+            ["*"] if allowed_hosts is None else list(allowed_hosts)
+        )
+        self.allow_any: bool = (
+            "*" in allowed_hosts if allowed_hosts is not None else True
+        )
         self.www_redirect: bool = www_redirect
-        self.except_path: list = [] if except_path is None else list(except_path)
+        self.except_path: list = (
+            [] if except_path is None else list(except_path)
+        )
         if allowed_hosts is not None:
             for allowed_host in allowed_hosts:
                 if "*" in allowed_host[1:]:
                     raise Responses_500.middleware_exception
-                if (allowed_host.startswith("*") and allowed_host != "*") and not allowed_host.startswith("*."):
+                if (
+                    allowed_host.startswith("*") and allowed_host != "*"
+                ) and not allowed_host.startswith("*."):
                     raise Responses_500.middleware_exception
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+    async def __call__(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> None:
         if self.allow_any or scope["type"] not in (
             "http",
             "websocket",
@@ -57,5 +69,7 @@ class TrustedHostMiddleware:
                 redirect_url = url.replace(netloc="www." + url.netloc)
                 response = RedirectResponse(url=str(redirect_url))
             else:
-                response = PlainTextResponse("Invalid host header", status_code=400)
+                response = PlainTextResponse(
+                    "Invalid host header", status_code=400
+                )
             await response(scope, receive, send)

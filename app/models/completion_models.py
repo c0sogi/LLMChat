@@ -1,4 +1,24 @@
-from typing import Dict, List, Optional, Literal, NotRequired, TypedDict
+from sys import version_info
+from typing import Dict, List, Optional, Literal, TypedDict
+
+# If python version >= 3.11, use the built-in NotRequired type.
+# Otherwise, import it from typing_extensi
+if version_info >= (3, 11):
+    from typing import NotRequired  # type: ignore
+else:
+    from typing_extensions import NotRequired
+
+from .function_calling.base import JsonTypes
+
+
+class FunctionCallParsed(TypedDict):
+    name: str
+    arguments: NotRequired[Dict[str, JsonTypes]]
+
+
+class FunctionCallUnparsed(TypedDict):
+    name: NotRequired[str]
+    arguments: NotRequired[str]
 
 
 class EmbeddingUsage(TypedDict):
@@ -60,6 +80,7 @@ class ChatCompletionMessage(TypedDict):
     role: Literal["assistant", "user", "system"]
     content: str
     user: NotRequired[str]
+    function_call: NotRequired[FunctionCallUnparsed]
 
 
 class ChatCompletionChoice(TypedDict):
@@ -80,6 +101,7 @@ class ChatCompletion(TypedDict):
 class ChatCompletionChunkDelta(TypedDict):
     role: NotRequired[Literal["assistant"]]
     content: NotRequired[str]
+    function_call: NotRequired[FunctionCallUnparsed]
 
 
 class ChatCompletionChunkChoice(TypedDict):
@@ -94,6 +116,7 @@ class ChatCompletionChunk(TypedDict):
     object: Literal["chat.completion.chunk"]
     created: int
     choices: List[ChatCompletionChunkChoice]
+
 
 class ModelData(TypedDict):
     id: str
