@@ -1,4 +1,5 @@
 """Wrapper for llama_cpp to generate text completions."""
+from inspect import signature
 import sys
 from os import getpid, kill
 from pathlib import Path
@@ -157,43 +158,6 @@ def _create_chat_completion(
         return client._convert_text_completion_to_chat(completion)  # type: ignore
 
 
-# def _create_chat_completion(
-#     client: llama_cpp.Llama,
-#     messages: list[APIChatMessage],
-#     stream: bool,
-#     settings: TextGenerationSettings,
-# ) -> ChatCompletion | Iterator[llama_cpp.ChatCompletionChunk]:
-#     return client.create_chat_completion(
-#         stream=stream,
-#         messages=[
-#             llama_cpp.ChatCompletionMessage(**message.dict()) for message in messages
-#         ],
-#         max_tokens=settings.max_tokens,
-#         temperature=settings.temperature,
-#         top_p=settings.top_p,
-#         stop=settings.stop,
-#         frequency_penalty=settings.frequency_penalty,
-#         presence_penalty=settings.presence_penalty,
-#         repeat_penalty=settings.repeat_penalty,
-#         top_k=settings.top_k,
-#         tfs_z=settings.tfs_z,
-#         mirostat_mode=settings.mirostat_mode,
-#         mirostat_tau=settings.mirostat_tau,
-#         mirostat_eta=settings.mirostat_eta,
-#         logits_processor=llama_cpp.LogitsProcessorList(
-#             [
-#                 llama_cpp_server.make_logit_bias_processor(
-#                     client,
-#                     settings.logit_bias,
-#                     settings.logit_bias_type,
-#                 ),
-#             ]
-#         )
-#         if settings.logit_bias is not None
-#         else None,
-#     )
-
-
 class LlamaCppCompletionGenerator(BaseCompletionGenerator):
     generator: Optional[Iterator[CompletionChunk | ChatCompletionChunk]] = None
     client: Optional[llama_cpp.Llama] = None
@@ -224,6 +188,16 @@ class LlamaCppCompletionGenerator(BaseCompletionGenerator):
     def from_pretrained(
         cls, llm_model: "LlamaCppModel"
     ) -> "LlamaCppCompletionGenerator":
+        additional_kwargs = {}
+        arg_keys = signature(llama_cpp.Llama.__init__).parameters.keys()
+        if "rope_freq_base" in arg_keys:
+            additional_kwargs.update(
+                {"rope_freq_base": llm_model.rope_freq_base}
+            )
+        if "rope_freq_scale" in arg_keys:
+            additional_kwargs.update(
+                {"rope_freq_scale": llm_model.rope_freq_scale}
+            )
         client = llama_cpp.Llama(
             model_path=resolve_model_path_to_posix(
                 llm_model.model_path,
@@ -246,6 +220,7 @@ class LlamaCppCompletionGenerator(BaseCompletionGenerator):
             lora_path=llm_model.lora_path,
             low_vram=llm_model.low_vram,
             verbose=llm_model.echo,
+            **additional_kwargs,
         )
         if llm_model.cache:
             cache_type = llm_model.cache_type
@@ -339,7 +314,7 @@ class LlamaCppCompletionGenerator(BaseCompletionGenerator):
 
 if __name__ == "__main__":
     from app.models.llm_tokenizers import LlamaTokenizer
-    from app.models.llms import LlamaCppModel
+    from app.models.llms import LlamaCppModel  # noqa: F811
 
     llama_cpp_model = LlamaCppModel(
         model_path="orca-mini-3b.ggmlv3.q4_1.bin",

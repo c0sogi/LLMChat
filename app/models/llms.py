@@ -187,6 +187,8 @@ class LlamaCppModel(LLMModel):
     ] = None  # Number of threads to use. If None, the number of threads is automatically determined.
     low_vram: bool = False  # Whether to use less VRAM.
     embedding: bool = False  # Whether to use the embedding layer.
+    rope_freq_base: float = 10000.0  # I use 26000 for n_ctx=4096. https://github.com/ggerganov/llama.cpp/pull/2054
+    rope_freq_scale: float = 1.0  # Generally, 2048 / n_ctx. https://github.com/ggerganov/llama.cpp/pull/2054
 
 
 @dataclass
@@ -309,8 +311,8 @@ class LLMModels(EnumMixin):
     # Llama-cpp models
     wizard_vicuna_13b_uncensored = LlamaCppModel(
         name="Wizard-Vicuna-13B-Uncensored",
-        max_total_tokens=2048,  # context tokens (n_ctx)
-        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
+        max_total_tokens=4096,  # context tokens (n_ctx)
+        max_tokens_per_request=2048,  # The maximum number of tokens to generate.
         token_margin=8,
         tokenizer=LlamaTokenizer("ehartford/Wizard-Vicuna-13B-Uncensored"),
         model_path="Wizard-Vicuna-13B-Uncensored.ggmlv3.q5_1.bin",  # The filename of model. Must end with .bin.
@@ -342,19 +344,16 @@ class LLMModels(EnumMixin):
         model_path="kovicuna_q4km.bin",  # The filename of model. Must end with .bin.
         prefix_template=DescriptionTemplates.USER_AI__SHORT,
     )
-    wizard_lm_uncensored_13b = LlamaCppModel(
+    wizard_lm_13b_v1_1 = LlamaCppModel(
         name="wizardLM-13B-Uncensored",
-        max_total_tokens=5120,  # context tokens (n_ctx)
-        max_tokens_per_request=2560,  # The maximum number of tokens to generate.
+        max_total_tokens=4096,  # context tokens (n_ctx)
+        max_tokens_per_request=2048,  # The maximum number of tokens to generate.
         token_margin=8,
         prefix_template=DescriptionTemplates.USER_AI__SHORT,
         tokenizer=LlamaTokenizer("victor123/WizardLM-13B-1.0"),
-        model_path="wizardLM-13B-Uncensored.ggmlv3.q5_K_M.bin",  # The filename of model. Must end with .bin.
-        user_chat_roles=UserChatRoles(
-            user="Instruction",
-            ai="Response",
-            system="System",
-        ),
+        model_path="wizardlm-13b-v1.1.ggmlv3.q4_K_S.bin",  # The filename of model. Must end with .bin.
+        rope_freq_scale=0.5,  # similar to `compress_pos_emb`, but inverse number: (2048 / n_ctx)
+        rope_freq_base=26000,  # need some perplexity test; 26000 is my empirical value for 4096 context tokens
     )
     guanaco_13b = LlamaCppModel(
         name="guanaco-13B-GGML",
@@ -397,12 +396,14 @@ class LLMModels(EnumMixin):
     )
     selfee_7b = LlamaCppModel(
         name="selfee-7B-GGML",
-        max_total_tokens=2048,  # context tokens (n_ctx)
-        max_tokens_per_request=1024,  # The maximum number of tokens to generate.
+        max_total_tokens=4096,  # context tokens (n_ctx)
+        max_tokens_per_request=2048,  # The maximum number of tokens to generate.
         token_margin=8,
         tokenizer=LlamaTokenizer("kaist-ai/selfee-7b-delta"),
-        model_path="selfee-7B.ggmlv3.q4_1.bin",  # The filename of model. Must end with .bin.
+        model_path="selfee-7b-superhot-8k.ggmlv3.q4_1.bin",  # The filename of model. Must end with .bin.
         prefix_template=DescriptionTemplates.USER_AI__SHORT,
+        rope_freq_scale=0.5,  # similar to `compress_pos_emb`, but inverse number: (2048 / n_ctx)
+        rope_freq_base=26000,  # need some perplexity test; 26000 is my empirical value for 4096 context tokens
     )
     llama_7b = LlamaCppModel(
         name="llama-7b-GGML",

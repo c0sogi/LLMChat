@@ -1,18 +1,15 @@
 """V1 Endpoints for Local Llama API
 Use same format as OpenAI API"""
 
-import json
+
 from collections import deque
 from functools import partial
-from os import getpid, kill
-from signal import SIGINT
-from typing import TYPE_CHECKING, AsyncGenerator, Callable, Iterator, Union
+from typing import TYPE_CHECKING, AsyncGenerator, Iterator, Optional, Union
 
 import anyio
 from anyio.streams.memory import MemoryObjectSendStream
-from fastapi import APIRouter, Depends, Request, Response
-from fastapi.responses import JSONResponse
-from fastapi.routing import APIRoute
+from fastapi import APIRouter, Depends, Request
+from orjson import dumps
 from pydantic import create_model_from_typeddict
 from sse_starlette.sse import EventSourceResponse
 from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
@@ -30,6 +27,7 @@ from app.models.completion_models import (
     Embedding,
     ModelList,
 )
+from app.utils.errors import RouteErrorHandler
 from app.utils.logger import ApiLogger
 from app.utils.module_reloader import ModuleReloader
 from app.utils.system import free_memory_of_first_item_from_container
@@ -104,71 +102,10 @@ OPENAI_REPLACEMENT_MODELS: dict[str, str] = {
     "gpt-3.5-turbo-16k": "longchat_7b",
     "gpt-4": "pygmalion_13b",
 }
-
+router = APIRouter(route_class=RouteErrorHandler)
 semaphore = anyio.create_semaphore(1)
 completion_generators: deque["BaseCompletionGenerator"] = deque(maxlen=1)
 embedding_generators: deque["BaseEmbeddingGenerator"] = deque(maxlen=1)
-
-
-class RouteErrorHandler(APIRoute):
-    """Custom APIRoute that handles application errors and exceptions"""
-
-    def get_route_handler(self) -> Callable:
-        original_route_handler = super().get_route_handler()
-
-        async def custom_route_handler(request: Request) -> Response:
-            try:
-                return await original_route_handler(request)
-            except (OSError, MemoryError) as e:
-                logger.exception(f"Exception in llama-cpp: {e}")
-                if isinstance(e, MemoryError):
-                    error_msg = str(e)
-                else:
-                    error_msg = "Memory corruption occurred. Terminating..."
-                kill(getpid(), SIGINT)
-                return JSONResponse(
-                    {
-                        "error": {
-                            "message": error_msg,
-                            "type": "internal_server_error",
-                            "param": None,
-                            "code": "internal_server_error",
-                        }
-                    },
-                    500,
-                )
-            except AssertionError as e:
-                return JSONResponse(
-                    {
-                        "error": {
-                            "message": str(e),
-                            "type": "invalid_request_error",
-                            "param": None,
-                            "code": "invalid_request_error",
-                        }
-                    },
-                    status_code=400,
-                )
-            except Exception as e:
-                logger.exception(f"Exception in llama-cpp: {e}")
-                return JSONResponse(
-                    {
-                        "error": {
-                            "message": "Unexpected server error",
-                            "type": "internal_server_error",
-                            "param": None,
-                            "code": "internal_server_error",
-                        }
-                    },
-                    status_code=500,
-                )
-            finally:
-                ...
-
-        return custom_route_handler
-
-
-router = APIRouter(route_class=RouteErrorHandler)
 
 
 class DynamicLLMS:
@@ -331,6 +268,41 @@ def get_embedding_generator(
         raise AssertionError(f"Could not find a model: {body.model}")
 
 
+async def get_event_publisher(
+    request: Request,
+    inner_send_chan: MemoryObjectSendStream,
+    iterator: Iterator,
+    is_chat_completion: Optional[bool] = None,
+):
+    async with inner_send_chan:
+        try:
+            async for chunk in iterate_in_threadpool(iterator):
+                if is_chat_completion is True:
+                    print(
+                        chunk["choices"][0]["delta"].get("content", ""),
+                        end="",
+                        flush=True,
+                    )
+                elif is_chat_completion is False:
+                    print(
+                        chunk["choices"][0]["text"],
+                        end="",
+                        flush=True,
+                    )
+                await inner_send_chan.send(b"data: " + dumps(chunk) + b"\n\n")
+                if await request.is_disconnected():
+                    raise anyio.get_cancelled_exc_class()()
+            await inner_send_chan.send(b"data: [DONE]\n\n")
+        except anyio.get_cancelled_exc_class() as e:
+            with anyio.move_on_after(1, shield=True):
+                logger.info(
+                    f"🦙 Disconnected from client (via refresh/close) {request.client}",
+                )
+                raise e
+        finally:
+            logger.info("\n[🦙 I'm done talking]")
+
+
 @router.post(
     "/v1/chat/completions",
     response_model=create_model_from_typeddict(ChatCompletion),  # type: ignore
@@ -344,45 +316,29 @@ async def create_chat_completion(
     completion_generator = get_completion_generator(body)
     logger.info("\n[🦙 I'm talking now]")
     if body.stream:
+        _iterator: Iterator[
+            ChatCompletionChunk
+        ] = completion_generator.generate_chat_completion_with_streaming(
+            messages=body.messages,
+            settings=body,
+        )
+        # EAFP: It's easier to ask for forgiveness than permission
+        first_response = await run_in_threadpool(next, _iterator)
+
+        def iterator() -> Iterator[ChatCompletionChunk]:
+            yield first_response
+            yield from _iterator
+
         send_chan, recv_chan = anyio.create_memory_object_stream(10)
-
-        async def event_publisher(inner_send_chan: MemoryObjectSendStream):
-            async with inner_send_chan:
-                try:
-                    iterator: Iterator[
-                        ChatCompletionChunk
-                    ] = await run_in_threadpool(
-                        completion_generator.generate_chat_completion_with_streaming,
-                        messages=body.messages,
-                        settings=body,
-                    )
-                    async for chat_chunk in iterate_in_threadpool(iterator):
-                        print(
-                            chat_chunk["choices"][0]["delta"].get(
-                                "content", ""
-                            ),
-                            end="",
-                            flush=True,
-                        )
-                        await inner_send_chan.send(
-                            dict(data=json.dumps(chat_chunk))
-                        )
-                        if await request.is_disconnected():
-                            raise anyio.get_cancelled_exc_class()()
-                    await inner_send_chan.send(dict(data="[DONE]"))
-                except anyio.get_cancelled_exc_class() as e:
-                    with anyio.move_on_after(1, shield=True):
-                        logger.info(
-                            f"🦙 Disconnected from client (via refresh/close) {request.client}",
-                        )
-                        await inner_send_chan.send(dict(closing=True))
-                        raise e
-                finally:
-                    logger.info("\n[🦙 I'm done talking]")
-
         return EventSourceResponse(
             recv_chan,
-            data_sender_callable=partial(event_publisher, send_chan),
+            data_sender_callable=partial(
+                get_event_publisher,
+                request=request,
+                inner_send_chan=send_chan,
+                iterator=iterator(),
+                is_chat_completion=True,
+            ),
         )
     else:
         chat_completion: ChatCompletion = await run_in_threadpool(
@@ -408,43 +364,29 @@ async def create_completion(
     completion_generator = get_completion_generator(body)
     logger.info("\n[🦙 I'm talking now]")
     if body.stream:
+        _iterator: Iterator[
+            CompletionChunk
+        ] = completion_generator.generate_completion_with_streaming(
+            prompt=body.prompt,
+            settings=body,
+        )
+        # EAFP: It's easier to ask for forgiveness than permission
+        first_response = await run_in_threadpool(next, _iterator)
+
+        def iterator() -> Iterator[CompletionChunk]:
+            yield first_response
+            yield from _iterator
+
         send_chan, recv_chan = anyio.create_memory_object_stream(10)
-
-        async def event_publisher(inner_send_chan: MemoryObjectSendStream):
-            async with inner_send_chan:
-                try:
-                    iterator: Iterator[
-                        CompletionChunk
-                    ] = await run_in_threadpool(
-                        completion_generator.generate_completion_with_streaming,
-                        prompt=body.prompt,
-                        settings=body,
-                    )
-                    async for chunk in iterate_in_threadpool(iterator):
-                        print(
-                            chunk["choices"][0]["text"],
-                            end="",
-                            flush=True,
-                        )
-                        await inner_send_chan.send(
-                            dict(data=json.dumps(chunk))
-                        )
-                        if await request.is_disconnected():
-                            raise anyio.get_cancelled_exc_class()()
-                    await inner_send_chan.send(dict(data="[DONE]"))
-                except anyio.get_cancelled_exc_class() as e:
-                    with anyio.move_on_after(1, shield=True):
-                        logger.info(
-                            f"🦙 Disconnected from client (via refresh/close) {request.client}",
-                        )
-                        await inner_send_chan.send(dict(closing=True))
-                        raise e
-                finally:
-                    logger.info("\n[🦙 I'm done talking!]")
-
         return EventSourceResponse(
             recv_chan,
-            data_sender_callable=partial(event_publisher, send_chan),
+            data_sender_callable=partial(
+                get_event_publisher,
+                request=request,
+                inner_send_chan=send_chan,
+                iterator=iterator(),
+                is_chat_completion=False,
+            ),
         )
     else:
         completion: Completion = await run_in_threadpool(
