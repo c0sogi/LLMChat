@@ -442,11 +442,7 @@ async def acreate_completion(
     async with ClientSession(
         timeout=ChatConfig.timeout
     ) as session:  # initialize client
-        async with session.post(
-            url,
-            headers=headers,
-            data=data,
-        ) as response:
+        async with session.post(url, headers=headers, data=data) as response:
             await _handle_error_response(response)
             if stream:
                 async for json_data in _extract_json_from_streaming_response(
@@ -478,11 +474,7 @@ async def acreate_chat_completion(
         )
     )
     async with ClientSession(timeout=ChatConfig.timeout) as session:
-        async with session.post(
-            url,
-            headers=headers,
-            data=data,
-        ) as response:
+        async with session.post(url, headers=headers, data=data) as response:
             await _handle_error_response(response)
             if stream:
                 async for json_data in _extract_json_from_streaming_response(

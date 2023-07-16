@@ -118,13 +118,17 @@ async def _harvest_done_tasks(buffer: BufferedUserContext) -> None:
 @asynccontextmanager
 async def _chat_cycle_context_manager(buffer: BufferedUserContext):
     try:
+        # Send Start-of-Chat message to client
         await asyncio.gather(
             SendToWebsocket.init(buffer=buffer, send_tokens=True),
             _harvest_done_tasks(buffer=buffer),
         )
+
+        # Run a chat cycle
         yield
     except ChatException as chat_exception:
         if isinstance(chat_exception, ChatTextGenerationException):
+            # Send error message to client when text generation fails
             await SendToWebsocket.message(
                 websocket=buffer.websocket,
                 msg=f"\n\nAn error occurred while generating text: **{chat_exception.msg}**",
@@ -132,33 +136,36 @@ async def _chat_cycle_context_manager(buffer: BufferedUserContext):
                 finish=True,
                 model_name=buffer.current_user_chat_context.llm_model.value.name,
             )
-        elif isinstance(chat_exception, ChatInterruptedException):
-            if buffer.done.is_set():
-                # If the chat is interrupted outside of AI's turn, then
-                # we need to send EOS to the client.
-                buffer.done.clear()
-                await SendToWebsocket.message(
-                    websocket=buffer.websocket,
-                    msg="",
-                    chat_room_id=buffer.current_chat_room_id,
-                    finish=True,
-                    model_name=buffer.current_user_chat_context.llm_model.value.name,
-                )
-
-            if chat_exception.msg:
-                await MessageManager.add_message_history_safely(
-                    user_chat_context=buffer.current_user_chat_context,
-                    role=ChatRoles.AI,
-                    content=chat_exception.msg,
-                )
+        elif (
+            isinstance(chat_exception, ChatInterruptedException)
+            and chat_exception.msg
+        ):
+            # if msg is not None, save the message generated before interruption
+            await MessageManager.add_message_history_safely(
+                user_chat_context=buffer.current_user_chat_context,
+                role=ChatRoles.AI,
+                content=chat_exception.msg,
+            )
         else:
+            # Send error message to client when other errors occur
             await SendToWebsocket.message(
                 websocket=buffer.websocket,
                 msg=str(chat_exception.msg),
                 chat_room_id=buffer.current_chat_room_id,
-            )  # send too much token exception message to websocket
+            )
     finally:
+        # Clean up buffer
+        buffer.done.clear()
         buffer.optional_info["uuid"] = None
+
+        # Send End-of-Chat message to client
+        await SendToWebsocket.message(
+            websocket=buffer.websocket,
+            msg="",
+            chat_room_id=buffer.current_chat_room_id,
+            finish=True,
+            model_name=buffer.current_user_chat_context.llm_model.value.name,
+        )
 
 
 async def _change_context(
@@ -267,7 +274,7 @@ async def _websocket_receiver(buffer: BufferedUserContext) -> None:
             await buffer.queue.put(
                 await VectorStoreManager.embed_file_to_vectorstore(
                     file=received_bytes,
-                    filename=buffer.optional_info.get("filename", ""),
+                    filename=buffer.optional_info.get("filename") or "",
                     collection_name=buffer.current_user_chat_context.user_id,
                 )
             )
@@ -291,13 +298,18 @@ async def _websocket_sender(buffer: BufferedUserContext) -> None:
                     buffer.optional_info["uuid"] = item.uuid
                     buffer.optional_info["translate"] = item.translate
                     splitted: list[str] = item.msg[1:].split(" ")
-                    if not item.msg.startswith("/retry"):
+                    if not item.msg.startswith("/") or not any(
+                        (
+                            item.msg[1:].startswith(command)
+                            for command in ChatCommands.special_commands
+                        )
+                    ):
                         buffer.last_user_message = item.msg
                     await _interruption_event_watcher(
                         MessageHandler.command(
                             callback_name=splitted[0],
                             callback_args=splitted[1:],
-                            callback_finder=ChatCommands._find_callback_with_command,
+                            callback_finder=ChatCommands.find_callback_with_command,
                             buffer=buffer,
                         ),
                         event=buffer.done,
