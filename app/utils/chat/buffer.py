@@ -1,6 +1,15 @@
 import asyncio
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Optional, Union
+from sys import version_info
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Literal,
+    Optional,
+    TypedDict,
+    Union,
+)
 
 from fastapi import WebSocket
 
@@ -13,6 +22,24 @@ from app.models.chat_models import (
     UserChatContext,
     UserChatProfile,
 )
+from app.models.function_calling.base import FunctionCall
+
+# Otherwise, import it from typing_extensi
+if version_info >= (3, 11):
+    from typing import NotRequired  # type: ignore
+else:
+    from typing_extensions import NotRequired
+
+
+class OptionalInfo(TypedDict):
+    translate: NotRequired[Optional[str]]
+    functions: NotRequired[Optional[list[FunctionCall]]]
+    function_call: NotRequired[
+        Optional[FunctionCall | Literal["none", "auto"]]
+    ]
+    api_key: NotRequired[Optional[str]]
+    uuid: NotRequired[Optional[str]]
+    filename: NotRequired[Optional[str]]
 
 
 class ContextList:
@@ -58,7 +85,7 @@ class BufferedUserContext:
     done: asyncio.Event = field(default_factory=asyncio.Event)
     task_list: list[asyncio.Task[Any]] = field(default_factory=list)  # =
     last_user_message: Optional[str] = None
-    optional_info: dict = field(default_factory=dict)
+    optional_info: OptionalInfo = field(default_factory=OptionalInfo)
     _sorted_ctxts: ContextList = field(init=False)
     _current_ctxt: UserChatContext = field(init=False)
 

@@ -44,8 +44,6 @@ class UserChatContext:
         default_factory=list
     )
 
-    optional_info: dict = field(default_factory=dict)
-
     @property
     def user_message_tokens(self) -> int:
         return sum([m.tokens for m in self.user_message_histories])

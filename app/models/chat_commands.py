@@ -12,6 +12,22 @@ from app.utils.chat.commands.vectorstore import VectorstoreCommands
 from .chat_models import command_response
 
 
+class ChatCommandsMetaClass(type):
+    """Metaclass for ChatCommands class.
+    It is used to automatically create list of special commands.
+    """
+
+    special_commands: list[str]
+
+    def __init__(cls, name, bases, dct):
+        super().__init__(name, bases, dct)
+        cls.special_commands = [
+            callback_name
+            for callback_name in dir(CoreCommands)
+            if not callback_name.startswith("_")
+        ]
+
+
 class ChatCommands(
     CoreCommands,
     VectorstoreCommands,
@@ -21,10 +37,14 @@ class ChatCommands(
     ServerCommands,
     TestingCommands,
     SummarizeCommands,
+    metaclass=ChatCommandsMetaClass,
 ):
     @classmethod
-    def _find_callback_with_command(cls, command: str) -> Callable:
-        return getattr(cls, command, cls.not_existing_callback)
+    def find_callback_with_command(cls, command: str) -> Callable:
+        found_callback: Callable = getattr(cls, command)
+        if found_callback is None or not callable(found_callback):
+            found_callback = cls.not_existing_callback
+        return found_callback
 
     @staticmethod
     @command_response.send_message_and_stop

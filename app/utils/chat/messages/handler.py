@@ -545,7 +545,7 @@ class MessageHandler:
         await _command_interpreter(
             callback_name=callback_name,
             callback_args=callback_args,
-            callback_kwargs=buffer.optional_info,
+            callback_kwargs=dict(buffer.optional_info),
             callback_finder=callback_finder,
             buffer=buffer,
         )

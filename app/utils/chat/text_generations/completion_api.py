@@ -66,9 +66,7 @@ def _get_stop_strings(
 
 def _get_api_key(buffer: BufferedUserContext) -> Optional[str]:
     """Return API key to use for completion API"""
-    user_defined_api_key: Optional[
-        str
-    ] = buffer.current_user_chat_context.optional_info.get("api_key")
+    user_defined_api_key: Optional[str] = buffer.optional_info.get("api_key")
     return (
         str(user_defined_api_key)
         if user_defined_api_key is not None
@@ -101,7 +99,6 @@ def _make_common_kwargs(buffer: BufferedUserContext, max_tokens: int) -> dict:
         top_p=buffer.current_user_chat_profile.top_p,
         presence_penalty=buffer.current_user_chat_profile.presence_penalty,
         frequency_penalty=buffer.current_user_chat_profile.frequency_penalty,
-        logit_bias={},
         user=buffer.user_id,
         max_tokens=max_tokens,
         api_key=_get_api_key(buffer=buffer),

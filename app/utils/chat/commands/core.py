@@ -195,11 +195,11 @@ class CoreCommands:
     @staticmethod
     @command_response.send_message_and_stop
     def addoptionalinfo(
-        key: str, value: str, user_chat_context: UserChatContext
+        key: str, value: str, buffer: BufferedUserContext
     ) -> str:
         """Add optional info to buffer\n
         /addoptionalinfo <key> <value>"""
-        user_chat_context.optional_info[key] = " ".join(value)
+        buffer.optional_info[key] = " ".join(value)
         return f"I've added {key}={value} to your optional info."
 
     @classmethod
